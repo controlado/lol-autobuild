@@ -13,7 +13,7 @@ secrets:
   service_name: lol-autobuild
 
 recommendation:
-  min_occurrence: 100
+  min_occurrence: 1_000
   top_items: 6
   top_spells: 2
 
