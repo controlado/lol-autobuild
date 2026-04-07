@@ -111,7 +111,7 @@ func syncCmd() *cobra.Command {
 
 			result, err := svc.Sync(context.Background(), req)
 			if err != nil {
-				var notConfigured error = lcu.ErrNotConfigured
+				notConfigured := lcu.ErrNotConfigured
 				if errors.Is(err, notConfigured) {
 					log.Warn().Err(err).Msg("LCU is not configured")
 				}
