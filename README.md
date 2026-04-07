@@ -25,16 +25,17 @@ Bootstrap phase only. The repository ships architecture, contracts, CI/release, 
 ## Quick start
 
 ```bash
-go run ./cmd/dev sync --role top --dry-run
+go run ./cmd/dev sync --dry-run
 ```
 
 By default, the command reads `config.example.yaml` from current working directory. Use:
 
 ```bash
-go run ./cmd/dev sync --config ./config.example.yaml --role top --dry-run
+go run ./cmd/dev sync --config ./config.example.yaml --dry-run
 ```
 
-Champion ID is auto-detected from LCU champ select (`/lol-champ-select/v1/session`). The command fails when LCU is unavailable or your champion is not selected yet.
+Champion ID and role are auto-detected from LCU champ select (`/lol-champ-select/v1/session`).
+Current role detection support is limited to Summoner's Rift Draft/Ranked queues (`queueId` 400, 420, 440). The command fails when LCU is unavailable, your champion is not selected yet, or role detection is not reliable for the current queue.
 Set `lcu.enabled: true` in your config and optionally provide `lcu.lockfile_path` if auto-discovery does not find your installation.
 
 ## Development checks

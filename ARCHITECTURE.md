@@ -6,7 +6,7 @@
 
 Data flow:
 
-1. Detect local champion from LCU champ select session.
+1. Detect local champion and role from LCU champ select session.
 2. Resolve auth token via `TokenProvider`.
 3. Query Coachless API endpoints.
 4. Build recommendation model.
@@ -36,7 +36,8 @@ Data flow:
   - `LCUClient`
   - `RecommendationEngine`
 
-`SyncRequest` no longer accepts manual champion ID. Champion selection is mandatory via LCU detection.
+`SyncRequest` no longer accepts manual champion ID or role. Champion and role selection are mandatory via LCU detection.
+Role detection is queue-aware and currently limited to Summoner's Rift Draft/Ranked (`queueId` 400/420/440).
 
 ## Authentication strategy
 

@@ -7,7 +7,6 @@ type Service interface {
 }
 
 type SyncRequest struct {
-	Role  string
 	Patch string
 
 	ApplyItems  bool
@@ -19,6 +18,8 @@ type SyncRequest struct {
 
 type SyncResult struct {
 	DetectedChampionID int
+	DetectedRole       string
+	DetectedQueueID    int
 	ItemSetApplied     bool
 	RunePageApplied    bool
 	SpellsApplied      bool

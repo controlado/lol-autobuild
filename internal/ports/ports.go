@@ -132,8 +132,15 @@ type ApplySummonerSpellsRequest struct {
 	DryRun     bool
 }
 
+type DetectedSelection struct {
+	ChampionID   int
+	Role         string
+	QueueID      int
+	IsAutofilled bool
+}
+
 type LCUClient interface {
-	DetectChampionID(ctx context.Context) (int, error)
+	DetectSelection(ctx context.Context) (DetectedSelection, error)
 	ApplyItemSet(ctx context.Context, req ApplyItemSetRequest) error
 	ApplyRunePage(ctx context.Context, req ApplyRunePageRequest) error
 	ApplySummonerSpells(ctx context.Context, req ApplySummonerSpellsRequest) error

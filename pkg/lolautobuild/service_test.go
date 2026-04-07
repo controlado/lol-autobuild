@@ -31,6 +31,9 @@ func (t tokenProviderStub) Refresh(ctx context.Context) (ports.TokenPair, error)
 
 type coachlessStub struct {
 	getPatchesCalls int
+	keystoneCalls   []ports.KeystoneRequest
+	spellCalls      []ports.SummonerSpellStatsRequest
+	itemCalls       []ports.ItemStatsRequest
 }
 
 func (c *coachlessStub) Refresh(ctx context.Context, refreshToken string) (ports.TokenPair, error) {
@@ -49,14 +52,14 @@ func (c *coachlessStub) GetPatches(ctx context.Context, accessToken string) ([]p
 func (c *coachlessStub) GetKeystoneData(ctx context.Context, accessToken string, req ports.KeystoneRequest) ([]ports.KeystoneStat, error) {
 	_ = ctx
 	_ = accessToken
-	_ = req
+	c.keystoneCalls = append(c.keystoneCalls, req)
 	return []ports.KeystoneStat{{Rune: 8437, WPAOverall: 1.4, Occurrence: 1000}}, nil
 }
 
 func (c *coachlessStub) GetSummonerSpellStats(ctx context.Context, accessToken string, req ports.SummonerSpellStatsRequest) ([]ports.SummonerSpellStat, error) {
 	_ = ctx
 	_ = accessToken
-	_ = req
+	c.spellCalls = append(c.spellCalls, req)
 	return []ports.SummonerSpellStat{
 		{SummonerSpell: 4, WPAOverall: 0.8, Occurrence: 500},
 		{SummonerSpell: 14, WPAOverall: 0.7, Occurrence: 450},
@@ -66,7 +69,7 @@ func (c *coachlessStub) GetSummonerSpellStats(ctx context.Context, accessToken s
 func (c *coachlessStub) GetItemStats(ctx context.Context, accessToken string, req ports.ItemStatsRequest) ([]ports.ItemStat, error) {
 	_ = ctx
 	_ = accessToken
-	_ = req
+	c.itemCalls = append(c.itemCalls, req)
 	return []ports.ItemStat{
 		{ItemID: 1055, WPAOverall: 1.0, Occurrence: 900},
 		{ItemID: 1036, WPAOverall: 0.5, Occurrence: 600},
@@ -74,21 +77,21 @@ func (c *coachlessStub) GetItemStats(ctx context.Context, accessToken string, re
 }
 
 type lcuStub struct {
-	detectedChampionID int
-	detectErr          error
-	detectCalls        int
-	itemSetCalls       []ports.ApplyItemSetRequest
-	runePageCalls      []ports.ApplyRunePageRequest
-	spellCalls         []ports.ApplySummonerSpellsRequest
+	detectedSelection ports.DetectedSelection
+	detectErr         error
+	detectCalls       int
+	itemSetCalls      []ports.ApplyItemSetRequest
+	runePageCalls     []ports.ApplyRunePageRequest
+	spellCalls        []ports.ApplySummonerSpellsRequest
 }
 
-func (l *lcuStub) DetectChampionID(ctx context.Context) (int, error) {
+func (l *lcuStub) DetectSelection(ctx context.Context) (ports.DetectedSelection, error) {
 	_ = ctx
 	l.detectCalls++
 	if l.detectErr != nil {
-		return 0, l.detectErr
+		return ports.DetectedSelection{}, l.detectErr
 	}
-	return l.detectedChampionID, nil
+	return l.detectedSelection, nil
 }
 
 func (l *lcuStub) ApplyItemSet(ctx context.Context, req ports.ApplyItemSetRequest) error {
@@ -113,7 +116,14 @@ func TestSyncDryRunDetectsChampionButDoesNotApplyLCU(t *testing.T) {
 	t.Parallel()
 
 	coachless := &coachlessStub{}
-	lcu := &lcuStub{detectedChampionID: 240}
+	lcu := &lcuStub{
+		detectedSelection: ports.DetectedSelection{
+			ChampionID:   240,
+			Role:         "top",
+			QueueID:      420,
+			IsAutofilled: false,
+		},
+	}
 	svc, err := NewService(ServiceDeps{
 		Coachless:   coachless,
 		Tokens:      tokenProviderStub{token: "t"},
@@ -126,7 +136,6 @@ func TestSyncDryRunDetectsChampionButDoesNotApplyLCU(t *testing.T) {
 	}
 
 	got, err := svc.Sync(context.Background(), SyncRequest{
-		Role:        "top",
 		ApplyItems:  true,
 		ApplyRunes:  true,
 		ApplySpells: true,
@@ -138,6 +147,12 @@ func TestSyncDryRunDetectsChampionButDoesNotApplyLCU(t *testing.T) {
 
 	if got.DetectedChampionID != 240 {
 		t.Fatalf("unexpected detected champion id: %d", got.DetectedChampionID)
+	}
+	if got.DetectedRole != "top" {
+		t.Fatalf("unexpected detected role: %q", got.DetectedRole)
+	}
+	if got.DetectedQueueID != 420 {
+		t.Fatalf("unexpected detected queue id: %d", got.DetectedQueueID)
 	}
 
 	if got.ItemSetApplied || got.RunePageApplied || got.SpellsApplied {
@@ -155,14 +170,28 @@ func TestSyncDryRunDetectsChampionButDoesNotApplyLCU(t *testing.T) {
 	if coachless.getPatchesCalls != 1 {
 		t.Fatalf("expected coachless calls after successful detect, got getPatches=%d", coachless.getPatchesCalls)
 	}
+	if len(coachless.keystoneCalls) != 1 {
+		t.Fatalf("expected one keystone call, got %d", len(coachless.keystoneCalls))
+	}
+	if coachless.keystoneCalls[0].CommonFilters.Role != 0 {
+		t.Fatalf("expected detected top role code 0, got %d", coachless.keystoneCalls[0].CommonFilters.Role)
+	}
 }
 
 func TestSyncUsesDetectedChampionIDInApplyRequests(t *testing.T) {
 	t.Parallel()
 
-	lcu := &lcuStub{detectedChampionID: 777}
+	coachless := &coachlessStub{}
+	lcu := &lcuStub{
+		detectedSelection: ports.DetectedSelection{
+			ChampionID:   777,
+			Role:         "support",
+			QueueID:      440,
+			IsAutofilled: true,
+		},
+	}
 	svc, err := NewService(ServiceDeps{
-		Coachless:   &coachlessStub{},
+		Coachless:   coachless,
 		Tokens:      tokenProviderStub{token: "t"},
 		LCU:         lcu,
 		Recommender: recommend.NewEngine(),
@@ -173,7 +202,6 @@ func TestSyncUsesDetectedChampionIDInApplyRequests(t *testing.T) {
 	}
 
 	got, err := svc.Sync(context.Background(), SyncRequest{
-		Role:        "top",
 		ApplyItems:  true,
 		ApplyRunes:  true,
 		ApplySpells: true,
@@ -186,6 +214,15 @@ func TestSyncUsesDetectedChampionIDInApplyRequests(t *testing.T) {
 	if got.DetectedChampionID != 777 {
 		t.Fatalf("expected detected champion 777, got %d", got.DetectedChampionID)
 	}
+	if got.DetectedRole != "support" {
+		t.Fatalf("expected detected role support, got %q", got.DetectedRole)
+	}
+	if got.DetectedQueueID != 440 {
+		t.Fatalf("expected detected queue 440, got %d", got.DetectedQueueID)
+	}
+	if len(got.Warnings) == 0 {
+		t.Fatalf("expected warnings to include patch/autofill messages")
+	}
 
 	if len(lcu.itemSetCalls) != 1 || len(lcu.runePageCalls) != 1 || len(lcu.spellCalls) != 1 {
 		t.Fatalf("unexpected LCU apply calls: items=%d runes=%d spells=%d", len(lcu.itemSetCalls), len(lcu.runePageCalls), len(lcu.spellCalls))
@@ -193,6 +230,18 @@ func TestSyncUsesDetectedChampionIDInApplyRequests(t *testing.T) {
 
 	if lcu.itemSetCalls[0].ChampionID != 777 || lcu.runePageCalls[0].ChampionID != 777 || lcu.spellCalls[0].ChampionID != 777 {
 		t.Fatalf("apply calls must use detected champion id")
+	}
+	if lcu.itemSetCalls[0].Role != "support" || lcu.runePageCalls[0].Role != "support" || lcu.spellCalls[0].Role != "support" {
+		t.Fatalf("apply calls must use detected role")
+	}
+	if len(coachless.keystoneCalls) != 1 {
+		t.Fatalf("expected one keystone call, got %d", len(coachless.keystoneCalls))
+	}
+	if coachless.keystoneCalls[0].CommonFilters.Role != 4 {
+		t.Fatalf("expected support role code 4, got %d", coachless.keystoneCalls[0].CommonFilters.Role)
+	}
+	if len(coachless.keystoneCalls[0].CommonFilters.ChampionIDs) != 1 || coachless.keystoneCalls[0].CommonFilters.ChampionIDs[0] != 777 {
+		t.Fatalf("coachless filters must include detected champion id 777")
 	}
 }
 
@@ -214,7 +263,6 @@ func TestSyncFailsFastWhenChampionDetectionFails(t *testing.T) {
 	}
 
 	_, err = svc.Sync(context.Background(), SyncRequest{
-		Role:        "top",
 		ApplyItems:  true,
 		ApplyRunes:  true,
 		ApplySpells: true,

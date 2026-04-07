@@ -23,7 +23,6 @@ import (
 
 type syncFlags struct {
 	ConfigPath  string
-	Role        string
 	Patch       string
 	ApplyItems  bool
 	ApplyRunes  bool
@@ -99,7 +98,6 @@ func syncCmd() *cobra.Command {
 			}
 
 			req := lolautobuild.SyncRequest{
-				Role:        flags.Role,
 				Patch:       flags.Patch,
 				ApplyItems:  flags.ApplyItems,
 				ApplyRunes:  flags.ApplyRunes,
@@ -128,7 +126,6 @@ func syncCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&flags.ConfigPath, "config", "config.example.yaml", "Path to YAML configuration file")
-	cmd.Flags().StringVar(&flags.Role, "role", "top", "Role name: top/jungle/mid/adc/support")
 	cmd.Flags().StringVar(&flags.Patch, "patch", "", "Patch label (e.g. 16.7). Empty = latest")
 	cmd.Flags().BoolVar(&flags.ApplyItems, "apply-items", true, "Apply item set")
 	cmd.Flags().BoolVar(&flags.ApplyRunes, "apply-runes", true, "Apply rune page")

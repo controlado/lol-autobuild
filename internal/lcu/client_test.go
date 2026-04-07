@@ -15,12 +15,12 @@ import (
 	"testing"
 )
 
-func TestDetectChampionIDReturnsNotConfiguredWhenDisabled(t *testing.T) {
+func TestDetectSelectionReturnsNotConfiguredWhenDisabled(t *testing.T) {
 	t.Parallel()
 
 	client := NewClient(false, "")
 	client.discoverLockfilePaths = func() []string { return nil }
-	_, err := client.DetectChampionID(context.Background())
+	_, err := client.DetectSelection(context.Background())
 	if !errors.Is(err, ErrNotConfigured) {
 		t.Fatalf("expected ErrNotConfigured, got %v", err)
 	}
@@ -48,7 +48,7 @@ func TestParseLockfileInvalid(t *testing.T) {
 	}
 }
 
-func TestDetectChampionIDFromChampSelect(t *testing.T) {
+func TestDetectSelectionFromChampSelect(t *testing.T) {
 	t.Parallel()
 
 	expectedAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("riot:secret"))
@@ -63,72 +63,121 @@ func TestDetectChampionIDFromChampSelect(t *testing.T) {
 			return
 		}
 
-		_, _ = fmt.Fprint(w, `{"localPlayerCellId":3,"myTeam":[{"cellId":2,"championId":1},{"cellId":3,"championId":240}]}`)
+		_, _ = fmt.Fprint(w, `{"queueId":420,"localPlayerCellId":3,"myTeam":[{"cellId":2,"championId":1,"assignedPosition":"TOP","isAutofilled":false},{"cellId":3,"championId":240,"assignedPosition":"MIDDLE","isAutofilled":true}]}`)
 	}))
 	defer server.Close()
 
-	u, err := url.Parse(server.URL)
-	if err != nil {
-		t.Fatalf("parse server URL: %v", err)
-	}
+	port := mustServerPort(t, server.URL)
 
-	port, err := strconv.Atoi(u.Port())
-	if err != nil {
-		t.Fatalf("parse server port: %v", err)
-	}
-
-	dir := t.TempDir()
-	lockfilePath := filepath.Join(dir, "lockfile")
-	raw := fmt.Sprintf("LeagueClientUx:1234:%d:secret:http", port)
-	if err := os.WriteFile(lockfilePath, []byte(raw), 0o600); err != nil {
-		t.Fatalf("write lockfile: %v", err)
-	}
+	lockfilePath := filepath.Join(t.TempDir(), "lockfile")
+	writeLockfile(t, lockfilePath, port)
 
 	client := NewClient(true, lockfilePath)
 	client.discoverLockfilePaths = func() []string { return nil }
-	id, err := client.DetectChampionID(context.Background())
+	selection, err := client.DetectSelection(context.Background())
 	if err != nil {
-		t.Fatalf("DetectChampionID() error = %v", err)
+		t.Fatalf("DetectSelection() error = %v", err)
 	}
 
-	if id != 240 {
-		t.Fatalf("expected champion id 240, got %d", id)
+	if selection.ChampionID != 240 {
+		t.Fatalf("expected champion id 240, got %d", selection.ChampionID)
+	}
+	if selection.Role != "mid" {
+		t.Fatalf("expected role mid, got %q", selection.Role)
+	}
+	if selection.QueueID != 420 {
+		t.Fatalf("expected queue id 420, got %d", selection.QueueID)
+	}
+	if !selection.IsAutofilled {
+		t.Fatalf("expected autofill flag true")
 	}
 }
 
-func TestDetectChampionIDReturnsNotSelected(t *testing.T) {
+func TestDetectSelectionReturnsChampionNotSelected(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = fmt.Fprint(w, `{"localPlayerCellId":3,"myTeam":[{"cellId":3,"championId":0}]}`)
+		_, _ = fmt.Fprint(w, `{"queueId":420,"localPlayerCellId":3,"myTeam":[{"cellId":3,"championId":0,"assignedPosition":"TOP","isAutofilled":false}]}`)
 	}))
 	defer server.Close()
 
-	u, err := url.Parse(server.URL)
-	if err != nil {
-		t.Fatalf("parse server URL: %v", err)
-	}
-
-	port, err := strconv.Atoi(u.Port())
-	if err != nil {
-		t.Fatalf("parse server port: %v", err)
-	}
+	port := mustServerPort(t, server.URL)
 
 	lockfilePath := filepath.Join(t.TempDir(), "lockfile")
-	raw := fmt.Sprintf("LeagueClientUx:1234:%d:secret:http", port)
-	if err := os.WriteFile(lockfilePath, []byte(raw), 0o600); err != nil {
-		t.Fatalf("write lockfile: %v", err)
-	}
+	writeLockfile(t, lockfilePath, port)
 
 	client := NewClient(true, lockfilePath)
 	client.discoverLockfilePaths = func() []string { return nil }
-	_, err = client.DetectChampionID(context.Background())
+	_, err := client.DetectSelection(context.Background())
 	if !errors.Is(err, ErrChampionNotSelected) {
 		t.Fatalf("expected ErrChampionNotSelected, got %v", err)
 	}
 }
 
-func TestDetectChampionIDReturnsUnavailableWhenNotInChampSelect(t *testing.T) {
+func TestDetectSelectionReturnsRoleNotAssigned(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `{"queueId":420,"localPlayerCellId":3,"myTeam":[{"cellId":3,"championId":266,"assignedPosition":"UNSELECTED","isAutofilled":false}]}`)
+	}))
+	defer server.Close()
+
+	port := mustServerPort(t, server.URL)
+
+	lockfilePath := filepath.Join(t.TempDir(), "lockfile")
+	writeLockfile(t, lockfilePath, port)
+
+	client := NewClient(true, lockfilePath)
+	client.discoverLockfilePaths = func() []string { return nil }
+	_, err := client.DetectSelection(context.Background())
+	if !errors.Is(err, ErrRoleNotAssigned) {
+		t.Fatalf("expected ErrRoleNotAssigned, got %v", err)
+	}
+}
+
+func TestDetectSelectionReturnsRoleUnknown(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `{"queueId":420,"localPlayerCellId":3,"myTeam":[{"cellId":3,"championId":266,"assignedPosition":"DUO_TOP","isAutofilled":false}]}`)
+	}))
+	defer server.Close()
+
+	port := mustServerPort(t, server.URL)
+
+	lockfilePath := filepath.Join(t.TempDir(), "lockfile")
+	writeLockfile(t, lockfilePath, port)
+
+	client := NewClient(true, lockfilePath)
+	client.discoverLockfilePaths = func() []string { return nil }
+	_, err := client.DetectSelection(context.Background())
+	if !errors.Is(err, ErrRoleUnknown) {
+		t.Fatalf("expected ErrRoleUnknown, got %v", err)
+	}
+}
+
+func TestDetectSelectionReturnsUnsupportedQueue(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `{"queueId":490,"localPlayerCellId":3,"myTeam":[{"cellId":3,"championId":55,"assignedPosition":"MIDDLE","isAutofilled":false}]}`)
+	}))
+	defer server.Close()
+
+	port := mustServerPort(t, server.URL)
+
+	lockfilePath := filepath.Join(t.TempDir(), "lockfile")
+	writeLockfile(t, lockfilePath, port)
+
+	client := NewClient(true, lockfilePath)
+	client.discoverLockfilePaths = func() []string { return nil }
+	_, err := client.DetectSelection(context.Background())
+	if !errors.Is(err, ErrRoleDetectionUnsupportedQueue) {
+		t.Fatalf("expected ErrRoleDetectionUnsupportedQueue, got %v", err)
+	}
+}
+
+func TestDetectSelectionReturnsUnavailableWhenNotInChampSelect(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -136,42 +185,31 @@ func TestDetectChampionIDReturnsUnavailableWhenNotInChampSelect(t *testing.T) {
 	}))
 	defer server.Close()
 
-	u, err := url.Parse(server.URL)
-	if err != nil {
-		t.Fatalf("parse server URL: %v", err)
-	}
-
-	port, err := strconv.Atoi(u.Port())
-	if err != nil {
-		t.Fatalf("parse server port: %v", err)
-	}
+	port := mustServerPort(t, server.URL)
 
 	lockfilePath := filepath.Join(t.TempDir(), "lockfile")
-	raw := fmt.Sprintf("LeagueClientUx:1234:%d:secret:http", port)
-	if err := os.WriteFile(lockfilePath, []byte(raw), 0o600); err != nil {
-		t.Fatalf("write lockfile: %v", err)
-	}
+	writeLockfile(t, lockfilePath, port)
 
 	client := NewClient(true, lockfilePath)
 	client.discoverLockfilePaths = func() []string { return nil }
-	_, err = client.DetectChampionID(context.Background())
+	_, err := client.DetectSelection(context.Background())
 	if !errors.Is(err, ErrChampSelectUnavailable) {
 		t.Fatalf("expected ErrChampSelectUnavailable, got %v", err)
 	}
 }
 
-func TestDetectChampionIDReturnsLockfileNotFound(t *testing.T) {
+func TestDetectSelectionReturnsLockfileNotFound(t *testing.T) {
 	t.Parallel()
 
 	client := NewClient(true, filepath.Join(t.TempDir(), "missing-lockfile"))
 	client.discoverLockfilePaths = func() []string { return nil }
-	_, err := client.DetectChampionID(context.Background())
+	_, err := client.DetectSelection(context.Background())
 	if !errors.Is(err, ErrLockfileNotFound) {
 		t.Fatalf("expected ErrLockfileNotFound, got %v", err)
 	}
 }
 
-func TestDetectChampionIDFallsBackWhenAutoCandidateFails(t *testing.T) {
+func TestDetectSelectionFallsBackWhenAutoCandidateFails(t *testing.T) {
 	t.Parallel()
 
 	autoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +218,7 @@ func TestDetectChampionIDFallsBackWhenAutoCandidateFails(t *testing.T) {
 	defer autoServer.Close()
 
 	fallbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = fmt.Fprint(w, `{"localPlayerCellId":1,"myTeam":[{"cellId":1,"championId":67}]}`)
+		_, _ = fmt.Fprint(w, `{"queueId":440,"localPlayerCellId":1,"myTeam":[{"cellId":1,"championId":67,"assignedPosition":"BOTTOM","isAutofilled":false}]}`)
 	}))
 	defer fallbackServer.Close()
 
@@ -196,26 +234,26 @@ func TestDetectChampionIDFallsBackWhenAutoCandidateFails(t *testing.T) {
 	client := NewClient(true, fallbackPath)
 	client.discoverLockfilePaths = func() []string { return []string{autoPath} }
 
-	id, err := client.DetectChampionID(context.Background())
+	selection, err := client.DetectSelection(context.Background())
 	if err != nil {
-		t.Fatalf("DetectChampionID() error = %v", err)
+		t.Fatalf("DetectSelection() error = %v", err)
 	}
 
-	if id != 67 {
-		t.Fatalf("expected champion id 67, got %d", id)
+	if selection.ChampionID != 67 || selection.Role != "adc" || selection.QueueID != 440 {
+		t.Fatalf("unexpected selection: %#v", selection)
 	}
 }
 
-func TestDetectChampionIDFallsBackAfterChampionNotSelected(t *testing.T) {
+func TestDetectSelectionFallsBackAfterRoleNotAssigned(t *testing.T) {
 	t.Parallel()
 
 	autoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = fmt.Fprint(w, `{"localPlayerCellId":1,"myTeam":[{"cellId":1,"championId":0}]}`)
+		_, _ = fmt.Fprint(w, `{"queueId":420,"localPlayerCellId":1,"myTeam":[{"cellId":1,"championId":99,"assignedPosition":"UNSELECTED","isAutofilled":false}]}`)
 	}))
 	defer autoServer.Close()
 
 	fallbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = fmt.Fprint(w, `{"localPlayerCellId":2,"myTeam":[{"cellId":2,"championId":777}]}`)
+		_, _ = fmt.Fprint(w, `{"queueId":420,"localPlayerCellId":2,"myTeam":[{"cellId":2,"championId":777,"assignedPosition":"UTILITY","isAutofilled":true}]}`)
 	}))
 	defer fallbackServer.Close()
 
@@ -231,26 +269,26 @@ func TestDetectChampionIDFallsBackAfterChampionNotSelected(t *testing.T) {
 	client := NewClient(true, fallbackPath)
 	client.discoverLockfilePaths = func() []string { return []string{autoPath} }
 
-	id, err := client.DetectChampionID(context.Background())
+	selection, err := client.DetectSelection(context.Background())
 	if err != nil {
-		t.Fatalf("DetectChampionID() error = %v", err)
+		t.Fatalf("DetectSelection() error = %v", err)
 	}
 
-	if id != 777 {
-		t.Fatalf("expected champion id 777, got %d", id)
+	if selection.ChampionID != 777 || selection.Role != "support" || !selection.IsAutofilled {
+		t.Fatalf("unexpected selection: %#v", selection)
 	}
 }
 
-func TestDetectChampionIDAllCandidatesFailReturnsPriorityError(t *testing.T) {
+func TestDetectSelectionAllCandidatesFailReturnsPriorityError(t *testing.T) {
 	t.Parallel()
 
 	autoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = fmt.Fprint(w, `{"localPlayerCellId":1,"myTeam":[{"cellId":1,"championId":0}]}`)
+		_, _ = fmt.Fprint(w, `{"queueId":490,"localPlayerCellId":1,"myTeam":[{"cellId":1,"championId":157,"assignedPosition":"MIDDLE","isAutofilled":false}]}`)
 	}))
 	defer autoServer.Close()
 
 	fallbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.NotFound(w, r)
+		_, _ = fmt.Fprint(w, `{"queueId":420,"localPlayerCellId":1,"myTeam":[{"cellId":1,"championId":0,"assignedPosition":"TOP","isAutofilled":false}]}`)
 	}))
 	defer fallbackServer.Close()
 
@@ -266,7 +304,7 @@ func TestDetectChampionIDAllCandidatesFailReturnsPriorityError(t *testing.T) {
 	client := NewClient(true, fallbackPath)
 	client.discoverLockfilePaths = func() []string { return []string{autoPath} }
 
-	_, err := client.DetectChampionID(context.Background())
+	_, err := client.DetectSelection(context.Background())
 	if !errors.Is(err, ErrChampionNotSelected) {
 		t.Fatalf("expected ErrChampionNotSelected, got %v", err)
 	}

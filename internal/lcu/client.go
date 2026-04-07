@@ -24,6 +24,9 @@ var ErrLockfileNotFound = errors.New("lcu lockfile not found")
 var ErrInvalidLockfile = errors.New("invalid lcu lockfile")
 var ErrChampSelectUnavailable = errors.New("champ select session is unavailable")
 var ErrChampionNotSelected = errors.New("local champion is not selected")
+var ErrRoleDetectionUnsupportedQueue = errors.New("role detection is unsupported for this queue")
+var ErrRoleNotAssigned = errors.New("local role is not assigned")
+var ErrRoleUnknown = errors.New("local role is unknown")
 
 type Client struct {
 	Enabled      bool
@@ -43,14 +46,17 @@ func NewClient(enabled bool, lockfilePath string) *Client {
 	}
 }
 
-func (c *Client) DetectChampionID(ctx context.Context) (int, error) {
+func (c *Client) DetectSelection(ctx context.Context) (ports.DetectedSelection, error) {
 	if !c.Enabled {
-		return 0, ErrNotConfigured
+		return ports.DetectedSelection{}, ErrNotConfigured
 	}
 
 	var lastErr error
 	seenExisting := false
 	seenChampionNotSelected := false
+	seenRoleNotAssigned := false
+	seenRoleUnknown := false
+	seenUnsupportedQueue := false
 	seenSessionUnavailable := false
 
 	for _, lockfilePath := range c.lockfileCandidates() {
@@ -75,10 +81,19 @@ func (c *Client) DetectChampionID(ctx context.Context) (int, error) {
 			continue
 		}
 
-		championID, err := championIDFromSession(session)
+		selection, err := selectionFromSession(session)
 		if err != nil {
 			if errors.Is(err, ErrChampionNotSelected) {
 				seenChampionNotSelected = true
+			}
+			if errors.Is(err, ErrRoleNotAssigned) {
+				seenRoleNotAssigned = true
+			}
+			if errors.Is(err, ErrRoleUnknown) {
+				seenRoleUnknown = true
+			}
+			if errors.Is(err, ErrRoleDetectionUnsupportedQueue) {
+				seenUnsupportedQueue = true
 			}
 			if errors.Is(err, ErrChampSelectUnavailable) {
 				seenSessionUnavailable = true
@@ -87,22 +102,34 @@ func (c *Client) DetectChampionID(ctx context.Context) (int, error) {
 			continue
 		}
 
-		return championID, nil
+		return selection, nil
 	}
 
 	if seenChampionNotSelected {
-		return 0, withLastCandidateError(ErrChampionNotSelected, lastErr)
+		return ports.DetectedSelection{}, withLastCandidateError(ErrChampionNotSelected, lastErr)
+	}
+
+	if seenRoleNotAssigned {
+		return ports.DetectedSelection{}, withLastCandidateError(ErrRoleNotAssigned, lastErr)
+	}
+
+	if seenRoleUnknown {
+		return ports.DetectedSelection{}, withLastCandidateError(ErrRoleUnknown, lastErr)
+	}
+
+	if seenUnsupportedQueue {
+		return ports.DetectedSelection{}, withLastCandidateError(ErrRoleDetectionUnsupportedQueue, lastErr)
 	}
 
 	if seenSessionUnavailable {
-		return 0, withLastCandidateError(ErrChampSelectUnavailable, lastErr)
+		return ports.DetectedSelection{}, withLastCandidateError(ErrChampSelectUnavailable, lastErr)
 	}
 
 	if !seenExisting {
-		return 0, ErrLockfileNotFound
+		return ports.DetectedSelection{}, ErrLockfileNotFound
 	}
 
-	return 0, withLastCandidateError(ErrLockfileNotFound, lastErr)
+	return ports.DetectedSelection{}, withLastCandidateError(ErrLockfileNotFound, lastErr)
 }
 
 type lockfileInfo struct {
@@ -113,9 +140,12 @@ type lockfileInfo struct {
 
 type champSelectSession struct {
 	LocalPlayerCellID int `json:"localPlayerCellId"`
+	QueueID           int `json:"queueId"`
 	MyTeam            []struct {
-		CellID     int `json:"cellId"`
-		ChampionID int `json:"championId"`
+		CellID           int    `json:"cellId"`
+		ChampionID       int    `json:"championId"`
+		AssignedPosition string `json:"assignedPosition"`
+		IsAutofilled     bool   `json:"isAutofilled"`
 	} `json:"myTeam"`
 }
 
@@ -159,20 +189,62 @@ func (c *Client) readLockfile(lockfilePath string) (lockfileInfo, error) {
 	return parseLockfile(raw)
 }
 
-func championIDFromSession(session champSelectSession) (int, error) {
+func selectionFromSession(session champSelectSession) (ports.DetectedSelection, error) {
+	if !isRoleDetectionQueueSupported(session.QueueID) {
+		return ports.DetectedSelection{}, fmt.Errorf("%w: queueId %d", ErrRoleDetectionUnsupportedQueue, session.QueueID)
+	}
+
 	for _, member := range session.MyTeam {
 		if member.CellID != session.LocalPlayerCellID {
 			continue
 		}
 
 		if member.ChampionID <= 0 {
-			return 0, ErrChampionNotSelected
+			return ports.DetectedSelection{}, ErrChampionNotSelected
 		}
 
-		return member.ChampionID, nil
+		role, err := canonicalRoleFromAssignedPosition(member.AssignedPosition)
+		if err != nil {
+			return ports.DetectedSelection{}, err
+		}
+
+		return ports.DetectedSelection{
+			ChampionID:   member.ChampionID,
+			Role:         role,
+			QueueID:      session.QueueID,
+			IsAutofilled: member.IsAutofilled,
+		}, nil
 	}
 
-	return 0, fmt.Errorf("%w: local player cell %d not found in myTeam", ErrChampSelectUnavailable, session.LocalPlayerCellID)
+	return ports.DetectedSelection{}, fmt.Errorf("%w: local player cell %d not found in myTeam", ErrChampSelectUnavailable, session.LocalPlayerCellID)
+}
+
+func isRoleDetectionQueueSupported(queueID int) bool {
+	switch queueID {
+	case 400, 420, 440:
+		return true
+	default:
+		return false
+	}
+}
+
+func canonicalRoleFromAssignedPosition(assignedPosition string) (string, error) {
+	switch strings.ToUpper(strings.TrimSpace(assignedPosition)) {
+	case "TOP":
+		return "top", nil
+	case "JUNGLE":
+		return "jungle", nil
+	case "MIDDLE":
+		return "mid", nil
+	case "BOTTOM":
+		return "adc", nil
+	case "UTILITY":
+		return "support", nil
+	case "", "FILL", "UNSELECTED":
+		return "", fmt.Errorf("%w: assignedPosition %q", ErrRoleNotAssigned, assignedPosition)
+	default:
+		return "", fmt.Errorf("%w: assignedPosition %q", ErrRoleUnknown, assignedPosition)
+	}
 }
 
 func withLastCandidateError(base error, last error) error {
@@ -336,8 +408,8 @@ func (c *Client) ApplySummonerSpells(ctx context.Context, req ports.ApplySummone
 }
 
 type StubClient struct {
-	DetectedChampionID int
-	DetectChampionErr  error
+	DetectedSelection  ports.DetectedSelection
+	DetectErr          error
 	ItemSetCalls       []ports.ApplyItemSetRequest
 	RunePageCalls      []ports.ApplyRunePageRequest
 	SummonerSpellCalls []ports.ApplySummonerSpellsRequest
@@ -346,13 +418,13 @@ type StubClient struct {
 	SummonerSpellsErr  error
 }
 
-func (c *StubClient) DetectChampionID(ctx context.Context) (int, error) {
+func (c *StubClient) DetectSelection(ctx context.Context) (ports.DetectedSelection, error) {
 	_ = ctx
-	if c.DetectChampionErr != nil {
-		return 0, c.DetectChampionErr
+	if c.DetectErr != nil {
+		return ports.DetectedSelection{}, c.DetectErr
 	}
 
-	return c.DetectedChampionID, nil
+	return c.DetectedSelection, nil
 }
 
 func (c *StubClient) ApplyItemSet(ctx context.Context, req ports.ApplyItemSetRequest) error {
