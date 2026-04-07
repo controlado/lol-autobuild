@@ -55,11 +55,13 @@ func NewService(deps ServiceDeps) (Service, error) {
 }
 
 func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, error) {
-	if req.ChampionID <= 0 {
-		return SyncResult{}, errors.New("champion_id must be > 0")
-	}
 	if strings.TrimSpace(req.Role) == "" {
 		return SyncResult{}, errors.New("role is required")
+	}
+
+	detectedChampionID, err := s.deps.LCU.DetectChampionID(ctx)
+	if err != nil {
+		return SyncResult{}, fmt.Errorf("detect champion id: %w", err)
 	}
 
 	accessToken, err := s.deps.Tokens.AccessToken(ctx)
@@ -81,7 +83,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 
 	filters := ports.CommonFilters{
 		Patch:       patchFilter,
-		ChampionIDs: []int{req.ChampionID},
+		ChampionIDs: []int{detectedChampionID},
 		LeagueTiers: []int{5, 6, 7},
 		Role:        roleCode,
 	}
@@ -119,7 +121,8 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 	})
 
 	result := SyncResult{
-		Warnings: append([]string{}, rec.Warnings...),
+		DetectedChampionID: detectedChampionID,
+		Warnings:           append([]string{}, rec.Warnings...),
 	}
 	result.Warnings = append(result.Warnings, fmt.Sprintf("selected patch: %s", patchLabel))
 
@@ -132,7 +135,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 		if rec.Keystone == nil {
 			result.Warnings = append(result.Warnings, "apply runes requested but no keystone recommendation was available")
 		} else if err := s.deps.LCU.ApplyRunePage(ctx, ports.ApplyRunePageRequest{
-			ChampionID: req.ChampionID,
+			ChampionID: detectedChampionID,
 			Role:       req.Role,
 			KeystoneID: rec.Keystone.Rune,
 			DryRun:     false,
@@ -152,7 +155,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 		if len(spellIDs) == 0 {
 			result.Warnings = append(result.Warnings, "apply spells requested but no spell recommendation was available")
 		} else if err := s.deps.LCU.ApplySummonerSpells(ctx, ports.ApplySummonerSpellsRequest{
-			ChampionID: req.ChampionID,
+			ChampionID: detectedChampionID,
 			Role:       req.Role,
 			SpellIDs:   spellIDs,
 			DryRun:     false,
@@ -172,7 +175,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 		if len(itemIDs) == 0 {
 			result.Warnings = append(result.Warnings, "apply items requested but no item recommendation was available")
 		} else if err := s.deps.LCU.ApplyItemSet(ctx, ports.ApplyItemSetRequest{
-			ChampionID: req.ChampionID,
+			ChampionID: detectedChampionID,
 			Role:       req.Role,
 			Patch:      patchLabel,
 			ItemIDs:    itemIDs,

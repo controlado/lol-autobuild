@@ -6,11 +6,12 @@
 
 Data flow:
 
-1. Resolve auth token via `TokenProvider`.
-2. Query Coachless API endpoints.
-3. Build recommendation model.
-4. Apply actions through `LCUClient` (items/runes/spells) or dry-run.
-5. Return structured sync result and warnings.
+1. Detect local champion from LCU champ select session.
+2. Resolve auth token via `TokenProvider`.
+3. Query Coachless API endpoints.
+4. Build recommendation model.
+5. Apply actions through `LCUClient` (items/runes/spells) or dry-run.
+6. Return structured sync result and warnings.
 
 ## Layout
 
@@ -34,6 +35,8 @@ Data flow:
   - `SecretStore`
   - `LCUClient`
   - `RecommendationEngine`
+
+`SyncRequest` no longer accepts manual champion ID. Champion selection is mandatory via LCU detection.
 
 ## Authentication strategy
 

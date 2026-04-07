@@ -18,5 +18,5 @@ recommendation:
   top_spells: 2
 
 lcu:
-  enabled: false
+  enabled: true
   lockfile_path: ""

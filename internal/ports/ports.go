@@ -133,6 +133,7 @@ type ApplySummonerSpellsRequest struct {
 }
 
 type LCUClient interface {
+	DetectChampionID(ctx context.Context) (int, error)
 	ApplyItemSet(ctx context.Context, req ApplyItemSetRequest) error
 	ApplyRunePage(ctx context.Context, req ApplyRunePageRequest) error
 	ApplySummonerSpells(ctx context.Context, req ApplySummonerSpellsRequest) error

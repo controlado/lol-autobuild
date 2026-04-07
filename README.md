@@ -25,14 +25,17 @@ Bootstrap phase only. The repository ships architecture, contracts, CI/release, 
 ## Quick start
 
 ```bash
-go run ./cmd/dev sync --champion-id 240 --role top --dry-run
+go run ./cmd/dev sync --role top --dry-run
 ```
 
-By default, the command reads `config.yaml` from current working directory. Use:
+By default, the command reads `config.example.yaml` from current working directory. Use:
 
 ```bash
-go run ./cmd/dev sync --config ./config.example.yaml --champion-id 240 --role top --dry-run
+go run ./cmd/dev sync --config ./config.example.yaml --role top --dry-run
 ```
+
+Champion ID is auto-detected from LCU champ select (`/lol-champ-select/v1/session`). The command fails when LCU is unavailable or your champion is not selected yet.
+Set `lcu.enabled: true` in your config and optionally provide `lcu.lockfile_path` if auto-discovery does not find your installation.
 
 ## Development checks
 

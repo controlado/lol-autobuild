@@ -23,7 +23,6 @@ import (
 
 type syncFlags struct {
 	ConfigPath  string
-	ChampionID  int
 	Role        string
 	Patch       string
 	ApplyItems  bool
@@ -70,7 +69,7 @@ func syncCmd() *cobra.Command {
 
 			coachlessClient := coachless.NewClient(cfg.Coachless.APIBaseURL, time.Duration(cfg.Coachless.TimeoutSeconds)*time.Second)
 			secretStore := secrets.NewKeyringStore(cfg.Secrets.ServiceName)
-			lcuClient := lcu.NewClient(cfg.LCU.Enabled)
+			lcuClient := lcu.NewClient(cfg.LCU.Enabled, cfg.LCU.LockfilePath)
 
 			provider := auth.NewProvider(
 				coachlessClient,
@@ -100,7 +99,6 @@ func syncCmd() *cobra.Command {
 			}
 
 			req := lolautobuild.SyncRequest{
-				ChampionID:  flags.ChampionID,
 				Role:        flags.Role,
 				Patch:       flags.Patch,
 				ApplyItems:  flags.ApplyItems,
@@ -130,7 +128,6 @@ func syncCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&flags.ConfigPath, "config", "config.example.yaml", "Path to YAML configuration file")
-	cmd.Flags().IntVar(&flags.ChampionID, "champion-id", 0, "Champion numeric ID")
 	cmd.Flags().StringVar(&flags.Role, "role", "top", "Role name: top/jungle/mid/adc/support")
 	cmd.Flags().StringVar(&flags.Patch, "patch", "", "Patch label (e.g. 16.7). Empty = latest")
 	cmd.Flags().BoolVar(&flags.ApplyItems, "apply-items", true, "Apply item set")
@@ -138,6 +135,5 @@ func syncCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&flags.ApplySpells, "apply-spells", true, "Apply summoner spells")
 	cmd.Flags().BoolVar(&flags.DryRun, "dry-run", true, "Do not apply changes to LCU")
 
-	_ = cmd.MarkFlagRequired("champion-id")
 	return cmd
 }
