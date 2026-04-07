@@ -29,12 +29,17 @@ type Client struct {
 	Enabled      bool
 	LockfilePath string
 	HTTPClient   *http.Client
+
+	discoverLockfilePaths func() []string
 }
 
 func NewClient(enabled bool, lockfilePath string) *Client {
 	return &Client{
 		Enabled:      enabled,
 		LockfilePath: strings.TrimSpace(lockfilePath),
+		discoverLockfilePaths: func() []string {
+			return autoDiscoverLockfilePaths()
+		},
 	}
 }
 
@@ -43,29 +48,62 @@ func (c *Client) DetectChampionID(ctx context.Context) (int, error) {
 		return 0, ErrNotConfigured
 	}
 
-	info, err := c.readLockfile()
-	if err != nil {
-		return 0, err
-	}
+	candidates := c.lockfileCandidates()
+	var lastErr error
+	seenExisting := false
+	seenChampionNotSelected := false
+	seenSessionUnavailable := false
 
-	session, err := c.fetchChampSelectSession(ctx, info)
-	if err != nil {
-		return 0, err
-	}
+	for _, lockfilePath := range candidates {
+		stat, err := os.Stat(lockfilePath)
+		if err != nil || stat.IsDir() {
+			continue
+		}
+		seenExisting = true
 
-	for _, member := range session.MyTeam {
-		if member.CellID != session.LocalPlayerCellID {
+		info, err := c.readLockfile(lockfilePath)
+		if err != nil {
+			lastErr = fmt.Errorf("lockfile %q: %w", lockfilePath, err)
 			continue
 		}
 
-		if member.ChampionID <= 0 {
-			return 0, ErrChampionNotSelected
+		session, err := c.fetchChampSelectSession(ctx, info)
+		if err != nil {
+			if errors.Is(err, ErrChampSelectUnavailable) {
+				seenSessionUnavailable = true
+			}
+			lastErr = fmt.Errorf("lockfile %q: %w", lockfilePath, err)
+			continue
 		}
 
-		return member.ChampionID, nil
+		championID, err := championIDFromSession(session)
+		if err != nil {
+			if errors.Is(err, ErrChampionNotSelected) {
+				seenChampionNotSelected = true
+			}
+			if errors.Is(err, ErrChampSelectUnavailable) {
+				seenSessionUnavailable = true
+			}
+			lastErr = fmt.Errorf("lockfile %q: %w", lockfilePath, err)
+			continue
+		}
+
+		return championID, nil
 	}
 
-	return 0, fmt.Errorf("%w: local player cell %d not found in myTeam", ErrChampSelectUnavailable, session.LocalPlayerCellID)
+	if seenChampionNotSelected {
+		return 0, withLastCandidateError(ErrChampionNotSelected, lastErr)
+	}
+
+	if seenSessionUnavailable {
+		return 0, withLastCandidateError(ErrChampSelectUnavailable, lastErr)
+	}
+
+	if !seenExisting {
+		return 0, ErrLockfileNotFound
+	}
+
+	return 0, withLastCandidateError(ErrLockfileNotFound, lastErr)
 }
 
 type lockfileInfo struct {
@@ -82,12 +120,38 @@ type champSelectSession struct {
 	} `json:"myTeam"`
 }
 
-func (c *Client) readLockfile() (lockfileInfo, error) {
-	lockfilePath, err := c.resolveLockfilePath()
-	if err != nil {
-		return lockfileInfo{}, err
+func (c *Client) lockfileCandidates() []string {
+	raw := make([]string, 0, 4)
+	if c.discoverLockfilePaths != nil {
+		raw = append(raw, c.discoverLockfilePaths()...)
+	}
+	if c.LockfilePath != "" {
+		raw = append(raw, c.LockfilePath)
 	}
 
+	seen := make(map[string]struct{}, len(raw))
+	out := make([]string, 0, len(raw))
+	for _, candidate := range raw {
+		cleanPath := filepath.Clean(strings.TrimSpace(candidate))
+		if cleanPath == "" || cleanPath == "." {
+			continue
+		}
+
+		key := cleanPath
+		if runtime.GOOS == "windows" {
+			key = strings.ToLower(cleanPath)
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, cleanPath)
+	}
+
+	return out
+}
+
+func (c *Client) readLockfile(lockfilePath string) (lockfileInfo, error) {
 	raw, err := os.ReadFile(lockfilePath)
 	if err != nil {
 		return lockfileInfo{}, fmt.Errorf("%w: %v", ErrLockfileNotFound, err)
@@ -96,27 +160,28 @@ func (c *Client) readLockfile() (lockfileInfo, error) {
 	return parseLockfile(raw)
 }
 
-func (c *Client) resolveLockfilePath() (string, error) {
-	candidates := autoDiscoverLockfilePaths()
-	if c.LockfilePath != "" {
-		candidates = append(candidates, c.LockfilePath)
-	}
-
-	for _, path := range candidates {
-		cleanPath := strings.TrimSpace(path)
-		if cleanPath == "" {
+func championIDFromSession(session champSelectSession) (int, error) {
+	for _, member := range session.MyTeam {
+		if member.CellID != session.LocalPlayerCellID {
 			continue
 		}
 
-		stat, err := os.Stat(cleanPath)
-		if err != nil || stat.IsDir() {
-			continue
+		if member.ChampionID <= 0 {
+			return 0, ErrChampionNotSelected
 		}
 
-		return cleanPath, nil
+		return member.ChampionID, nil
 	}
 
-	return "", ErrLockfileNotFound
+	return 0, fmt.Errorf("%w: local player cell %d not found in myTeam", ErrChampSelectUnavailable, session.LocalPlayerCellID)
+}
+
+func withLastCandidateError(base error, last error) error {
+	if last == nil {
+		return base
+	}
+
+	return fmt.Errorf("%w: last candidate error: %v", base, last)
 }
 
 func parseLockfile(raw []byte) (lockfileInfo, error) {
