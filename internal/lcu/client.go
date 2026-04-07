@@ -48,13 +48,12 @@ func (c *Client) DetectChampionID(ctx context.Context) (int, error) {
 		return 0, ErrNotConfigured
 	}
 
-	candidates := c.lockfileCandidates()
 	var lastErr error
 	seenExisting := false
 	seenChampionNotSelected := false
 	seenSessionUnavailable := false
 
-	for _, lockfilePath := range candidates {
+	for _, lockfilePath := range c.lockfileCandidates() {
 		stat, err := os.Stat(lockfilePath)
 		if err != nil || stat.IsDir() {
 			continue
@@ -242,9 +241,7 @@ func (c *Client) fetchChampSelectSession(ctx context.Context, info lockfileInfo)
 		return champSelectSession{}, fmt.Errorf("%w: build request: %v", ErrChampSelectUnavailable, err)
 	}
 
-	token := base64.StdEncoding.EncodeToString([]byte("riot:" + info.Password))
-	req.Header.Set("Authorization", "Basic "+token)
-	req.Header.Set("Accept", "application/json")
+	applyLCUHeaders(req, info.Password)
 
 	resp, err := c.httpClient(info.Protocol).Do(req)
 	if err != nil {
@@ -270,6 +267,16 @@ func (c *Client) fetchChampSelectSession(ctx context.Context, info lockfileInfo)
 		}
 		return champSelectSession{}, fmt.Errorf("%w: status %d: %s", ErrChampSelectUnavailable, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
+}
+
+func applyLCUHeaders(req *http.Request, password string) {
+	req.Header.Set("Authorization", lcuBasicAuthHeader(password))
+	req.Header.Set("Accept", "application/json")
+}
+
+func lcuBasicAuthHeader(password string) string {
+	token := base64.StdEncoding.EncodeToString([]byte("riot:" + password))
+	return "Basic " + token
 }
 
 func (c *Client) httpClient(protocol string) *http.Client {
