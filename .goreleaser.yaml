@@ -1,0 +1,34 @@
+version: 2
+
+project_name: lol-autobuild
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: lol-autobuild
+    main: ./cmd/dev
+    binary: lol-autobuild-dev
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: default
+    formats:
+      - zip
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github-native

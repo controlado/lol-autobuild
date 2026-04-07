@@ -1,0 +1,32 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test artifacts
+*.test
+*.out
+coverage.out
+
+# Go workspace/cache
+vendor/
+.gocache/
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env/config local overrides
+.env
+config.yaml
+
+# Release artifacts
+dist/

@@ -1,0 +1,73 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestLoadAndValidate(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+
+	raw := `
+log_level: debug
+coachless:
+  api_base_url: https://api.coachless.gg
+  timeout_seconds: 15
+auth:
+  auto_enabled: true
+  manual_fallback_enabled: true
+  token_skew_seconds: 20
+secrets:
+  service_name: lol-autobuild
+recommendation:
+  min_occurrence: 50
+  top_items: 5
+  top_spells: 2
+lcu:
+  enabled: false
+`
+
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.LogLevel != "debug" {
+		t.Fatalf("unexpected log level: %s", cfg.LogLevel)
+	}
+
+	if cfg.Recommendation.TopItems != 5 {
+		t.Fatalf("unexpected top items: %d", cfg.Recommendation.TopItems)
+	}
+}
+
+func TestValidateFailsOnInvalidConfig(t *testing.T) {
+	t.Parallel()
+
+	cfg := Defaults()
+	cfg.Coachless.APIBaseURL = ""
+	cfg.Recommendation.TopSpells = 0
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+
+	msg := err.Error()
+	if !strings.Contains(msg, "coachless.api_base_url") {
+		t.Fatalf("expected base url error, got: %s", msg)
+	}
+
+	if !strings.Contains(msg, "recommendation.top_spells") {
+		t.Fatalf("expected top_spells error, got: %s", msg)
+	}
+}

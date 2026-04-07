@@ -1,0 +1,58 @@
+name: ci
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            race: "false"
+          - os: macos-latest
+            race: "true"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Download deps
+        run: go mod download
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        if: matrix.race == 'false'
+        run: go test ./...
+
+      - name: Test (race)
+        if: matrix.race == 'true'
+        run: go test -race ./...
+
+  lint:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.62.2
+          args: --timeout=5m

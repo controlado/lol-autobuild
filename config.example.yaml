@@ -1,0 +1,22 @@
+log_level: info
+
+coachless:
+  api_base_url: https://api.coachless.gg
+  timeout_seconds: 20
+
+auth:
+  auto_enabled: true
+  manual_fallback_enabled: true
+  token_skew_seconds: 30
+
+secrets:
+  service_name: lol-autobuild
+
+recommendation:
+  min_occurrence: 100
+  top_items: 6
+  top_spells: 2
+
+lcu:
+  enabled: false
+  lockfile_path: ""
