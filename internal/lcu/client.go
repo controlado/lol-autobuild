@@ -272,7 +272,7 @@ func withLastCandidateError(base error, last error) error {
 		return base
 	}
 
-	return fmt.Errorf("%w: last candidate error: %v", base, last)
+	return errors.Join(base, fmt.Errorf("last candidate error: %w", last))
 }
 
 func parseLockfile(raw []byte) (lockfileInfo, error) {
