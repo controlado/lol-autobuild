@@ -32,6 +32,15 @@ var ErrInvalidSummonerSpellsRequest = errors.New("invalid summoner spells apply 
 var ErrChampionSelectionChanged = errors.New("champion selection changed during apply")
 var ErrSummonerSpellsApplyFailed = errors.New("apply summoner spells failed")
 
+type queueID int
+
+const (
+	queueDraftPick   queueID = 400
+	queueSoloDuo     queueID = 420
+	queueFlex        queueID = 440
+	queueRankedClash queueID = 3110
+)
+
 type Client struct {
 	Enabled      bool
 	LockfilePath string
@@ -239,9 +248,9 @@ func localPlayerFromSession(session champSelectSession) (champSelectPlayerSelect
 	return champSelectPlayerSelection{}, fmt.Errorf("%w: local player cell %d not found in myTeam", ErrChampSelectUnavailable, session.LocalPlayerCellID)
 }
 
-func isRoleDetectionQueueSupported(queueID int) bool {
-	switch queueID {
-	case 400, 420, 440, 3110:
+func isRoleDetectionQueueSupported(queueIDValue int) bool {
+	switch queueID(queueIDValue) {
+	case queueDraftPick, queueSoloDuo, queueFlex, queueRankedClash:
 		return true
 	default:
 		return false
