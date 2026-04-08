@@ -181,3 +181,46 @@ func TestSyncFailsFastWhenChampionDetectionFails(t *testing.T) {
 		t.Fatalf("LCU apply should not run when detection fails")
 	}
 }
+
+func TestSyncReturnsErrorWhenRecommendationQueryFails(t *testing.T) {
+	t.Parallel()
+
+	queryErr := errors.New("spell endpoint failed")
+	coachless := &coachlessStub{spellErr: queryErr}
+	lcu := &lcuStub{
+		detectedSelection: ports.DetectedSelection{
+			ChampionID:   240,
+			Role:         "top",
+			QueueID:      420,
+			IsAutofilled: false,
+		},
+	}
+
+	svc, err := NewService(ServiceDeps{
+		Coachless:   coachless,
+		Tokens:      tokenProviderStub{token: "t"},
+		LCU:         lcu,
+		Recommender: recommend.NewEngine(),
+		Policy:      RecommendationPolicy{MinOccurrence: 100, TopItems: 6, TopSpells: 2},
+	})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	_, err = svc.Sync(context.Background(), SyncRequest{
+		ApplyItems:  true,
+		ApplyRunes:  true,
+		ApplySpells: true,
+		DryRun:      false,
+	})
+	if err == nil {
+		t.Fatal("expected sync error when one recommendation query fails")
+	}
+	if !errors.Is(err, queryErr) {
+		t.Fatalf("expected wrapped query error, got %v", err)
+	}
+
+	if len(lcu.itemSetCalls)+len(lcu.runePageCalls)+len(lcu.spellCalls) != 0 {
+		t.Fatalf("LCU apply should not run when recommendation query fails")
+	}
+}

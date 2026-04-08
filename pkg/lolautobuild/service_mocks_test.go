@@ -32,6 +32,9 @@ type coachlessStub struct {
 	keystoneCalls   []ports.KeystoneRequest
 	spellCalls      []ports.SummonerSpellStatsRequest
 	itemCalls       []ports.ItemStatsRequest
+	keystoneErr     error
+	spellErr        error
+	itemErr         error
 }
 
 func (c *coachlessStub) Refresh(ctx context.Context, refreshToken string) (ports.TokenPair, error) {
@@ -51,6 +54,9 @@ func (c *coachlessStub) GetKeystoneData(ctx context.Context, accessToken string,
 	_ = ctx
 	_ = accessToken
 	c.keystoneCalls = append(c.keystoneCalls, req)
+	if c.keystoneErr != nil {
+		return nil, c.keystoneErr
+	}
 	return []ports.KeystoneStat{{Rune: 8437, WPAOverall: 1.4, Occurrence: 1000}}, nil
 }
 
@@ -58,6 +64,9 @@ func (c *coachlessStub) GetSummonerSpellStats(ctx context.Context, accessToken s
 	_ = ctx
 	_ = accessToken
 	c.spellCalls = append(c.spellCalls, req)
+	if c.spellErr != nil {
+		return nil, c.spellErr
+	}
 	return []ports.SummonerSpellStat{
 		{SummonerSpell: 4, WPAOverall: 0.8, Occurrence: 500},
 		{SummonerSpell: 14, WPAOverall: 0.7, Occurrence: 450},
@@ -68,6 +77,9 @@ func (c *coachlessStub) GetItemStats(ctx context.Context, accessToken string, re
 	_ = ctx
 	_ = accessToken
 	c.itemCalls = append(c.itemCalls, req)
+	if c.itemErr != nil {
+		return nil, c.itemErr
+	}
 	return []ports.ItemStat{
 		{ItemID: 1055, WPAOverall: 1.0, Occurrence: 900},
 		{ItemID: 1036, WPAOverall: 0.5, Occurrence: 600},

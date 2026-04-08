@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/controlado/lol-autobuild/internal/ports"
+	"golang.org/x/sync/errgroup"
 )
 
 type RecommendationPolicy struct {
@@ -84,27 +85,49 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 		Role:        roleCode,
 	}
 
-	keystoneStats, err := s.deps.Coachless.GetKeystoneData(ctx, accessToken, ports.KeystoneRequest{CommonFilters: filters})
-	if err != nil {
-		return SyncResult{}, fmt.Errorf("get keystone data: %w", err)
-	}
+	var keystoneStats []ports.KeystoneStat
+	var spellStats []ports.SummonerSpellStat
+	var itemStats []ports.ItemStat
 
-	spellStats, err := s.deps.Coachless.GetSummonerSpellStats(ctx, accessToken, ports.SummonerSpellStatsRequest{
-		CommonFilters: filters,
-		PairedSpell:   nil,
-	})
-	if err != nil {
-		return SyncResult{}, fmt.Errorf("get summoner spell stats: %w", err)
-	}
+	g, gctx := errgroup.WithContext(ctx)
 
-	itemStats, err := s.deps.Coachless.GetItemStats(ctx, accessToken, ports.ItemStatsRequest{
-		CommonFilters:         filters,
-		ItemType:              6,
-		LoadFirstEpicPurchase: false,
-		IncludeSupportItems:   false,
+	g.Go(func() error {
+		var err error
+		keystoneStats, err = s.deps.Coachless.GetKeystoneData(gctx, accessToken, ports.KeystoneRequest{CommonFilters: filters})
+		if err != nil {
+			return fmt.Errorf("get keystone data: %w", err)
+		}
+		return nil
 	})
-	if err != nil {
-		return SyncResult{}, fmt.Errorf("get item stats: %w", err)
+
+	g.Go(func() error {
+		var err error
+		spellStats, err = s.deps.Coachless.GetSummonerSpellStats(gctx, accessToken, ports.SummonerSpellStatsRequest{
+			CommonFilters: filters,
+			PairedSpell:   nil,
+		})
+		if err != nil {
+			return fmt.Errorf("get summoner spell stats: %w", err)
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		var err error
+		itemStats, err = s.deps.Coachless.GetItemStats(gctx, accessToken, ports.ItemStatsRequest{
+			CommonFilters:         filters,
+			ItemType:              6,
+			LoadFirstEpicPurchase: false,
+			IncludeSupportItems:   false,
+		})
+		if err != nil {
+			return fmt.Errorf("get item stats: %w", err)
+		}
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return SyncResult{}, err
 	}
 
 	rec := s.deps.Recommender.Recommend(ports.RecommendationInput{
