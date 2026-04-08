@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -105,7 +104,7 @@ func syncCmd() *cobra.Command {
 				DryRun:      flags.DryRun,
 			}
 
-			result, err := svc.Sync(context.Background(), req)
+			result, err := svc.Sync(cmd.Context(), req)
 			if err != nil {
 				notConfigured := lcu.ErrNotConfigured
 				if errors.Is(err, notConfigured) {
