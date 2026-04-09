@@ -13,6 +13,13 @@ Data flow:
 5. Apply actions through `LCUClient` (items/runes/spells) or dry-run.
 6. Return structured sync result and warnings.
 
+Watch flow:
+
+1. Open LCU websocket stream (`OnJsonApiEvent`) and forward raw events through channel.
+2. Route/filter only champ select session create/update events.
+3. Apply debounce window, then trigger one sync cycle.
+4. Run startup sync once at watch bootstrap.
+
 ## Layout
 
 - `pkg/lolautobuild`: public service interface and sync orchestration entrypoint.
@@ -29,6 +36,7 @@ Data flow:
 
 - Public:
   - `Service.Sync(ctx, SyncRequest) (SyncResult, error)`
+  - `Service.Watch(ctx, WatchRequest) error`
 - Internal ports:
   - `CoachlessClient`
   - `TokenProvider`

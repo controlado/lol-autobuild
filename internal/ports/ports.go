@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 )
 
@@ -139,11 +140,18 @@ type DetectedSelection struct {
 	IsAutofilled bool
 }
 
+type LCUEvent struct {
+	EventType string
+	URI       string
+	Data      json.RawMessage
+}
+
 type LCUClient interface {
 	DetectSelection(ctx context.Context) (DetectedSelection, error)
 	ApplyItemSet(ctx context.Context, req ApplyItemSetRequest) error
 	ApplyRunePage(ctx context.Context, req ApplyRunePageRequest) error
 	ApplySummonerSpells(ctx context.Context, req ApplySummonerSpellsRequest) error
+	WatchEvents(ctx context.Context, out chan<- LCUEvent) error
 }
 
 type RecommendationInput struct {

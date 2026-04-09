@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -20,7 +21,7 @@ import (
 	"github.com/controlado/lol-autobuild/pkg/lolautobuild"
 )
 
-type syncFlags struct {
+type runFlags struct {
 	ConfigPath  string
 	Patch       string
 	ApplyItems  bool
@@ -43,55 +44,23 @@ func rootCmd() *cobra.Command {
 	}
 
 	root.AddCommand(syncCmd())
+	root.AddCommand(watchCmd())
 	return root
 }
 
 func syncCmd() *cobra.Command {
-	flags := syncFlags{}
+	flags := runFlags{}
 
 	cmd := &cobra.Command{
 		Use:   "sync",
 		Short: "Run one synchronization cycle",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load(flags.ConfigPath)
+			cfg, err := loadConfigAndLogging(flags.ConfigPath)
 			if err != nil {
 				return err
 			}
 
-			level, err := zerolog.ParseLevel(cfg.LogLevel)
-			if err != nil {
-				level = zerolog.InfoLevel
-			}
-			zerolog.SetGlobalLevel(level)
-			log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-
-			coachlessClient := coachless.NewClient(cfg.Coachless.APIBaseURL, time.Duration(cfg.Coachless.TimeoutSeconds)*time.Second)
-			secretStore := secrets.NewKeyringStore(cfg.Secrets.ServiceName)
-			lcuClient := lcu.NewClient(cfg.LCU.Enabled, cfg.LCU.LockfilePath)
-
-			provider := auth.NewProvider(
-				coachlessClient,
-				secretStore,
-				auth.BrowserSource{LoginURL: "https://coachless.gg/login-area/login"},
-				auth.EnvManualSource{},
-				auth.ProviderOptions{
-					AutoEnabled:           cfg.Auth.AutoEnabled,
-					ManualFallbackEnabled: cfg.Auth.ManualFallbackEnabled,
-					TokenSkew:             time.Duration(cfg.Auth.TokenSkewSeconds) * time.Second,
-				},
-			)
-
-			svc, err := lolautobuild.NewService(lolautobuild.ServiceDeps{
-				Coachless:   coachlessClient,
-				Tokens:      provider,
-				LCU:         lcuClient,
-				Recommender: recommend.NewEngine(),
-				Policy: lolautobuild.RecommendationPolicy{
-					MinOccurrence: cfg.Recommendation.MinOccurrence,
-					TopItems:      cfg.Recommendation.TopItems,
-					TopSpells:     cfg.Recommendation.TopSpells,
-				},
-			})
+			svc, err := buildService(cfg)
 			if err != nil {
 				return err
 			}
@@ -106,11 +75,7 @@ func syncCmd() *cobra.Command {
 
 			result, err := svc.Sync(cmd.Context(), req)
 			if err != nil {
-				notConfigured := lcu.ErrNotConfigured
-				if errors.Is(err, notConfigured) {
-					log.Warn().Err(err).Msg("LCU is not configured")
-				}
-
+				warnIfLCUNotConfigured(err)
 				return err
 			}
 
@@ -124,12 +89,159 @@ func syncCmd() *cobra.Command {
 		},
 	}
 
+	bindRunFlags(cmd, &flags)
+	return cmd
+}
+
+func watchCmd() *cobra.Command {
+	flags := runFlags{}
+
+	cmd := &cobra.Command{
+		Use:   "watch",
+		Short: "Watch LCU events and run synchronization continuously",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfigAndLogging(flags.ConfigPath)
+			if err != nil {
+				return err
+			}
+
+			svc, err := buildService(cfg)
+			if err != nil {
+				return err
+			}
+
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
+			defer stop()
+
+			log.Info().
+				Dur("debounce", time.Duration(cfg.Watch.DebounceMillis)*time.Millisecond).
+				Dur("reconnect_delay", time.Duration(cfg.Watch.ReconnectDelayMillis)*time.Millisecond).
+				Msg("watch started; press CTRL+C to stop")
+
+			err = svc.Watch(ctx, lolautobuild.WatchRequest{
+				Patch:       flags.Patch,
+				ApplyItems:  flags.ApplyItems,
+				ApplyRunes:  flags.ApplyRunes,
+				ApplySpells: flags.ApplySpells,
+				DryRun:      flags.DryRun,
+				Debounce:    time.Duration(cfg.Watch.DebounceMillis) * time.Millisecond,
+				OnCycle:     logWatchCycle,
+			})
+			if err != nil {
+				warnIfLCUNotConfigured(err)
+				return err
+			}
+
+			log.Info().Msg("watch stopped")
+			return nil
+		},
+	}
+
+	bindRunFlags(cmd, &flags)
+	return cmd
+}
+
+func bindRunFlags(cmd *cobra.Command, flags *runFlags) {
 	cmd.Flags().StringVar(&flags.ConfigPath, "config", "config.example.yaml", "Path to YAML configuration file")
 	cmd.Flags().StringVar(&flags.Patch, "patch", "", "Patch label (e.g. 16.7). Empty = latest")
 	cmd.Flags().BoolVar(&flags.ApplyItems, "apply-items", true, "Apply item set")
 	cmd.Flags().BoolVar(&flags.ApplyRunes, "apply-runes", true, "Apply rune page")
 	cmd.Flags().BoolVar(&flags.ApplySpells, "apply-spells", true, "Apply summoner spells")
 	cmd.Flags().BoolVar(&flags.DryRun, "dry-run", true, "Do not apply changes to LCU")
+}
 
-	return cmd
+func loadConfigAndLogging(configPath string) (config.Config, error) {
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return config.Config{}, err
+	}
+
+	configureLogging(cfg.LogLevel)
+	return cfg, nil
+}
+
+func configureLogging(rawLevel string) {
+	level, err := zerolog.ParseLevel(rawLevel)
+	if err != nil {
+		level = zerolog.InfoLevel
+	}
+
+	zerolog.SetGlobalLevel(level)
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+}
+
+func buildService(cfg config.Config) (lolautobuild.Service, error) {
+	coachlessClient := coachless.NewClient(cfg.Coachless.APIBaseURL, time.Duration(cfg.Coachless.TimeoutSeconds)*time.Second)
+	secretStore := secrets.NewKeyringStore(cfg.Secrets.ServiceName)
+	lcuClient := lcu.NewClient(cfg.LCU.Enabled, cfg.LCU.LockfilePath)
+	lcuClient.WatchReconnectDelay = time.Duration(cfg.Watch.ReconnectDelayMillis) * time.Millisecond
+
+	provider := auth.NewProvider(
+		coachlessClient,
+		secretStore,
+		auth.BrowserSource{LoginURL: "https://coachless.gg/login-area/login"},
+		auth.EnvManualSource{},
+		auth.ProviderOptions{
+			AutoEnabled:           cfg.Auth.AutoEnabled,
+			ManualFallbackEnabled: cfg.Auth.ManualFallbackEnabled,
+			TokenSkew:             time.Duration(cfg.Auth.TokenSkewSeconds) * time.Second,
+		},
+	)
+
+	return lolautobuild.NewService(lolautobuild.ServiceDeps{
+		Coachless:   coachlessClient,
+		Tokens:      provider,
+		LCU:         lcuClient,
+		Recommender: recommend.NewEngine(),
+		Policy: lolautobuild.RecommendationPolicy{
+			MinOccurrence: cfg.Recommendation.MinOccurrence,
+			TopItems:      cfg.Recommendation.TopItems,
+			TopSpells:     cfg.Recommendation.TopSpells,
+		},
+	})
+}
+
+func warnIfLCUNotConfigured(err error) {
+	if errors.Is(err, lcu.ErrNotConfigured) {
+		log.Warn().Err(err).Msg("LCU is not configured")
+	}
+}
+
+func logWatchCycle(cycle lolautobuild.WatchCycle) {
+	logger := log.Info()
+	if cycle.Err != nil {
+		logger = log.Warn().Err(cycle.Err)
+	}
+
+	logger = logger.Str("trigger", string(cycle.Trigger))
+	if cycle.EventType != "" {
+		logger = logger.Str("event_type", cycle.EventType)
+	}
+	if cycle.EventURI != "" {
+		logger = logger.Str("event_uri", cycle.EventURI)
+	}
+
+	if cycle.Err != nil {
+		logger.Msg("watch cycle failed")
+		return
+	}
+
+	if cycle.Result == nil {
+		logger.Msg("watch cycle completed with no sync result")
+		return
+	}
+
+	logger = logger.
+		Int("champion_id", cycle.Result.DetectedChampionID).
+		Str("role", cycle.Result.DetectedRole).
+		Int("queue_id", cycle.Result.DetectedQueueID).
+		Bool("item_set_applied", cycle.Result.ItemSetApplied).
+		Bool("rune_page_applied", cycle.Result.RunePageApplied).
+		Bool("spells_applied", cycle.Result.SpellsApplied)
+
+	if len(cycle.Result.Warnings) > 0 {
+		logger = logger.Strs("warnings", cycle.Result.Warnings)
+	}
+
+	logger.Msg("watch cycle completed")
 }

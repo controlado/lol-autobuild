@@ -20,3 +20,7 @@ recommendation:
 lcu:
   enabled: true
   lockfile_path: ""
+
+watch:
+  debounce_millis: 500
+  reconnect_delay_millis: 1000
