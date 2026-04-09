@@ -10,6 +10,15 @@ import (
 	"github.com/controlado/lol-autobuild/internal/ports"
 )
 
+type queueID int
+
+const (
+	queueDraftPick       queueID = 400
+	queueSoloDuo         queueID = 420
+	queueFlex            queueID = 440
+	queueCustomDraftPick queueID = 3110
+)
+
 func (c *Client) DetectSelection(ctx context.Context) (ports.DetectedSelection, error) {
 	if !c.Enabled {
 		return ports.DetectedSelection{}, ErrNotConfigured
@@ -133,9 +142,9 @@ func localPlayerFromSession(session champSelectSession) (champSelectPlayerSelect
 	return champSelectPlayerSelection{}, fmt.Errorf("%w: local player cell %d not found in myTeam", ErrChampSelectUnavailable, session.LocalPlayerCellID)
 }
 
-func isRoleDetectionQueueSupported(queueID int) bool {
-	switch queueID {
-	case 400, 420, 440, 3110:
+func isRoleDetectionQueueSupported(queueIDValue int) bool {
+	switch queueID(queueIDValue) {
+	case queueDraftPick, queueSoloDuo, queueFlex, queueCustomDraftPick:
 		return true
 	default:
 		return false
