@@ -6,6 +6,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/chromedp/chromedp v0.14.2
 	github.com/go-resty/resty/v2 v2.16.5
+	github.com/gorilla/websocket v1.5.3
 	github.com/rs/zerolog v1.35.0
 	github.com/spf13/cobra v1.10.2
 	github.com/zalando/go-keyring v0.2.8
@@ -22,7 +23,6 @@ require (
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/gobwas/ws v1.4.0 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
