@@ -11,50 +11,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type RecommendationPolicy struct {
-	MinOccurrence int
-	TopItems      int
-	TopSpells     int
-}
-
-type ServiceDeps struct {
-	Coachless   ports.CoachlessClient
-	Tokens      ports.TokenProvider
-	LCU         ports.LCUClient
-	Recommender ports.RecommendationEngine
-	Policy      RecommendationPolicy
-}
-
-type syncService struct {
-	deps ServiceDeps
-}
-
-func NewService(deps ServiceDeps) (Service, error) {
-	if deps.Coachless == nil {
-		return nil, errors.New("coachless client is required")
-	}
-	if deps.Tokens == nil {
-		return nil, errors.New("token provider is required")
-	}
-	if deps.LCU == nil {
-		return nil, errors.New("lcu client is required")
-	}
-	if deps.Recommender == nil {
-		return nil, errors.New("recommendation engine is required")
-	}
-	if deps.Policy.MinOccurrence < 0 {
-		return nil, errors.New("policy.min_occurrence must be >= 0")
-	}
-	if deps.Policy.TopItems <= 0 {
-		deps.Policy.TopItems = 6
-	}
-	if deps.Policy.TopSpells <= 0 {
-		deps.Policy.TopSpells = 2
-	}
-
-	return &syncService{deps: deps}, nil
-}
-
 func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, error) {
 	selection, err := s.deps.LCU.DetectSelection(ctx)
 	if err != nil {
@@ -81,11 +37,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 	filters := ports.CommonFilters{
 		Patch:       patchFilter,
 		ChampionIDs: []int{selection.ChampionID},
-		LeagueTiers: []int{
-			int(ports.CoachlessLeagueTierFive),
-			int(ports.CoachlessLeagueTierSix),
-			int(ports.CoachlessLeagueTierSeven),
-		},
+		LeagueTiers: []int{5, 6, 7},
 		Role:        roleCode,
 	}
 
@@ -120,7 +72,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 		var err error
 		itemStats, err = s.deps.Coachless.GetItemStats(gctx, accessToken, ports.ItemStatsRequest{
 			CommonFilters:         filters,
-			ItemType:              int(ports.CoachlessItemTypeDefault),
+			ItemType:              6,
 			LoadFirstEpicPurchase: false,
 			IncludeSupportItems:   false,
 		})
@@ -242,26 +194,26 @@ func resolvePatch(rawPatch string, patches []ports.PatchInfo) (ports.PatchFilter
 	return ports.PatchFilter{
 		Major:          selected.Major,
 		Patch:          selected.Patch,
-		PatchAdditions: int(ports.CoachlessPatchAdditionsDefault),
+		PatchAdditions: 2,
 	}, selected.Label, nil
 }
 
 func roleToCode(role string) int {
 	switch strings.ToLower(strings.TrimSpace(role)) {
 	case "top":
-		return int(ports.CoachlessRoleTop)
+		return 0
 	case "jungle":
-		return int(ports.CoachlessRoleJungle)
+		return 1
 	case "mid", "middle":
-		return int(ports.CoachlessRoleMid)
+		return 2
 	case "adc", "bot":
-		return int(ports.CoachlessRoleADC)
+		return 3
 	case "support", "sup":
-		return int(ports.CoachlessRoleSupport)
+		return 4
 	default:
 		if v, err := strconv.Atoi(role); err == nil {
 			return v
 		}
-		return int(ports.CoachlessRoleTop)
+		return 0
 	}
 }

@@ -37,8 +37,6 @@ func NewProvider(coachless ports.CoachlessClient, store ports.SecretStore, auto 
 }
 
 func (p *Provider) AccessToken(ctx context.Context) (string, error) {
-	var causes []error
-
 	pair, err := p.store.ReadTokens(ctx)
 	if err == nil {
 		pair = ensureExpiry(pair)
@@ -56,11 +54,7 @@ func (p *Provider) AccessToken(ctx context.Context) (string, error) {
 
 				return refreshed.AccessToken, nil
 			}
-
-			causes = append(causes, fmt.Errorf("refresh token: %w", refreshErr))
 		}
-	} else {
-		causes = append(causes, fmt.Errorf("read tokens: %w", err))
 	}
 
 	if p.opts.AutoEnabled && p.auto != nil {
@@ -73,8 +67,6 @@ func (p *Provider) AccessToken(ctx context.Context) (string, error) {
 
 			return autoPair.AccessToken, nil
 		}
-
-		causes = append(causes, fmt.Errorf("auto acquire tokens: %w", autoErr))
 	}
 
 	if p.opts.ManualFallbackEnabled && p.manual != nil {
@@ -87,16 +79,9 @@ func (p *Provider) AccessToken(ctx context.Context) (string, error) {
 
 			return manualPair.AccessToken, nil
 		}
-
-		causes = append(causes, fmt.Errorf("manual acquire tokens: %w", manualErr))
 	}
 
-	baseErr := errors.New("unable to acquire valid access token")
-	if len(causes) == 0 {
-		return "", baseErr
-	}
-
-	return "", errors.Join(append([]error{baseErr}, causes...)...)
+	return "", errors.New("unable to acquire valid access token")
 }
 
 func (p *Provider) Refresh(ctx context.Context) (ports.TokenPair, error) {
@@ -150,7 +135,17 @@ func expFromJWT(token string) (time.Time, error) {
 		return time.Time{}, errors.New("invalid jwt format")
 	}
 
-	decoded, err := base64.RawURLEncoding.DecodeString(parts[1])
+	payload := parts[1]
+	payload = strings.ReplaceAll(payload, "-", "+")
+	payload = strings.ReplaceAll(payload, "_", "/")
+	switch len(payload) % 4 {
+	case 2:
+		payload += "=="
+	case 3:
+		payload += "="
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(payload)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("decode payload: %w", err)
 	}
