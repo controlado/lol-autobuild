@@ -8,6 +8,7 @@ LCU is an unofficial local API and can break at any time due to client updates.
 - Client lockfile availability race at startup.
 - Session/champ-select state changes during apply operations.
 - Local auth/session reset by Riot client updates.
+- WebSocket disconnects during client restarts/patching.
 
 ## Project policy
 
@@ -20,6 +21,7 @@ LCU is an unofficial local API and can break at any time due to client updates.
 - `--dry-run` remains the safest mode for diagnostics, but still requires champion detection from LCU.
 - If apply fails for one subsystem (items/runes/spells), continue processing others and emit warnings.
 - Keep payloads and intended operations visible in logs (without secrets).
+- `watch` retries websocket connection using configured reconnect delay.
 
 ## Runtime prerequisite
 

@@ -71,3 +71,25 @@ func TestValidateFailsOnInvalidConfig(t *testing.T) {
 		t.Fatalf("expected top_spells error, got: %s", msg)
 	}
 }
+
+func TestValidateFailsOnInvalidWatchConfig(t *testing.T) {
+	t.Parallel()
+
+	cfg := Defaults()
+	cfg.Watch.DebounceMillis = 0
+	cfg.Watch.ReconnectDelayMillis = -1
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+
+	msg := err.Error()
+	if !strings.Contains(msg, "watch.debounce_millis") {
+		t.Fatalf("expected debounce validation error, got: %s", msg)
+	}
+
+	if !strings.Contains(msg, "watch.reconnect_delay_millis") {
+		t.Fatalf("expected reconnect_delay validation error, got: %s", msg)
+	}
+}
