@@ -81,7 +81,11 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 	filters := ports.CommonFilters{
 		Patch:       patchFilter,
 		ChampionIDs: []int{selection.ChampionID},
-		LeagueTiers: []int{5, 6, 7},
+		LeagueTiers: []int{
+			int(ports.CoachlessLeagueTierFive),
+			int(ports.CoachlessLeagueTierSix),
+			int(ports.CoachlessLeagueTierSeven),
+		},
 		Role:        roleCode,
 	}
 
@@ -116,7 +120,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 		var err error
 		itemStats, err = s.deps.Coachless.GetItemStats(gctx, accessToken, ports.ItemStatsRequest{
 			CommonFilters:         filters,
-			ItemType:              6,
+			ItemType:              int(ports.CoachlessItemTypeDefault),
 			LoadFirstEpicPurchase: false,
 			IncludeSupportItems:   false,
 		})
@@ -238,26 +242,26 @@ func resolvePatch(rawPatch string, patches []ports.PatchInfo) (ports.PatchFilter
 	return ports.PatchFilter{
 		Major:          selected.Major,
 		Patch:          selected.Patch,
-		PatchAdditions: 2,
+		PatchAdditions: int(ports.CoachlessPatchAdditionsDefault),
 	}, selected.Label, nil
 }
 
 func roleToCode(role string) int {
 	switch strings.ToLower(strings.TrimSpace(role)) {
 	case "top":
-		return 0
+		return int(ports.CoachlessRoleTop)
 	case "jungle":
-		return 1
+		return int(ports.CoachlessRoleJungle)
 	case "mid", "middle":
-		return 2
+		return int(ports.CoachlessRoleMid)
 	case "adc", "bot":
-		return 3
+		return int(ports.CoachlessRoleADC)
 	case "support", "sup":
-		return 4
+		return int(ports.CoachlessRoleSupport)
 	default:
 		if v, err := strconv.Atoi(role); err == nil {
 			return v
 		}
-		return 0
+		return int(ports.CoachlessRoleTop)
 	}
 }
