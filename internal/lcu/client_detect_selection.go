@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/controlado/lol-autobuild/internal/ports"
@@ -25,32 +24,30 @@ func (c *Client) DetectSelection(ctx context.Context) (ports.DetectedSelection, 
 	}
 
 	var lastErr error
-	seenExisting := false
 	seenChampionNotSelected := false
 	seenRoleNotAssigned := false
 	seenRoleUnknown := false
 	seenUnsupportedQueue := false
 	seenSessionUnavailable := false
+	seenConnection := false
 
-	for _, lockfilePath := range c.lockfileCandidates() {
-		stat, err := os.Stat(lockfilePath)
-		if err != nil || stat.IsDir() {
-			continue
-		}
-		seenExisting = true
-
-		info, err := c.readLockfile(lockfilePath)
+	for _, candidate := range c.connectionCandidates(ctx) {
+		info, err := candidate.resolve()
 		if err != nil {
-			lastErr = fmt.Errorf("lockfile %q: %w", lockfilePath, err)
+			if !errors.Is(err, ErrLockfileNotFound) {
+				seenConnection = true
+			}
+			lastErr = fmt.Errorf("candidate %q: %w", candidate.label(), err)
 			continue
 		}
+		seenConnection = true
 
 		session, err := c.fetchChampSelectSession(ctx, info)
 		if err != nil {
 			if errors.Is(err, ErrChampSelectUnavailable) {
 				seenSessionUnavailable = true
 			}
-			lastErr = fmt.Errorf("lockfile %q: %w", lockfilePath, err)
+			lastErr = fmt.Errorf("candidate %q: %w", candidate.label(), err)
 			continue
 		}
 
@@ -71,7 +68,7 @@ func (c *Client) DetectSelection(ctx context.Context) (ports.DetectedSelection, 
 			if errors.Is(err, ErrChampSelectUnavailable) {
 				seenSessionUnavailable = true
 			}
-			lastErr = fmt.Errorf("lockfile %q: %w", lockfilePath, err)
+			lastErr = fmt.Errorf("candidate %q: %w", candidate.label(), err)
 			continue
 		}
 
@@ -98,7 +95,7 @@ func (c *Client) DetectSelection(ctx context.Context) (ports.DetectedSelection, 
 		return ports.DetectedSelection{}, withLastCandidateError(ErrChampSelectUnavailable, lastErr)
 	}
 
-	if !seenExisting {
+	if !seenConnection {
 		return ports.DetectedSelection{}, ErrLockfileNotFound
 	}
 

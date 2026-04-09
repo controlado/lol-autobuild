@@ -10,8 +10,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -35,17 +33,15 @@ type Client struct {
 	HTTPClient          *http.Client
 	WatchReconnectDelay time.Duration
 
-	discoverLockfilePaths func() []string
+	discoverOpenClientConnections func(context.Context) []clientConnectionCandidate
 }
 
 func NewClient(enabled bool, lockfilePath string) *Client {
 	return &Client{
-		Enabled:             enabled,
-		LockfilePath:        strings.TrimSpace(lockfilePath),
-		WatchReconnectDelay: time.Second,
-		discoverLockfilePaths: func() []string {
-			return autoDiscoverLockfilePaths()
-		},
+		Enabled:                       enabled,
+		LockfilePath:                  strings.TrimSpace(lockfilePath),
+		WatchReconnectDelay:           time.Second,
+		discoverOpenClientConnections: discoverOpenClientConnections,
 	}
 }
 
@@ -73,37 +69,6 @@ type champSelectPlayerSelection struct {
 type champSelectMySelectionPatch struct {
 	Spell1ID int `json:"spell1Id"`
 	Spell2ID int `json:"spell2Id"`
-}
-
-func (c *Client) lockfileCandidates() []string {
-	raw := make([]string, 0, 4)
-	if c.discoverLockfilePaths != nil {
-		raw = append(raw, c.discoverLockfilePaths()...)
-	}
-	if c.LockfilePath != "" {
-		raw = append(raw, c.LockfilePath)
-	}
-
-	seen := make(map[string]struct{}, len(raw))
-	out := make([]string, 0, len(raw))
-	for _, candidate := range raw {
-		cleanPath := filepath.Clean(strings.TrimSpace(candidate))
-		if cleanPath == "" || cleanPath == "." {
-			continue
-		}
-
-		key := cleanPath
-		if runtime.GOOS == "windows" {
-			key = strings.ToLower(cleanPath)
-		}
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, cleanPath)
-	}
-
-	return out
 }
 
 func (c *Client) readLockfile(lockfilePath string) (lockfileInfo, error) {
@@ -149,28 +114,6 @@ func parseLockfile(raw []byte) (lockfileInfo, error) {
 		Password: password,
 		Protocol: protocol,
 	}, nil
-}
-
-func autoDiscoverLockfilePaths() []string {
-	switch runtime.GOOS {
-	case "windows":
-		paths := []string{`C:\Riot Games\League of Legends\lockfile`}
-		if v := strings.TrimSpace(os.Getenv("ProgramFiles")); v != "" {
-			paths = append(paths, filepath.Join(v, "Riot Games", "League of Legends", "lockfile"))
-		}
-		if v := strings.TrimSpace(os.Getenv("ProgramFiles(x86)")); v != "" {
-			paths = append(paths, filepath.Join(v, "Riot Games", "League of Legends", "lockfile"))
-		}
-		return paths
-	case "darwin":
-		paths := []string{"/Applications/League of Legends.app/Contents/LoL/lockfile"}
-		if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
-			paths = append(paths, filepath.Join(home, "Applications", "League of Legends.app", "Contents", "LoL", "lockfile"))
-		}
-		return paths
-	default:
-		return nil
-	}
 }
 
 func (c *Client) fetchChampSelectSession(ctx context.Context, info lockfileInfo) (champSelectSession, error) {

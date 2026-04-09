@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -76,37 +75,35 @@ func (c *Client) watchReconnectDelay() time.Duration {
 
 func (c *Client) dialEventStream(ctx context.Context) (*websocket.Conn, error) {
 	var lastErr error
-	seenExisting := false
+	seenConnection := false
 
-	for _, lockfilePath := range c.lockfileCandidates() {
-		stat, err := os.Stat(lockfilePath)
-		if err != nil || stat.IsDir() {
-			continue
-		}
-		seenExisting = true
-
-		info, err := c.readLockfile(lockfilePath)
+	for _, candidate := range c.connectionCandidates(ctx) {
+		info, err := candidate.resolve()
 		if err != nil {
-			lastErr = fmt.Errorf("lockfile %q: %w", lockfilePath, err)
+			if !errors.Is(err, ErrLockfileNotFound) {
+				seenConnection = true
+			}
+			lastErr = fmt.Errorf("candidate %q: %w", candidate.label(), err)
 			continue
 		}
+		seenConnection = true
 
 		conn, err := dialLCUWebsocket(ctx, info)
 		if err != nil {
-			lastErr = fmt.Errorf("lockfile %q: %w", lockfilePath, err)
+			lastErr = fmt.Errorf("candidate %q: %w", candidate.label(), err)
 			continue
 		}
 
 		if err := conn.WriteJSON([]any{5, lcuEventTopic}); err != nil {
 			_ = conn.Close()
-			lastErr = fmt.Errorf("lockfile %q: subscribe %q: %w", lockfilePath, lcuEventTopic, err)
+			lastErr = fmt.Errorf("candidate %q: subscribe %q: %w", candidate.label(), lcuEventTopic, err)
 			continue
 		}
 
 		return conn, nil
 	}
 
-	if !seenExisting {
+	if !seenConnection {
 		return nil, ErrLockfileNotFound
 	}
 

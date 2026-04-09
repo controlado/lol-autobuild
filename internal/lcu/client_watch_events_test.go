@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -73,11 +72,16 @@ func TestWatchEventsForwardsRawEventsAndStopsOnCancel(t *testing.T) {
 
 	port := mustServerPort(t, server.URL)
 
-	lockfilePath := filepath.Join(t.TempDir(), "lockfile")
-	writeLockfile(t, lockfilePath, port)
-
-	client := NewClient(true, lockfilePath)
-	client.discoverLockfilePaths = func() []string { return nil }
+	client := NewClient(true, "")
+	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate {
+		return []clientConnectionCandidate{
+			staticConnectionCandidate("process:4321", lockfileInfo{
+				Port:     port,
+				Password: "secret",
+				Protocol: "http",
+			}),
+		}
+	}
 	client.WatchReconnectDelay = 10 * time.Millisecond
 
 	events := make(chan ports.LCUEvent, 1)
@@ -161,11 +165,16 @@ func TestWatchEventsReconnectsAfterDisconnect(t *testing.T) {
 
 	port := mustServerPort(t, server.URL)
 
-	lockfilePath := filepath.Join(t.TempDir(), "lockfile")
-	writeLockfile(t, lockfilePath, port)
-
-	client := NewClient(true, lockfilePath)
-	client.discoverLockfilePaths = func() []string { return nil }
+	client := NewClient(true, "")
+	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate {
+		return []clientConnectionCandidate{
+			staticConnectionCandidate("process:5321", lockfileInfo{
+				Port:     port,
+				Password: "secret",
+				Protocol: "http",
+			}),
+		}
+	}
 	client.WatchReconnectDelay = 20 * time.Millisecond
 
 	events := make(chan ports.LCUEvent, 1)
