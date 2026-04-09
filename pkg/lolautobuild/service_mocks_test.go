@@ -93,6 +93,7 @@ type lcuStub struct {
 	itemSetCalls      []ports.ApplyItemSetRequest
 	runePageCalls     []ports.ApplyRunePageRequest
 	spellCalls        []ports.ApplySummonerSpellsRequest
+	watchEventsErr    error
 }
 
 func (l *lcuStub) DetectSelection(ctx context.Context) (ports.DetectedSelection, error) {
@@ -120,4 +121,10 @@ func (l *lcuStub) ApplySummonerSpells(ctx context.Context, req ports.ApplySummon
 	_ = ctx
 	l.spellCalls = append(l.spellCalls, req)
 	return nil
+}
+
+func (l *lcuStub) WatchEvents(ctx context.Context, out chan<- ports.LCUEvent) error {
+	_ = ctx
+	_ = out
+	return l.watchEventsErr
 }

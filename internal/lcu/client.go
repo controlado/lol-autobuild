@@ -33,17 +33,19 @@ var ErrChampionSelectionChanged = errors.New("champion selection changed during 
 var ErrSummonerSpellsApplyFailed = errors.New("apply summoner spells failed")
 
 type Client struct {
-	Enabled      bool
-	LockfilePath string
-	HTTPClient   *http.Client
+	Enabled             bool
+	LockfilePath        string
+	HTTPClient          *http.Client
+	WatchReconnectDelay time.Duration
 
 	discoverLockfilePaths func() []string
 }
 
 func NewClient(enabled bool, lockfilePath string) *Client {
 	return &Client{
-		Enabled:      enabled,
-		LockfilePath: strings.TrimSpace(lockfilePath),
+		Enabled:             enabled,
+		LockfilePath:        strings.TrimSpace(lockfilePath),
+		WatchReconnectDelay: time.Second,
 		discoverLockfilePaths: func() []string {
 			return autoDiscoverLockfilePaths()
 		},
@@ -589,6 +591,8 @@ type StubClient struct {
 	ItemSetCalls       []ports.ApplyItemSetRequest
 	RunePageCalls      []ports.ApplyRunePageRequest
 	SummonerSpellCalls []ports.ApplySummonerSpellsRequest
+	WatchEventsCalls   int
+	WatchEventsErr     error
 	ItemSetErr         error
 	RunePageErr        error
 	SummonerSpellsErr  error
@@ -619,4 +623,11 @@ func (c *StubClient) ApplySummonerSpells(ctx context.Context, req ports.ApplySum
 	_ = ctx
 	c.SummonerSpellCalls = append(c.SummonerSpellCalls, req)
 	return c.SummonerSpellsErr
+}
+
+func (c *StubClient) WatchEvents(ctx context.Context, out chan<- ports.LCUEvent) error {
+	_ = ctx
+	_ = out
+	c.WatchEventsCalls++
+	return c.WatchEventsErr
 }

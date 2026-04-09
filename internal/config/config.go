@@ -16,6 +16,7 @@ type Config struct {
 	Secrets        SecretsConfig        `yaml:"secrets"`
 	Recommendation RecommendationConfig `yaml:"recommendation"`
 	LCU            LCUConfig            `yaml:"lcu"`
+	Watch          WatchConfig          `yaml:"watch"`
 }
 
 type CoachlessConfig struct {
@@ -44,6 +45,11 @@ type LCUConfig struct {
 	LockfilePath string `yaml:"lockfile_path"`
 }
 
+type WatchConfig struct {
+	DebounceMillis       int `yaml:"debounce_millis"`
+	ReconnectDelayMillis int `yaml:"reconnect_delay_millis"`
+}
+
 func Defaults() Config {
 	return Config{
 		LogLevel: "info",
@@ -66,6 +72,10 @@ func Defaults() Config {
 		},
 		LCU: LCUConfig{
 			Enabled: false,
+		},
+		Watch: WatchConfig{
+			DebounceMillis:       500,
+			ReconnectDelayMillis: 1000,
 		},
 	}
 }
@@ -122,6 +132,14 @@ func (c Config) Validate() error {
 
 	if c.Recommendation.TopSpells <= 0 {
 		errs = append(errs, errors.New("recommendation.top_spells must be > 0"))
+	}
+
+	if c.Watch.DebounceMillis <= 0 {
+		errs = append(errs, errors.New("watch.debounce_millis must be > 0"))
+	}
+
+	if c.Watch.ReconnectDelayMillis <= 0 {
+		errs = append(errs, errors.New("watch.reconnect_delay_millis must be > 0"))
 	}
 
 	return errors.Join(errs...)
