@@ -42,7 +42,7 @@ go run ./cmd/dev watch --config ./config.example.yaml --dry-run
 
 Champion ID and role are auto-detected from LCU champ select (`/lol-champ-select/v1/session`).
 Current role detection support is limited to Summoner's Rift Draft/Ranked queues (`queueId` 400, 420, 440). The command fails when LCU is unavailable, your champion is not selected yet, or role detection is not reliable for the current queue.
-Set `lcu.enabled: true` in your config and optionally provide `lcu.lockfile_path` if auto-discovery does not find your installation.
+Set `lcu.enabled: true` in your config. Connection discovery first inspects the open League client process args (`--app-port`, `--remoting-auth-token`, optional `--app-protocol`), and then falls back to `lcu.lockfile_path` when process discovery cannot produce a usable connection.
 `watch` listens to LCU websocket `OnJsonApiEvent`, routes relevant champ select session events, and applies debounce with `watch.debounce_millis`.
 
 ## Development checks

@@ -25,7 +25,12 @@ func TestGetPatchesParsesResponse(t *testing.T) {
 			t.Fatalf("missing authorization header")
 		}
 
-		_ = json.NewEncoder(w).Encode([]ports.PatchInfo{{Label: "16.7", Major: 16, Patch: 7, MatchCount: 123}})
+		_ = json.NewEncoder(w).Encode([]ports.PatchInfo{{
+			Label:      "16.7",
+			Major:      16,
+			Patch:      7,
+			MatchCount: 123,
+		}})
 	}))
 	defer srv.Close()
 
@@ -59,21 +64,30 @@ func TestGetKeystoneDataSendsBody(t *testing.T) {
 			t.Fatalf("unexpected body: %#v", body)
 		}
 
-		_ = json.NewEncoder(w).Encode([]ports.KeystoneStat{{Rune: 8010, WPAOverall: 1.2, Occurrence: 1000}})
+		_ = json.NewEncoder(w).Encode([]ports.KeystoneStat{{
+			Rune:       8010,
+			WPAOverall: 1.2,
+			Occurrence: 1000,
+		}})
 	}))
 	defer srv.Close()
 
-	rc := resty.New().SetTimeout(2 * time.Second)
-	client := NewClientWithHTTP(srv.URL, rc)
-
-	req := ports.KeystoneRequest{
-		CommonFilters: ports.CommonFilters{
-			ChampionIDs: []int{240},
-			Role:        0,
-			Patch:       ports.PatchFilter{Major: 16, Patch: 7, PatchAdditions: 2},
-			LeagueTiers: []int{5, 6, 7},
-		},
-	}
+	var (
+		rc     = resty.New().SetTimeout(2 * time.Second)
+		client = NewClientWithHTTP(srv.URL, rc)
+		req    = ports.KeystoneRequest{
+			CommonFilters: ports.CommonFilters{
+				ChampionIDs: []int{240},
+				Role:        0,
+				Patch: ports.PatchFilter{
+					Major:          16,
+					Patch:          7,
+					PatchAdditions: 2,
+				},
+				LeagueTiers: []int{5, 6, 7},
+			},
+		}
+	)
 
 	stats, err := client.GetKeystoneData(context.Background(), "token", req)
 	if err != nil {

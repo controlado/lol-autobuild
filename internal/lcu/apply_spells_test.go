@@ -19,6 +19,7 @@ func TestApplySummonerSpellsReturnsNotConfiguredWhenDisabled(t *testing.T) {
 	t.Parallel()
 
 	client := NewClient(false, "")
+
 	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
 		ChampionID: 240,
 		SpellIDs:   []int{4, 14},
@@ -32,7 +33,7 @@ func TestApplySummonerSpellsDryRunSkipsIO(t *testing.T) {
 	t.Parallel()
 
 	client := NewClient(true, filepath.Join(t.TempDir(), "missing-lockfile"))
-	client.discoverLockfilePaths = func() []string { return nil }
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 
 	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
 		ChampionID: 240,
@@ -82,11 +83,11 @@ func TestApplySummonerSpellsInvalidRequest(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			client := NewClient(true, filepath.Join(t.TempDir(), "missing-lockfile"))
-			client.discoverLockfilePaths = func() []string { return nil }
+			client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 
 			err := client.ApplySummonerSpells(context.Background(), tt.req)
 			if !errors.Is(err, ErrInvalidSummonerSpellsRequest) {
@@ -139,7 +140,7 @@ func TestApplySummonerSpellsSuccess(t *testing.T) {
 	writeLockfile(t, lockfilePath, mustServerPort(t, server.URL))
 
 	client := NewClient(true, lockfilePath)
-	client.discoverLockfilePaths = func() []string { return nil }
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
 		ChampionID: 240,
 		SpellIDs:   []int{4, 14},
@@ -183,7 +184,7 @@ func TestApplySummonerSpellsPreservesFlashSlot(t *testing.T) {
 	writeLockfile(t, lockfilePath, mustServerPort(t, server.URL))
 
 	client := NewClient(true, lockfilePath)
-	client.discoverLockfilePaths = func() []string { return nil }
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
 		ChampionID: 240,
 		SpellIDs:   []int{4, 7},
@@ -208,7 +209,7 @@ func TestApplySummonerSpellsFailsWhenChampionChanges(t *testing.T) {
 	writeLockfile(t, lockfilePath, mustServerPort(t, server.URL))
 
 	client := NewClient(true, lockfilePath)
-	client.discoverLockfilePaths = func() []string { return nil }
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
 		ChampionID: 240,
 		SpellIDs:   []int{4, 14},
@@ -218,7 +219,7 @@ func TestApplySummonerSpellsFailsWhenChampionChanges(t *testing.T) {
 	}
 }
 
-func TestApplySummonerSpellsFallsBackAcrossLockfiles(t *testing.T) {
+func TestApplySummonerSpellsFallsBackWhenProcessCandidateFails(t *testing.T) {
 	t.Parallel()
 
 	autoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -240,14 +241,18 @@ func TestApplySummonerSpellsFallsBackAcrossLockfiles(t *testing.T) {
 	}))
 	defer fallbackServer.Close()
 
-	dir := t.TempDir()
-	autoPath := filepath.Join(dir, "auto.lockfile")
-	fallbackPath := filepath.Join(dir, "fallback.lockfile")
-	writeLockfile(t, autoPath, mustServerPort(t, autoServer.URL))
+	autoPort := mustServerPort(t, autoServer.URL)
+	fallbackPath := filepath.Join(t.TempDir(), "fallback.lockfile")
 	writeLockfile(t, fallbackPath, mustServerPort(t, fallbackServer.URL))
 
 	client := NewClient(true, fallbackPath)
-	client.discoverLockfilePaths = func() []string { return []string{autoPath} }
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate {
+		return []connectionCandidate{staticCandidate("process:1234", connectionInfo{
+			Port:     autoPort,
+			Password: "secret",
+			Protocol: "http",
+		})}
+	}
 
 	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
 		ChampionID: 240,
@@ -280,7 +285,7 @@ func TestApplySummonerSpellsNotFoundMapsToChampSelectUnavailable(t *testing.T) {
 	writeLockfile(t, lockfilePath, mustServerPort(t, server.URL))
 
 	client := NewClient(true, lockfilePath)
-	client.discoverLockfilePaths = func() []string { return nil }
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
 		ChampionID: 240,
 		SpellIDs:   []int{4, 14},
@@ -303,14 +308,18 @@ func TestApplySummonerSpellsAllCandidatesFailRespectsPriority(t *testing.T) {
 	}))
 	defer fallbackServer.Close()
 
-	dir := t.TempDir()
-	autoPath := filepath.Join(dir, "auto.lockfile")
-	fallbackPath := filepath.Join(dir, "fallback.lockfile")
-	writeLockfile(t, autoPath, mustServerPort(t, autoServer.URL))
+	autoPort := mustServerPort(t, autoServer.URL)
+	fallbackPath := filepath.Join(t.TempDir(), "fallback.lockfile")
 	writeLockfile(t, fallbackPath, mustServerPort(t, fallbackServer.URL))
 
 	client := NewClient(true, fallbackPath)
-	client.discoverLockfilePaths = func() []string { return []string{autoPath} }
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate {
+		return []connectionCandidate{staticCandidate("process:1234", connectionInfo{
+			Port:     autoPort,
+			Password: "secret",
+			Protocol: "http",
+		})}
+	}
 
 	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
 		ChampionID: 240,

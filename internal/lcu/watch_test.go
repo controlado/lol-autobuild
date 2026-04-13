@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -21,7 +20,7 @@ func TestWatchEventsForwardsRawEventsAndStopsOnCancel(t *testing.T) {
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
 
-	expectedAuth := lcuBasicAuthHeader("secret")
+	expectedAuth := basicAuthHeader("secret")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != expectedAuth {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -49,14 +48,14 @@ func TestWatchEventsForwardsRawEventsAndStopsOnCancel(t *testing.T) {
 		}
 
 		var topic string
-		if len(sub) < 2 || json.Unmarshal(sub[1], &topic) != nil || topic != lcuEventTopic {
+		if len(sub) < 2 || json.Unmarshal(sub[1], &topic) != nil || topic != eventTopic {
 			t.Errorf("unexpected subscription payload: %s", string(subRaw))
 			return
 		}
 
 		if err := conn.WriteJSON([]any{
 			8,
-			lcuEventTopic,
+			eventTopic,
 			map[string]any{
 				"eventType": "Create",
 				"uri":       "/lol-champ-select/v1/session",
@@ -73,11 +72,16 @@ func TestWatchEventsForwardsRawEventsAndStopsOnCancel(t *testing.T) {
 
 	port := mustServerPort(t, server.URL)
 
-	lockfilePath := filepath.Join(t.TempDir(), "lockfile")
-	writeLockfile(t, lockfilePath, port)
-
-	client := NewClient(true, lockfilePath)
-	client.discoverLockfilePaths = func() []string { return nil }
+	client := NewClient(true, "")
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate {
+		return []connectionCandidate{
+			staticCandidate("process:4321", connectionInfo{
+				Port:     port,
+				Password: "secret",
+				Protocol: "http",
+			}),
+		}
+	}
 	client.WatchReconnectDelay = 10 * time.Millisecond
 
 	events := make(chan ports.LCUEvent, 1)
@@ -146,7 +150,7 @@ func TestWatchEventsReconnectsAfterDisconnect(t *testing.T) {
 
 		if err := conn.WriteJSON([]any{
 			8,
-			lcuEventTopic,
+			eventTopic,
 			map[string]any{
 				"eventType": "Update",
 				"uri":       "/lol-champ-select/v1/session",
@@ -161,11 +165,16 @@ func TestWatchEventsReconnectsAfterDisconnect(t *testing.T) {
 
 	port := mustServerPort(t, server.URL)
 
-	lockfilePath := filepath.Join(t.TempDir(), "lockfile")
-	writeLockfile(t, lockfilePath, port)
-
-	client := NewClient(true, lockfilePath)
-	client.discoverLockfilePaths = func() []string { return nil }
+	client := NewClient(true, "")
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate {
+		return []connectionCandidate{
+			staticCandidate("process:5321", connectionInfo{
+				Port:     port,
+				Password: "secret",
+				Protocol: "http",
+			}),
+		}
+	}
 	client.WatchReconnectDelay = 20 * time.Millisecond
 
 	events := make(chan ports.LCUEvent, 1)
@@ -206,9 +215,9 @@ func TestDecodeLCUEvent(t *testing.T) {
 
 	payload := []byte(`[8,"OnJsonApiEvent",{"eventType":"Create","uri":"/lol-champ-select/v1/session","data":{"foo":"bar"}}]`)
 
-	event, ok, err := decodeLCUEvent(payload)
+	event, ok, err := decodeEvent(payload)
 	if err != nil {
-		t.Fatalf("decodeLCUEvent() error = %v", err)
+		t.Fatalf("decodeEvent() error = %v", err)
 	}
 	if !ok {
 		t.Fatal("expected payload to be recognized as LCU event")

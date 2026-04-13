@@ -30,6 +30,7 @@ type BrowserSource struct {
 
 func (s BrowserSource) Acquire(ctx context.Context) (ports.TokenPair, error) {
 	_ = chromedp.Tasks{}
+
 	if strings.TrimSpace(s.LoginURL) == "" {
 		return ports.TokenPair{}, fmt.Errorf("browser source: login URL is required")
 	}
@@ -40,17 +41,18 @@ func (s BrowserSource) Acquire(ctx context.Context) (ports.TokenPair, error) {
 type EnvManualSource struct{}
 
 func (EnvManualSource) Acquire(ctx context.Context) (ports.TokenPair, error) {
-	_ = ctx
-
-	access := strings.TrimSpace(os.Getenv("COACHLESS_ACCESS_TOKEN"))
-	refresh := strings.TrimSpace(os.Getenv("COACHLESS_REFRESH_TOKEN"))
+	var (
+		_       = ctx
+		access  = strings.TrimSpace(os.Getenv("COACHLESS_ACCESS_TOKEN"))
+		refresh = strings.TrimSpace(os.Getenv("COACHLESS_REFRESH_TOKEN"))
+		expRaw  = strings.TrimSpace(os.Getenv("COACHLESS_ACCESS_TOKEN_EXP"))
+	)
 
 	if access == "" {
 		return ports.TokenPair{}, errors.New("manual source: COACHLESS_ACCESS_TOKEN is required")
 	}
 
-	exp := time.Now().Add(15 * time.Minute)
-	expRaw := strings.TrimSpace(os.Getenv("COACHLESS_ACCESS_TOKEN_EXP"))
+	var exp = time.Now().Add(15 * time.Minute) // default
 	if expRaw != "" {
 		unix, err := strconv.ParseInt(expRaw, 10, 64)
 		if err != nil {

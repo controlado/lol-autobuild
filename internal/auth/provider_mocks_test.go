@@ -15,6 +15,7 @@ type fakeStore struct {
 
 func (s *fakeStore) ReadTokens(ctx context.Context) (ports.TokenPair, error) {
 	_ = ctx
+
 	if s.readErr != nil {
 		return ports.TokenPair{}, s.readErr
 	}
@@ -24,6 +25,7 @@ func (s *fakeStore) ReadTokens(ctx context.Context) (ports.TokenPair, error) {
 
 func (s *fakeStore) WriteTokens(ctx context.Context, pair ports.TokenPair) error {
 	_ = ctx
+
 	if s.writeErr != nil {
 		return s.writeErr
 	}
@@ -46,6 +48,7 @@ type fakeCoachless struct {
 func (f fakeCoachless) Refresh(ctx context.Context, refreshToken string) (ports.TokenPair, error) {
 	_ = ctx
 	_ = refreshToken
+
 	if f.err != nil {
 		return ports.TokenPair{}, f.err
 	}
@@ -87,6 +90,7 @@ type fakeManualSource struct {
 
 func (m fakeManualSource) Acquire(ctx context.Context) (ports.TokenPair, error) {
 	_ = ctx
+
 	if m.err != nil {
 		return ports.TokenPair{}, m.err
 	}
@@ -101,6 +105,7 @@ type fakeAutoSource struct {
 
 func (a fakeAutoSource) Acquire(ctx context.Context) (ports.TokenPair, error) {
 	_ = ctx
+
 	if a.err != nil {
 		return ports.TokenPair{}, a.err
 	}

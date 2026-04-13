@@ -29,7 +29,7 @@ Watch flow:
 - `internal/auth`: token orchestration (auto + manual fallback).
 - `internal/secrets`: OS keyring-backed secret store.
 - `internal/recommend`: recommendation policy/mapping.
-- `internal/lcu`: LCU adapter interface implementations.
+- `internal/lcu`: LCU adapter interface implementations (`client.go`, `errors.go`, `session_http.go`, `connection_discovery.go`, `connection_parse.go`, `selection_detect.go`, `apply.go`, `watch.go`).
 - `cmd/dev`: development CLI.
 
 ## Core contracts
