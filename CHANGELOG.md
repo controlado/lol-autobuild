@@ -21,6 +21,7 @@ The format follows Keep a Changelog principles and semantic versioning.
 - `SyncResult.DetectedChampionID` to expose the champion resolved from LCU.
 - `SyncResult.DetectedRole` and `SyncResult.DetectedQueueID`.
 - LCU champion+role autodetection via discovered local LCU connection + `GET /lol-champ-select/v1/session`.
+- LCU item set apply implementation with idempotent upsert (`GET` + `PUT` on `/lol-item-sets/v1/item-sets/{summonerId}/sets`) and candidate fallback parity with other apply paths.
 - LCU websocket event stream support (`OnJsonApiEvent`) with reconnect loop.
 - `LCUClient.WatchEvents(ctx, out)` and raw `LCUEvent` transport via channel.
 - Watch configuration knobs: `watch.debounce_millis`, `watch.reconnect_delay_millis`.
