@@ -15,6 +15,7 @@ import (
 
 func (c *Client) ApplyItemSet(ctx context.Context, req ports.ApplyItemSetRequest) error {
 	_ = ctx
+
 	if !c.Enabled {
 		return ErrNotConfigured
 	}
@@ -28,6 +29,7 @@ func (c *Client) ApplyItemSet(ctx context.Context, req ports.ApplyItemSetRequest
 
 func (c *Client) ApplyRunePage(ctx context.Context, req ports.ApplyRunePageRequest) error {
 	_ = ctx
+
 	if !c.Enabled {
 		return ErrNotConfigured
 	}
@@ -52,11 +54,13 @@ func (c *Client) ApplySummonerSpells(ctx context.Context, req ports.ApplySummone
 		return err
 	}
 
-	var lastErr error
-	seenChampionSelectionChanged := false
-	seenChampionNotSelected := false
-	seenSessionUnavailable := false
-	seenConnection := false
+	var (
+		lastErr                      error
+		seenChampionSelectionChanged = false
+		seenChampionNotSelected      = false
+		seenSessionUnavailable       = false
+		seenConnection               = false
+	)
 
 	for _, candidate := range c.connectionCandidates(ctx) {
 		info, err := candidate.resolve()
@@ -123,6 +127,7 @@ func (c *Client) ApplySummonerSpells(ctx context.Context, req ports.ApplySummone
 	if !seenConnection {
 		return ErrLockfileNotFound
 	}
+
 	return withLastCandidateError(ErrSummonerSpellsApplyFailed, lastErr)
 }
 
@@ -143,14 +148,20 @@ func validateApplySummonerSpellsRequest(req ports.ApplySummonerSpellsRequest) er
 }
 
 func preserveFlashSlot(spellIDs []int, currentSpell1ID int, currentSpell2ID int) (int, int) {
-	spell1ID := spellIDs[0]
-	spell2ID := spellIDs[1]
+	var (
+		spell1ID = spellIDs[0]
+		spell2ID = spellIDs[1]
+	)
 
+	// se não possui flash nas spells requisitadas
 	containsFlash := spell1ID == 4 || spell2ID == 4
 	if !containsFlash {
 		return spell1ID, spell2ID
 	}
 
+	// otherSpellID == outra spell fora o flash
+	// se a primeira spell for flash, configura
+	// otherSpellID para a segunda spell
 	otherSpellID := spell1ID
 	if spell1ID == 4 {
 		otherSpellID = spell2ID

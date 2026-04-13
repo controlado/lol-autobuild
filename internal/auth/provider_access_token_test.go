@@ -12,23 +12,28 @@ import (
 func TestAccessTokenRefreshesExpiredToken(t *testing.T) {
 	t.Parallel()
 
-	store := &fakeStore{
-		pair: ports.TokenPair{
-			AccessToken:  "expired",
-			RefreshToken: "refresh",
-			ExpiresAt:    time.Now().Add(-1 * time.Minute),
-		},
-	}
-
-	coachless := fakeCoachless{
-		refreshed: ports.TokenPair{
-			AccessToken:  "new-access",
-			RefreshToken: "new-refresh",
-			ExpiresAt:    time.Now().Add(30 * time.Minute),
-		},
-	}
-
-	p := NewProvider(coachless, store, nil, nil, ProviderOptions{TokenSkew: 30 * time.Second})
+	var (
+		store = &fakeStore{
+			pair: ports.TokenPair{
+				AccessToken:  "expired",
+				RefreshToken: "refresh",
+				ExpiresAt:    time.Now().Add(-1 * time.Minute),
+			},
+		}
+		p = NewProvider(
+			fakeCoachless{
+				refreshed: ports.TokenPair{
+					AccessToken:  "new-access",
+					RefreshToken: "new-refresh",
+					ExpiresAt:    time.Now().Add(30 * time.Minute),
+				},
+			},
+			store,
+			nil,
+			nil,
+			ProviderOptions{TokenSkew: 30 * time.Second},
+		)
+	)
 
 	token, err := p.AccessToken(context.Background())
 	if err != nil {
@@ -47,19 +52,24 @@ func TestAccessTokenRefreshesExpiredToken(t *testing.T) {
 func TestAccessTokenFallsBackToManual(t *testing.T) {
 	t.Parallel()
 
-	store := &fakeStore{readErr: errors.New("not found")}
-	manual := fakeManualSource{
-		pair: ports.TokenPair{
-			AccessToken: "manual-access",
-			ExpiresAt:   time.Now().Add(15 * time.Minute),
-		},
-	}
-
-	p := NewProvider(fakeCoachless{}, store, fakeAutoSource{err: errors.New("auto fail")}, manual, ProviderOptions{
-		AutoEnabled:           true,
-		ManualFallbackEnabled: true,
-		TokenSkew:             10 * time.Second,
-	})
+	var (
+		p = NewProvider(
+			fakeCoachless{},
+			&fakeStore{readErr: errors.New("not found")},
+			fakeAutoSource{err: errors.New("auto fail")},
+			fakeManualSource{
+				pair: ports.TokenPair{
+					AccessToken: "manual-access",
+					ExpiresAt:   time.Now().Add(15 * time.Minute),
+				},
+			},
+			ProviderOptions{
+				AutoEnabled:           true,
+				ManualFallbackEnabled: true,
+				TokenSkew:             10 * time.Second,
+			},
+		)
+	)
 
 	token, err := p.AccessToken(context.Background())
 	if err != nil {
@@ -74,11 +84,19 @@ func TestAccessTokenFallsBackToManual(t *testing.T) {
 func TestAccessTokenFailsWhenNoSourceWorks(t *testing.T) {
 	t.Parallel()
 
-	p := NewProvider(fakeCoachless{}, &fakeStore{readErr: errors.New("not found")}, fakeAutoSource{err: errors.New("auto")}, fakeManualSource{err: errors.New("manual")}, ProviderOptions{
-		AutoEnabled:           true,
-		ManualFallbackEnabled: true,
-		TokenSkew:             10 * time.Second,
-	})
+	var (
+		p = NewProvider(
+			fakeCoachless{},
+			&fakeStore{readErr: errors.New("not found")},
+			fakeAutoSource{err: errors.New("auto")},
+			fakeManualSource{err: errors.New("manual")},
+			ProviderOptions{
+				AutoEnabled:           true,
+				ManualFallbackEnabled: true,
+				TokenSkew:             10 * time.Second,
+			},
+		)
+	)
 
 	_, err := p.AccessToken(context.Background())
 	if err == nil {

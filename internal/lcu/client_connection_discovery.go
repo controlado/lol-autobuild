@@ -5,13 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/shirou/gopsutil/v4/process"
 )
-
-const defaultLCUAppProtocol = "https"
 
 type clientConnectionCandidate struct {
 	source  string
@@ -20,6 +17,7 @@ type clientConnectionCandidate struct {
 
 func (candidate clientConnectionCandidate) label() string {
 	source := strings.TrimSpace(candidate.source)
+
 	if source == "" {
 		return "unknown"
 	}
@@ -118,21 +116,19 @@ func parseLCUProcessArgs(args []string) (lockfileInfo, error) {
 		return lockfileInfo{}, errors.New("missing --app-port")
 	}
 
-	port, err := strconv.Atoi(rawPort)
-	if err != nil || port <= 0 {
-		return lockfileInfo{}, errors.New("invalid --app-port")
+	info, err := parseConnectionInfoFromProcessArgs(rawPort, values["remoting-auth-token"], values["app-protocol"])
+	if err != nil {
+		switch {
+		case errors.Is(err, errInvalidPort):
+			return lockfileInfo{}, errors.New("invalid --app-port")
+		case errors.Is(err, errMissingPassword):
+			return lockfileInfo{}, errors.New("missing --remoting-auth-token")
+		default:
+			return lockfileInfo{}, err
+		}
 	}
 
-	password := strings.TrimSpace(values["remoting-auth-token"])
-	if password == "" {
-		return lockfileInfo{}, errors.New("missing --remoting-auth-token")
-	}
-
-	return lockfileInfo{
-		Port:     port,
-		Password: password,
-		Protocol: normalizeLCUProtocol(values["app-protocol"]),
-	}, nil
+	return info, nil
 }
 
 func processArgValues(args []string) map[string]string {
@@ -149,16 +145,11 @@ func processArgValues(args []string) map[string]string {
 			continue
 		}
 
-		key := raw
-		value := ""
-
-		if idx := strings.Index(raw, "="); idx >= 0 {
-			key = raw[:idx]
-			value = raw[idx+1:]
-		} else if i+1 < len(args) {
-			next := strings.TrimSpace(args[i+1])
-			if next != "" && !strings.HasPrefix(next, "--") {
-				value = next
+		key, value, hasSeparator := strings.Cut(raw, "=")
+		if !hasSeparator && i+1 < len(args) {
+			nextArg := strings.TrimSpace(args[i+1])
+			if nextArg != "" && !strings.HasPrefix(nextArg, "--") {
+				value = nextArg
 				i++
 			}
 		}
@@ -171,14 +162,4 @@ func processArgValues(args []string) map[string]string {
 	}
 
 	return values
-}
-
-func normalizeLCUProtocol(raw string) string {
-	protocol := strings.ToLower(strings.TrimSpace(raw))
-	switch protocol {
-	case "http", "https":
-		return protocol
-	default:
-		return defaultLCUAppProtocol
-	}
 }

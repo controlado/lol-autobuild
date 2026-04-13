@@ -14,10 +14,12 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var ErrWatchEventStreamFailed = errors.New("watch event stream failed")
-var ErrWatchEventsChannelRequired = errors.New("watch events channel is required")
-
 const lcuEventTopic = "OnJsonApiEvent"
+
+var (
+	ErrWatchEventStreamFailed     = errors.New("watch event stream failed")
+	ErrWatchEventsChannelRequired = errors.New("watch events channel is required")
+)
 
 type lcuEventEnvelope struct {
 	EventType string          `json:"eventType"`

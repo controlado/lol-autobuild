@@ -98,8 +98,8 @@ func (p *Provider) Refresh(ctx context.Context) (ports.TokenPair, error) {
 	if err != nil {
 		return ports.TokenPair{}, fmt.Errorf("refresh token: %w", err)
 	}
-
 	refreshed = ensureExpiry(refreshed)
+
 	if err := p.store.WriteTokens(ctx, refreshed); err != nil {
 		return ports.TokenPair{}, fmt.Errorf("persist refreshed tokens: %w", err)
 	}

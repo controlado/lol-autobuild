@@ -19,6 +19,7 @@ func TestApplySummonerSpellsReturnsNotConfiguredWhenDisabled(t *testing.T) {
 	t.Parallel()
 
 	client := NewClient(false, "")
+
 	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
 		ChampionID: 240,
 		SpellIDs:   []int{4, 14},
@@ -82,9 +83,9 @@ func TestApplySummonerSpellsInvalidRequest(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+
 			client := NewClient(true, filepath.Join(t.TempDir(), "missing-lockfile"))
 			client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate { return nil }
 
@@ -246,7 +247,11 @@ func TestApplySummonerSpellsFallsBackWhenProcessCandidateFails(t *testing.T) {
 
 	client := NewClient(true, fallbackPath)
 	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate {
-		return []clientConnectionCandidate{staticConnectionCandidate("process:1234", lockfileInfo{Port: autoPort, Password: "secret", Protocol: "http"})}
+		return []clientConnectionCandidate{staticConnectionCandidate("process:1234", lockfileInfo{
+			Port:     autoPort,
+			Password: "secret",
+			Protocol: "http",
+		})}
 	}
 
 	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
@@ -309,7 +314,11 @@ func TestApplySummonerSpellsAllCandidatesFailRespectsPriority(t *testing.T) {
 
 	client := NewClient(true, fallbackPath)
 	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate {
-		return []clientConnectionCandidate{staticConnectionCandidate("process:1234", lockfileInfo{Port: autoPort, Password: "secret", Protocol: "http"})}
+		return []clientConnectionCandidate{staticConnectionCandidate("process:1234", lockfileInfo{
+			Port:     autoPort,
+			Password: "secret",
+			Protocol: "http",
+		})}
 	}
 
 	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{

@@ -47,10 +47,13 @@ func (c *Client) Refresh(ctx context.Context, refreshToken string) (ports.TokenP
 		return ports.TokenPair{}, errors.New("refresh token is required")
 	}
 
-	reqBody := map[string]string{"refreshToken": refreshToken}
-	var out refreshResponse
+	var (
+		endpoint = "/api/Auth/refresh"
+		reqBody  = map[string]string{"refreshToken": refreshToken}
+		out      refreshResponse
+	)
 
-	if err := c.doJSON(ctx, http.MethodPost, "/api/Auth/refresh", "", reqBody, &out); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, endpoint, "", reqBody, &out); err != nil {
 		return ports.TokenPair{}, err
 	}
 
@@ -61,8 +64,12 @@ func (c *Client) Refresh(ctx context.Context, refreshToken string) (ports.TokenP
 }
 
 func (c *Client) GetPatches(ctx context.Context, accessToken string) ([]ports.PatchInfo, error) {
-	var out []ports.PatchInfo
-	if err := c.doJSON(ctx, http.MethodGet, "/api/ChampionWinprob/GetPatches", accessToken, nil, &out); err != nil {
+	var (
+		endpoint = "/api/ChampionWinprob/GetPatches"
+		out      []ports.PatchInfo
+	)
+
+	if err := c.doJSON(ctx, http.MethodGet, endpoint, accessToken, nil, &out); err != nil {
 		return nil, err
 	}
 
@@ -70,8 +77,12 @@ func (c *Client) GetPatches(ctx context.Context, accessToken string) ([]ports.Pa
 }
 
 func (c *Client) GetKeystoneData(ctx context.Context, accessToken string, req ports.KeystoneRequest) ([]ports.KeystoneStat, error) {
-	var out []ports.KeystoneStat
-	if err := c.doJSON(ctx, http.MethodPost, "/api/Rune/GetKeystoneData", accessToken, req, &out); err != nil {
+	var (
+		endpoint = "/api/Rune/GetKeystoneData"
+		out      []ports.KeystoneStat
+	)
+
+	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, req, &out); err != nil {
 		return nil, err
 	}
 
@@ -79,8 +90,12 @@ func (c *Client) GetKeystoneData(ctx context.Context, accessToken string, req po
 }
 
 func (c *Client) GetSummonerSpellStats(ctx context.Context, accessToken string, req ports.SummonerSpellStatsRequest) ([]ports.SummonerSpellStat, error) {
-	var out []ports.SummonerSpellStat
-	if err := c.doJSON(ctx, http.MethodPost, "/api/ChampionWinprob/GetGlobalSummonerSpellStatistics", accessToken, req, &out); err != nil {
+	var (
+		out      []ports.SummonerSpellStat
+		endpoint = "/api/ChampionWinprob/GetGlobalSummonerSpellStatistics"
+	)
+
+	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, req, &out); err != nil {
 		return nil, err
 	}
 
@@ -88,8 +103,12 @@ func (c *Client) GetSummonerSpellStats(ctx context.Context, accessToken string, 
 }
 
 func (c *Client) GetItemStats(ctx context.Context, accessToken string, req ports.ItemStatsRequest) ([]ports.ItemStat, error) {
-	var out []ports.ItemStat
-	if err := c.doJSON(ctx, http.MethodPost, "/api/ChampionWinprob/GetGlobalItemStatistics", accessToken, req, &out); err != nil {
+	var (
+		out      []ports.ItemStat
+		endpoint = "/api/ChampionWinprob/GetGlobalItemStatistics"
+	)
+
+	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, req, &out); err != nil {
 		return nil, err
 	}
 

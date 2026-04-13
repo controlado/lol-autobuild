@@ -45,6 +45,18 @@ func TestParseLockfileInvalid(t *testing.T) {
 	}
 }
 
+func TestParseLockfileInvalidProtocol(t *testing.T) {
+	t.Parallel()
+
+	_, err := parseLockfile([]byte("LeagueClientUx:1234:61538:secret:ftp"))
+	if !errors.Is(err, ErrInvalidLockfile) {
+		t.Fatalf("expected ErrInvalidLockfile, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "unsupported protocol") {
+		t.Fatalf("expected unsupported protocol error, got %v", err)
+	}
+}
+
 func TestDetectSelectionFromChampSelect(t *testing.T) {
 	t.Parallel()
 

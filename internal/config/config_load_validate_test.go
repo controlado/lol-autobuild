@@ -10,10 +10,10 @@ import (
 func TestLoadAndValidate(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.yaml")
-
-	raw := `
+	var (
+		dir  = t.TempDir()
+		path = filepath.Join(dir, "config.yaml")
+		raw  = `
 log_level: debug
 coachless:
   api_base_url: https://api.coachless.gg
@@ -31,6 +31,7 @@ recommendation:
 lcu:
   enabled: false
 `
+	)
 
 	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
