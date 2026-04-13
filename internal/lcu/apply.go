@@ -24,6 +24,10 @@ func (c *Client) ApplyItemSet(ctx context.Context, req ports.ApplyItemSetRequest
 		return nil
 	}
 
+	if _, err := validateItemSetApplyRequest(req); err != nil {
+		return err
+	}
+
 	return fmt.Errorf("apply item set: %w", ErrNotConfigured)
 }
 
@@ -145,6 +149,35 @@ func validateSpellApplyRequest(req ports.ApplySummonerSpellsRequest) error {
 		return fmt.Errorf("%w: spell IDs must be distinct", ErrInvalidSummonerSpellsRequest)
 	}
 	return nil
+}
+
+func validateItemSetApplyRequest(req ports.ApplyItemSetRequest) ([]int, error) {
+	if req.ChampionID <= 0 {
+		return nil, fmt.Errorf("%w: championID must be > 0", ErrInvalidItemSetRequest)
+	}
+	if len(req.ItemIDs) == 0 {
+		return nil, fmt.Errorf("%w: at least one item ID is required", ErrInvalidItemSetRequest)
+	}
+
+	seen := make(map[int]struct{}, len(req.ItemIDs))
+	itemIDs := make([]int, 0, len(req.ItemIDs))
+	for _, itemID := range req.ItemIDs {
+		if itemID <= 0 {
+			return nil, fmt.Errorf("%w: item IDs must be > 0", ErrInvalidItemSetRequest)
+		}
+		if _, ok := seen[itemID]; ok {
+			continue
+		}
+
+		seen[itemID] = struct{}{}
+		itemIDs = append(itemIDs, itemID)
+	}
+
+	if len(itemIDs) == 0 {
+		return nil, fmt.Errorf("%w: at least one unique item ID is required", ErrInvalidItemSetRequest)
+	}
+
+	return itemIDs, nil
 }
 
 func keepFlashSlot(spellIDs []int, currentSpell1ID int, currentSpell2ID int) (int, int) {
