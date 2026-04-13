@@ -23,83 +23,59 @@ func (c *Client) DetectSelection(ctx context.Context) (ports.DetectedSelection, 
 		return ports.DetectedSelection{}, ErrNotConfigured
 	}
 
-	var lastErr error
-	seenChampionNotSelected := false
-	seenRoleNotAssigned := false
-	seenRoleUnknown := false
-	seenUnsupportedQueue := false
-	seenSessionUnavailable := false
-	seenConnection := false
-
+	var attempt = newConnectionAttempt()
 	for _, candidate := range c.candidates(ctx) {
+		if err := ctx.Err(); err != nil {
+			return ports.DetectedSelection{}, err
+		}
+
 		info, err := candidate.resolve()
 		if err != nil {
 			if !errors.Is(err, ErrLockfileNotFound) {
-				seenConnection = true
+				attempt.markResolvableCandidate()
 			}
-			lastErr = fmt.Errorf("candidate %q: %w", candidate.label(), err)
+			attempt.observe(candidate.label(), ErrLockfileNotFound, err)
 			continue
 		}
-		seenConnection = true
+		attempt.markResolvableCandidate()
 
 		session, err := c.fetchChampSelectSession(ctx, info)
 		if err != nil {
-			if errors.Is(err, ErrChampSelectUnavailable) {
-				seenSessionUnavailable = true
-			}
-			lastErr = fmt.Errorf("candidate %q: %w", candidate.label(), err)
+			attempt.observe(candidate.label(), nil, err)
 			continue
 		}
 
 		selection, err := selectionFromSession(session)
 		if err != nil {
-			if errors.Is(err, ErrChampionNotSelected) {
-				seenChampionNotSelected = true
-			}
-			if errors.Is(err, ErrRoleNotAssigned) {
-				seenRoleNotAssigned = true
-			}
-			if errors.Is(err, ErrRoleUnknown) {
-				seenRoleUnknown = true
-			}
-			if errors.Is(err, ErrRoleDetectionUnsupportedQueue) {
-				seenUnsupportedQueue = true
-			}
-			if errors.Is(err, ErrChampSelectUnavailable) {
-				seenSessionUnavailable = true
-			}
-			lastErr = fmt.Errorf("candidate %q: %w", candidate.label(), err)
+			attempt.observe(candidate.label(), classifyDetectSelectionError(err), err)
 			continue
 		}
 
 		return selection, nil
 	}
 
-	if seenChampionNotSelected {
-		return ports.DetectedSelection{}, withLastCandidateError(ErrChampionNotSelected, lastErr)
-	}
+	return ports.DetectedSelection{}, attempt.finish(
+		ErrChampSelectUnavailable,
+		ErrChampionNotSelected,
+		ErrRoleNotAssigned,
+		ErrRoleUnknown,
+		ErrRoleDetectionUnsupportedQueue,
+	)
+}
 
-	if seenRoleNotAssigned {
-		return ports.DetectedSelection{}, withLastCandidateError(ErrRoleNotAssigned, lastErr)
+func classifyDetectSelectionError(err error) error {
+	switch {
+	case errors.Is(err, ErrChampionNotSelected):
+		return ErrChampionNotSelected
+	case errors.Is(err, ErrRoleNotAssigned):
+		return ErrRoleNotAssigned
+	case errors.Is(err, ErrRoleUnknown):
+		return ErrRoleUnknown
+	case errors.Is(err, ErrRoleDetectionUnsupportedQueue):
+		return ErrRoleDetectionUnsupportedQueue
+	default:
+		return nil
 	}
-
-	if seenRoleUnknown {
-		return ports.DetectedSelection{}, withLastCandidateError(ErrRoleUnknown, lastErr)
-	}
-
-	if seenUnsupportedQueue {
-		return ports.DetectedSelection{}, withLastCandidateError(ErrRoleDetectionUnsupportedQueue, lastErr)
-	}
-
-	if seenSessionUnavailable {
-		return ports.DetectedSelection{}, withLastCandidateError(ErrChampSelectUnavailable, lastErr)
-	}
-
-	if !seenConnection {
-		return ports.DetectedSelection{}, ErrLockfileNotFound
-	}
-
-	return ports.DetectedSelection{}, withLastCandidateError(ErrLockfileNotFound, lastErr)
 }
 
 func selectionFromSession(session champSelectSession) (ports.DetectedSelection, error) {
@@ -127,16 +103,6 @@ func selectionFromSession(session champSelectSession) (ports.DetectedSelection, 
 		QueueID:      session.QueueID,
 		IsAutofilled: member.IsAutofilled,
 	}, nil
-}
-
-func localPlayerFromSession(session champSelectSession) (champSelectPlayerSelection, error) {
-	for _, member := range session.MyTeam {
-		if member.CellID == session.LocalPlayerCellID {
-			return member, nil
-		}
-	}
-
-	return champSelectPlayerSelection{}, fmt.Errorf("%w: local player cell %d not found in myTeam", ErrChampSelectUnavailable, session.LocalPlayerCellID)
 }
 
 func isRoleDetectionQueueSupported(queueIDValue int) bool {

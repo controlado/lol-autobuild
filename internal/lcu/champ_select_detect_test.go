@@ -314,7 +314,4 @@ func TestDetectSelectionAllCandidatesFailReturnsPriorityError(t *testing.T) {
 	if !errors.Is(err, ErrChampionNotSelected) {
 		t.Fatalf("expected ErrChampionNotSelected, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "last candidate error:") {
-		t.Fatalf("expected last candidate context in error, got %v", err)
-	}
 }

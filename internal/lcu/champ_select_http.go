@@ -1,26 +1,14 @@
 package lcu
 
 import (
+	"bytes"
 	"context"
-	"crypto/tls"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
-	"time"
 )
-
-func (c *Client) readLockfile(lockfilePath string) (connectionInfo, error) {
-	raw, err := os.ReadFile(lockfilePath)
-	if err != nil {
-		return connectionInfo{}, fmt.Errorf("%w: %v", ErrLockfileNotFound, err)
-	}
-
-	return parseLockfile(raw)
-}
 
 func (c *Client) fetchChampSelectSession(ctx context.Context, info connectionInfo) (champSelectSession, error) {
 	url := fmt.Sprintf("%s://127.0.0.1:%d/lol-champ-select/v1/session", info.Protocol, info.Port)
@@ -58,29 +46,42 @@ func (c *Client) fetchChampSelectSession(ctx context.Context, info connectionInf
 	}
 }
 
-func (c *Client) httpClient(protocol string) *http.Client {
-	if c.HTTPClient != nil {
-		return c.HTTPClient
+func (c *Client) patchSelectionSpells(ctx context.Context, info connectionInfo, spell1ID int, spell2ID int) error {
+	payload, err := json.Marshal(champSelectMySelectionPatch{
+		Spell1ID: spell1ID,
+		Spell2ID: spell2ID,
+	})
+	if err != nil {
+		return fmt.Errorf("%w: encode payload: %v", ErrSummonerSpellsApplyFailed, err)
 	}
 
-	client := &http.Client{Timeout: 3 * time.Second}
-	if protocol == "https" {
-		client.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
+	url := fmt.Sprintf("%s://127.0.0.1:%d/lol-champ-select/v1/session/my-selection", info.Protocol, info.Port)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("%w: build request: %v", ErrSummonerSpellsApplyFailed, err)
+	}
+
+	applyHeaders(req, info.Password)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient(info.Protocol).Do(req)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrSummonerSpellsApplyFailed, err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
+		return nil
+	case http.StatusNotFound:
+		return ErrChampSelectUnavailable
+	default:
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		if len(body) == 0 {
+			return fmt.Errorf("%w: status %d", ErrSummonerSpellsApplyFailed, resp.StatusCode)
 		}
+		return fmt.Errorf("%w: status %d: %s", ErrSummonerSpellsApplyFailed, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
-
-	return client
-}
-
-func applyHeaders(req *http.Request, password string) {
-	req.Header.Set("Authorization", basicAuthHeader(password))
-	req.Header.Set("Accept", "application/json")
-}
-
-func basicAuthHeader(password string) string {
-	token := base64.StdEncoding.EncodeToString([]byte("riot:" + password))
-	return "Basic " + token
 }

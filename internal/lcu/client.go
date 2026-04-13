@@ -2,37 +2,18 @@ package lcu
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/controlado/lol-autobuild/internal/ports"
 )
 
 type connectionInfo struct {
 	Port     int
 	Password string
 	Protocol string
-}
-
-type champSelectSession struct {
-	LocalPlayerCellID int                          `json:"localPlayerCellId"`
-	QueueID           int                          `json:"queueId"`
-	MyTeam            []champSelectPlayerSelection `json:"myTeam"`
-}
-
-type champSelectPlayerSelection struct {
-	CellID           int    `json:"cellId"`
-	ChampionID       int    `json:"championId"`
-	AssignedPosition string `json:"assignedPosition"`
-	IsAutofilled     bool   `json:"isAutofilled"`
-	Spell1ID         int    `json:"spell1Id"`
-	Spell2ID         int    `json:"spell2Id"`
-}
-
-type champSelectMySelectionPatch struct {
-	Spell1ID int `json:"spell1Id"`
-	Spell2ID int `json:"spell2Id"`
 }
 
 type Client struct {
@@ -53,10 +34,16 @@ func NewClient(enabled bool, lockfilePath string) *Client {
 	}
 }
 
-func withLastCandidateError(base error, last error) error {
-	if last == nil {
-		return base
+func (c *Client) ApplyRunePage(ctx context.Context, req ports.ApplyRunePageRequest) error {
+	_ = ctx
+
+	if !c.Enabled {
+		return ErrNotConfigured
 	}
 
-	return errors.Join(base, fmt.Errorf("last candidate error: %w", last))
+	if req.DryRun {
+		return nil
+	}
+
+	return fmt.Errorf("apply rune page: %w", ErrNotConfigured)
 }

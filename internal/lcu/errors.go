@@ -1,6 +1,8 @@
 package lcu
 
-import "errors"
+import (
+	"errors"
+)
 
 var (
 	ErrNotConfigured                 = errors.New("lcu client is not configured")
