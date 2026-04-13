@@ -10,12 +10,12 @@ import (
 	"github.com/shirou/gopsutil/v4/process"
 )
 
-type clientConnectionCandidate struct {
+type connectionCandidate struct {
 	source  string
-	resolve func() (lockfileInfo, error)
+	resolve func() (connectionInfo, error)
 }
 
-func (candidate clientConnectionCandidate) label() string {
+func (candidate connectionCandidate) label() string {
 	source := strings.TrimSpace(candidate.source)
 
 	if source == "" {
@@ -25,39 +25,39 @@ func (candidate clientConnectionCandidate) label() string {
 	return source
 }
 
-func staticConnectionCandidate(source string, info lockfileInfo) clientConnectionCandidate {
-	return clientConnectionCandidate{
+func staticCandidate(source string, info connectionInfo) connectionCandidate {
+	return connectionCandidate{
 		source: source,
-		resolve: func() (lockfileInfo, error) {
+		resolve: func() (connectionInfo, error) {
 			return info, nil
 		},
 	}
 }
 
-func lockfileConnectionCandidate(source string, lockfilePath string, readLockfile func(string) (lockfileInfo, error)) clientConnectionCandidate {
-	return clientConnectionCandidate{
+func lockfileCandidate(source string, lockfilePath string, readLockfile func(string) (connectionInfo, error)) connectionCandidate {
+	return connectionCandidate{
 		source: source,
-		resolve: func() (lockfileInfo, error) {
+		resolve: func() (connectionInfo, error) {
 			return readLockfile(lockfilePath)
 		},
 	}
 }
 
-func (c *Client) connectionCandidates(ctx context.Context) []clientConnectionCandidate {
-	raw := make([]clientConnectionCandidate, 0, 4)
-	if c.discoverOpenClientConnections != nil {
-		raw = append(raw, c.discoverOpenClientConnections(ctx)...)
+func (c *Client) candidates(ctx context.Context) []connectionCandidate {
+	raw := make([]connectionCandidate, 0, 4)
+	if c.discoverProcessConnections != nil {
+		raw = append(raw, c.discoverProcessConnections(ctx)...)
 	}
 
 	if c.LockfilePath != "" {
 		lockfilePath := filepath.Clean(strings.TrimSpace(c.LockfilePath))
 		if lockfilePath != "" && lockfilePath != "." {
-			raw = append(raw, lockfileConnectionCandidate("config:lcu.lockfile_path", lockfilePath, c.readLockfile))
+			raw = append(raw, lockfileCandidate("config:lcu.lockfile_path", lockfilePath, c.readLockfile))
 		}
 	}
 
 	seen := make(map[string]struct{}, len(raw))
-	out := make([]clientConnectionCandidate, 0, len(raw))
+	out := make([]connectionCandidate, 0, len(raw))
 	for _, candidate := range raw {
 		if candidate.resolve == nil {
 			continue
@@ -73,14 +73,14 @@ func (c *Client) connectionCandidates(ctx context.Context) []clientConnectionCan
 	return out
 }
 
-func discoverOpenClientConnections(ctx context.Context) []clientConnectionCandidate {
+func discoverProcessConnections(ctx context.Context) []connectionCandidate {
 	processes, err := process.ProcessesWithContext(ctx)
 	if err != nil {
 		return nil
 	}
 
 	seen := make(map[string]struct{})
-	out := make([]clientConnectionCandidate, 0, len(processes))
+	out := make([]connectionCandidate, 0, len(processes))
 	for _, proc := range processes {
 		if proc == nil {
 			continue
@@ -91,7 +91,7 @@ func discoverOpenClientConnections(ctx context.Context) []clientConnectionCandid
 			continue
 		}
 
-		info, err := parseLCUProcessArgs(args)
+		info, err := parseProcessArgs(args)
 		if err != nil {
 			continue
 		}
@@ -102,36 +102,36 @@ func discoverOpenClientConnections(ctx context.Context) []clientConnectionCandid
 		}
 		seen[connectionKey] = struct{}{}
 
-		out = append(out, staticConnectionCandidate(fmt.Sprintf("process:%d", proc.Pid), info))
+		out = append(out, staticCandidate(fmt.Sprintf("process:%d", proc.Pid), info))
 	}
 
 	return out
 }
 
-func parseLCUProcessArgs(args []string) (lockfileInfo, error) {
-	values := processArgValues(args)
+func parseProcessArgs(args []string) (connectionInfo, error) {
+	values := parseArgValues(args)
 
 	rawPort := strings.TrimSpace(values["app-port"])
 	if rawPort == "" {
-		return lockfileInfo{}, errors.New("missing --app-port")
+		return connectionInfo{}, errors.New("missing --app-port")
 	}
 
-	info, err := parseConnectionInfoFromProcessArgs(rawPort, values["remoting-auth-token"], values["app-protocol"])
+	info, err := parseProcessConnection(rawPort, values["remoting-auth-token"], values["app-protocol"])
 	if err != nil {
 		switch {
 		case errors.Is(err, errInvalidPort):
-			return lockfileInfo{}, errors.New("invalid --app-port")
+			return connectionInfo{}, errors.New("invalid --app-port")
 		case errors.Is(err, errMissingPassword):
-			return lockfileInfo{}, errors.New("missing --remoting-auth-token")
+			return connectionInfo{}, errors.New("missing --remoting-auth-token")
 		default:
-			return lockfileInfo{}, err
+			return connectionInfo{}, err
 		}
 	}
 
 	return info, nil
 }
 
-func processArgValues(args []string) map[string]string {
+func parseArgValues(args []string) map[string]string {
 	values := make(map[string]string, len(args))
 
 	for i := 0; i < len(args); i++ {

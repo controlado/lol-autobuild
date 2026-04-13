@@ -16,7 +16,7 @@ func TestDetectSelectionReturnsNotConfiguredWhenDisabled(t *testing.T) {
 	t.Parallel()
 
 	client := NewClient(false, "")
-	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate { return nil }
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	_, err := client.DetectSelection(context.Background())
 	if !errors.Is(err, ErrNotConfigured) {
 		t.Fatalf("expected ErrNotConfigured, got %v", err)
@@ -82,7 +82,7 @@ func TestDetectSelectionFromChampSelect(t *testing.T) {
 	writeLockfile(t, lockfilePath, port)
 
 	client := NewClient(true, lockfilePath)
-	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate { return nil }
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	selection, err := client.DetectSelection(context.Background())
 	if err != nil {
 		t.Fatalf("DetectSelection() error = %v", err)
@@ -116,7 +116,7 @@ func TestDetectSelectionReturnsChampionNotSelected(t *testing.T) {
 	writeLockfile(t, lockfilePath, port)
 
 	client := NewClient(true, lockfilePath)
-	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate { return nil }
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	_, err := client.DetectSelection(context.Background())
 	if !errors.Is(err, ErrChampionNotSelected) {
 		t.Fatalf("expected ErrChampionNotSelected, got %v", err)
@@ -137,7 +137,7 @@ func TestDetectSelectionReturnsRoleNotAssigned(t *testing.T) {
 	writeLockfile(t, lockfilePath, port)
 
 	client := NewClient(true, lockfilePath)
-	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate { return nil }
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	_, err := client.DetectSelection(context.Background())
 	if !errors.Is(err, ErrRoleNotAssigned) {
 		t.Fatalf("expected ErrRoleNotAssigned, got %v", err)
@@ -158,7 +158,7 @@ func TestDetectSelectionReturnsRoleUnknown(t *testing.T) {
 	writeLockfile(t, lockfilePath, port)
 
 	client := NewClient(true, lockfilePath)
-	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate { return nil }
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	_, err := client.DetectSelection(context.Background())
 	if !errors.Is(err, ErrRoleUnknown) {
 		t.Fatalf("expected ErrRoleUnknown, got %v", err)
@@ -179,7 +179,7 @@ func TestDetectSelectionReturnsUnsupportedQueue(t *testing.T) {
 	writeLockfile(t, lockfilePath, port)
 
 	client := NewClient(true, lockfilePath)
-	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate { return nil }
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	_, err := client.DetectSelection(context.Background())
 	if !errors.Is(err, ErrRoleDetectionUnsupportedQueue) {
 		t.Fatalf("expected ErrRoleDetectionUnsupportedQueue, got %v", err)
@@ -200,7 +200,7 @@ func TestDetectSelectionReturnsUnavailableWhenNotInChampSelect(t *testing.T) {
 	writeLockfile(t, lockfilePath, port)
 
 	client := NewClient(true, lockfilePath)
-	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate { return nil }
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	_, err := client.DetectSelection(context.Background())
 	if !errors.Is(err, ErrChampSelectUnavailable) {
 		t.Fatalf("expected ErrChampSelectUnavailable, got %v", err)
@@ -211,7 +211,7 @@ func TestDetectSelectionReturnsLockfileNotFound(t *testing.T) {
 	t.Parallel()
 
 	client := NewClient(true, filepath.Join(t.TempDir(), "missing-lockfile"))
-	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate { return nil }
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	_, err := client.DetectSelection(context.Background())
 	if !errors.Is(err, ErrLockfileNotFound) {
 		t.Fatalf("expected ErrLockfileNotFound, got %v", err)
@@ -238,8 +238,8 @@ func TestDetectSelectionFallsBackWhenProcessCandidateFails(t *testing.T) {
 	writeLockfile(t, fallbackPath, fallbackPort)
 
 	client := NewClient(true, fallbackPath)
-	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate {
-		return []clientConnectionCandidate{staticConnectionCandidate("process:1234", lockfileInfo{Port: autoPort, Password: "secret", Protocol: "http"})}
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate {
+		return []connectionCandidate{staticCandidate("process:1234", connectionInfo{Port: autoPort, Password: "secret", Protocol: "http"})}
 	}
 
 	selection, err := client.DetectSelection(context.Background())
@@ -272,8 +272,8 @@ func TestDetectSelectionFallsBackAfterRoleNotAssigned(t *testing.T) {
 	writeLockfile(t, fallbackPath, fallbackPort)
 
 	client := NewClient(true, fallbackPath)
-	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate {
-		return []clientConnectionCandidate{staticConnectionCandidate("process:1234", lockfileInfo{Port: autoPort, Password: "secret", Protocol: "http"})}
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate {
+		return []connectionCandidate{staticCandidate("process:1234", connectionInfo{Port: autoPort, Password: "secret", Protocol: "http"})}
 	}
 
 	selection, err := client.DetectSelection(context.Background())
@@ -306,8 +306,8 @@ func TestDetectSelectionAllCandidatesFailReturnsPriorityError(t *testing.T) {
 	writeLockfile(t, fallbackPath, fallbackPort)
 
 	client := NewClient(true, fallbackPath)
-	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate {
-		return []clientConnectionCandidate{staticConnectionCandidate("process:1234", lockfileInfo{Port: autoPort, Password: "secret", Protocol: "http"})}
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate {
+		return []connectionCandidate{staticCandidate("process:1234", connectionInfo{Port: autoPort, Password: "secret", Protocol: "http"})}
 	}
 
 	_, err := client.DetectSelection(context.Background())

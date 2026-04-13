@@ -31,7 +31,7 @@ func (c *Client) DetectSelection(ctx context.Context) (ports.DetectedSelection, 
 	seenSessionUnavailable := false
 	seenConnection := false
 
-	for _, candidate := range c.connectionCandidates(ctx) {
+	for _, candidate := range c.candidates(ctx) {
 		info, err := candidate.resolve()
 		if err != nil {
 			if !errors.Is(err, ErrLockfileNotFound) {
@@ -116,7 +116,7 @@ func selectionFromSession(session champSelectSession) (ports.DetectedSelection, 
 		return ports.DetectedSelection{}, ErrChampionNotSelected
 	}
 
-	role, err := canonicalRoleFromAssignedPosition(member.AssignedPosition)
+	role, err := normalizeAssignedRole(member.AssignedPosition)
 	if err != nil {
 		return ports.DetectedSelection{}, err
 	}
@@ -148,7 +148,7 @@ func isRoleDetectionQueueSupported(queueIDValue int) bool {
 	}
 }
 
-func canonicalRoleFromAssignedPosition(assignedPosition string) (string, error) {
+func normalizeAssignedRole(assignedPosition string) (string, error) {
 	switch strings.ToUpper(strings.TrimSpace(assignedPosition)) {
 	case "TOP":
 		return "top", nil

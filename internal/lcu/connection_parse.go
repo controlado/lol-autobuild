@@ -34,45 +34,45 @@ func parsePositivePort(raw string) (int, error) {
 	return port, nil
 }
 
-func parseConnectionInfoFromProcessArgs(rawPort, rawPassword, rawProtocol string) (lockfileInfo, error) {
-	return parseConnectionInfo(rawPort, rawPassword, rawProtocol, protocolFallback)
+func parseProcessConnection(rawPort, rawPassword, rawProtocol string) (connectionInfo, error) {
+	return parseConnection(rawPort, rawPassword, rawProtocol, protocolFallback)
 }
 
-func parseConnectionInfoFromLockfile(rawPort, rawPassword, rawProtocol string) (lockfileInfo, error) {
-	return parseConnectionInfo(rawPort, rawPassword, rawProtocol, protocolStrict)
+func parseLockfileConnection(rawPort, rawPassword, rawProtocol string) (connectionInfo, error) {
+	return parseConnection(rawPort, rawPassword, rawProtocol, protocolStrict)
 }
 
-func parseConnectionInfo(rawPort, rawPassword, rawProtocol string, mode protocolMode) (lockfileInfo, error) {
+func parseConnection(rawPort, rawPassword, rawProtocol string, mode protocolMode) (connectionInfo, error) {
 	port, err := parsePositivePort(rawPort)
 	if err != nil {
-		return lockfileInfo{}, err
+		return connectionInfo{}, err
 	}
 
 	password := strings.TrimSpace(rawPassword)
 	if password == "" {
-		return lockfileInfo{}, errMissingPassword
+		return connectionInfo{}, errMissingPassword
 	}
 
 	protocol := strings.ToLower(strings.TrimSpace(rawProtocol))
 	switch mode {
 	case protocolFallback:
-		protocol = normalizeLCUProtocol(protocol)
+		protocol = normalizeProtocol(protocol)
 	case protocolStrict:
 		if protocol != "https" && protocol != "http" {
-			return lockfileInfo{}, fmt.Errorf("%w %q", errUnsupportedProtocol, protocol)
+			return connectionInfo{}, fmt.Errorf("%w %q", errUnsupportedProtocol, protocol)
 		}
 	default:
-		return lockfileInfo{}, errInvalidProtocolMode
+		return connectionInfo{}, errInvalidProtocolMode
 	}
 
-	return lockfileInfo{
+	return connectionInfo{
 		Port:     port,
 		Password: password,
 		Protocol: protocol,
 	}, nil
 }
 
-func normalizeLCUProtocol(raw string) string {
+func normalizeProtocol(raw string) string {
 	protocol := strings.ToLower(strings.TrimSpace(raw))
 	switch protocol {
 	case "http", "https":
@@ -82,15 +82,15 @@ func normalizeLCUProtocol(raw string) string {
 	}
 }
 
-func parseLockfile(raw []byte) (lockfileInfo, error) {
+func parseLockfile(raw []byte) (connectionInfo, error) {
 	parts := strings.Split(strings.TrimSpace(string(raw)), ":")
 	if len(parts) != 5 {
-		return lockfileInfo{}, fmt.Errorf("%w: expected 5 fields", ErrInvalidLockfile)
+		return connectionInfo{}, fmt.Errorf("%w: expected 5 fields", ErrInvalidLockfile)
 	}
 
-	info, err := parseConnectionInfoFromLockfile(parts[2], parts[3], parts[4])
+	info, err := parseLockfileConnection(parts[2], parts[3], parts[4])
 	if err != nil {
-		return lockfileInfo{}, fmt.Errorf("%w: %v", ErrInvalidLockfile, err)
+		return connectionInfo{}, fmt.Errorf("%w: %v", ErrInvalidLockfile, err)
 	}
 
 	return info, nil

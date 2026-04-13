@@ -8,14 +8,14 @@ import (
 func TestParseLCUProcessArgsSuccess(t *testing.T) {
 	t.Parallel()
 
-	info, err := parseLCUProcessArgs([]string{
+	info, err := parseProcessArgs([]string{
 		"LeagueClientUx.exe",
 		"--app-port", "61538",
 		"--remoting-auth-token=secret-token",
 		"--app-protocol", "http",
 	})
 	if err != nil {
-		t.Fatalf("parseLCUProcessArgs() error = %v", err)
+		t.Fatalf("parseProcessArgs() error = %v", err)
 	}
 
 	if info.Port != 61538 {
@@ -32,7 +32,7 @@ func TestParseLCUProcessArgsSuccess(t *testing.T) {
 func TestParseLCUProcessArgsFailsWhenPortMissing(t *testing.T) {
 	t.Parallel()
 
-	_, err := parseLCUProcessArgs([]string{
+	_, err := parseProcessArgs([]string{
 		"LeagueClientUx.exe",
 		"--remoting-auth-token=secret-token",
 	})
@@ -44,7 +44,7 @@ func TestParseLCUProcessArgsFailsWhenPortMissing(t *testing.T) {
 func TestParseLCUProcessArgsFailsWhenPortInvalid(t *testing.T) {
 	t.Parallel()
 
-	_, err := parseLCUProcessArgs([]string{
+	_, err := parseProcessArgs([]string{
 		"LeagueClientUx.exe",
 		"--app-port=invalid",
 		"--remoting-auth-token=secret-token",
@@ -57,7 +57,7 @@ func TestParseLCUProcessArgsFailsWhenPortInvalid(t *testing.T) {
 func TestParseLCUProcessArgsFailsWhenTokenMissing(t *testing.T) {
 	t.Parallel()
 
-	_, err := parseLCUProcessArgs([]string{
+	_, err := parseProcessArgs([]string{
 		"LeagueClientUx.exe",
 		"--app-port=61538",
 	})
@@ -69,14 +69,14 @@ func TestParseLCUProcessArgsFailsWhenTokenMissing(t *testing.T) {
 func TestParseLCUProcessArgsInvalidProtocolFallsBackToDefault(t *testing.T) {
 	t.Parallel()
 
-	info, err := parseLCUProcessArgs([]string{
+	info, err := parseProcessArgs([]string{
 		"LeagueClientUx.exe",
 		"--app-port=61538",
 		"--remoting-auth-token=secret-token",
 		"--app-protocol=something-else",
 	})
 	if err != nil {
-		t.Fatalf("parseLCUProcessArgs() error = %v", err)
+		t.Fatalf("parseProcessArgs() error = %v", err)
 	}
 
 	if info.Protocol != defaultLCUAppProtocol {

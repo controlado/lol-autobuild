@@ -14,14 +14,14 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const lcuEventTopic = "OnJsonApiEvent"
+const eventTopic = "OnJsonApiEvent"
 
 var (
 	ErrWatchEventStreamFailed     = errors.New("watch event stream failed")
 	ErrWatchEventsChannelRequired = errors.New("watch events channel is required")
 )
 
-type lcuEventEnvelope struct {
+type eventEnvelope struct {
 	EventType string          `json:"eventType"`
 	URI       string          `json:"uri"`
 	Data      json.RawMessage `json:"data"`
@@ -79,7 +79,7 @@ func (c *Client) dialEventStream(ctx context.Context) (*websocket.Conn, error) {
 	var lastErr error
 	seenConnection := false
 
-	for _, candidate := range c.connectionCandidates(ctx) {
+	for _, candidate := range c.candidates(ctx) {
 		info, err := candidate.resolve()
 		if err != nil {
 			if !errors.Is(err, ErrLockfileNotFound) {
@@ -90,15 +90,15 @@ func (c *Client) dialEventStream(ctx context.Context) (*websocket.Conn, error) {
 		}
 		seenConnection = true
 
-		conn, err := dialLCUWebsocket(ctx, info)
+		conn, err := dialWebsocket(ctx, info)
 		if err != nil {
 			lastErr = fmt.Errorf("candidate %q: %w", candidate.label(), err)
 			continue
 		}
 
-		if err := conn.WriteJSON([]any{5, lcuEventTopic}); err != nil {
+		if err := conn.WriteJSON([]any{5, eventTopic}); err != nil {
 			_ = conn.Close()
-			lastErr = fmt.Errorf("candidate %q: subscribe %q: %w", candidate.label(), lcuEventTopic, err)
+			lastErr = fmt.Errorf("candidate %q: subscribe %q: %w", candidate.label(), eventTopic, err)
 			continue
 		}
 
@@ -112,7 +112,7 @@ func (c *Client) dialEventStream(ctx context.Context) (*websocket.Conn, error) {
 	return nil, withLastCandidateError(ErrWatchEventStreamFailed, lastErr)
 }
 
-func dialLCUWebsocket(ctx context.Context, info lockfileInfo) (*websocket.Conn, error) {
+func dialWebsocket(ctx context.Context, info connectionInfo) (*websocket.Conn, error) {
 	scheme := "ws"
 	dialer := websocket.Dialer{HandshakeTimeout: 3 * time.Second}
 	if info.Protocol == "https" {
@@ -124,7 +124,7 @@ func dialLCUWebsocket(ctx context.Context, info lockfileInfo) (*websocket.Conn, 
 
 	addr := fmt.Sprintf("%s://127.0.0.1:%d/", scheme, info.Port)
 	headers := http.Header{}
-	headers.Set("Authorization", lcuBasicAuthHeader(info.Password))
+	headers.Set("Authorization", basicAuthHeader(info.Password))
 
 	conn, resp, err := dialer.DialContext(ctx, addr, headers)
 	if err != nil {
@@ -157,7 +157,7 @@ func (c *Client) consumeEventStream(ctx context.Context, conn *websocket.Conn, o
 			return err
 		}
 
-		event, ok, err := decodeLCUEvent(payload)
+		event, ok, err := decodeEvent(payload)
 		if err != nil || !ok {
 			continue
 		}
@@ -170,7 +170,7 @@ func (c *Client) consumeEventStream(ctx context.Context, conn *websocket.Conn, o
 	}
 }
 
-func decodeLCUEvent(payload []byte) (ports.LCUEvent, bool, error) {
+func decodeEvent(payload []byte) (ports.LCUEvent, bool, error) {
 	var frame []json.RawMessage
 	if err := json.Unmarshal(payload, &frame); err != nil {
 		return ports.LCUEvent{}, false, err
@@ -184,11 +184,11 @@ func decodeLCUEvent(payload []byte) (ports.LCUEvent, bool, error) {
 	if err := json.Unmarshal(frame[1], &topic); err != nil {
 		return ports.LCUEvent{}, false, err
 	}
-	if topic != lcuEventTopic {
+	if topic != eventTopic {
 		return ports.LCUEvent{}, false, nil
 	}
 
-	var envelope lcuEventEnvelope
+	var envelope eventEnvelope
 	if err := json.Unmarshal(frame[2], &envelope); err != nil {
 		return ports.LCUEvent{}, false, err
 	}

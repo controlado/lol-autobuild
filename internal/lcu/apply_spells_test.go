@@ -33,7 +33,7 @@ func TestApplySummonerSpellsDryRunSkipsIO(t *testing.T) {
 	t.Parallel()
 
 	client := NewClient(true, filepath.Join(t.TempDir(), "missing-lockfile"))
-	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate { return nil }
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 
 	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
 		ChampionID: 240,
@@ -87,7 +87,7 @@ func TestApplySummonerSpellsInvalidRequest(t *testing.T) {
 			t.Parallel()
 
 			client := NewClient(true, filepath.Join(t.TempDir(), "missing-lockfile"))
-			client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate { return nil }
+			client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 
 			err := client.ApplySummonerSpells(context.Background(), tt.req)
 			if !errors.Is(err, ErrInvalidSummonerSpellsRequest) {
@@ -140,7 +140,7 @@ func TestApplySummonerSpellsSuccess(t *testing.T) {
 	writeLockfile(t, lockfilePath, mustServerPort(t, server.URL))
 
 	client := NewClient(true, lockfilePath)
-	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate { return nil }
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
 		ChampionID: 240,
 		SpellIDs:   []int{4, 14},
@@ -184,7 +184,7 @@ func TestApplySummonerSpellsPreservesFlashSlot(t *testing.T) {
 	writeLockfile(t, lockfilePath, mustServerPort(t, server.URL))
 
 	client := NewClient(true, lockfilePath)
-	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate { return nil }
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
 		ChampionID: 240,
 		SpellIDs:   []int{4, 7},
@@ -209,7 +209,7 @@ func TestApplySummonerSpellsFailsWhenChampionChanges(t *testing.T) {
 	writeLockfile(t, lockfilePath, mustServerPort(t, server.URL))
 
 	client := NewClient(true, lockfilePath)
-	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate { return nil }
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
 		ChampionID: 240,
 		SpellIDs:   []int{4, 14},
@@ -246,8 +246,8 @@ func TestApplySummonerSpellsFallsBackWhenProcessCandidateFails(t *testing.T) {
 	writeLockfile(t, fallbackPath, mustServerPort(t, fallbackServer.URL))
 
 	client := NewClient(true, fallbackPath)
-	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate {
-		return []clientConnectionCandidate{staticConnectionCandidate("process:1234", lockfileInfo{
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate {
+		return []connectionCandidate{staticCandidate("process:1234", connectionInfo{
 			Port:     autoPort,
 			Password: "secret",
 			Protocol: "http",
@@ -285,7 +285,7 @@ func TestApplySummonerSpellsNotFoundMapsToChampSelectUnavailable(t *testing.T) {
 	writeLockfile(t, lockfilePath, mustServerPort(t, server.URL))
 
 	client := NewClient(true, lockfilePath)
-	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate { return nil }
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
 		ChampionID: 240,
 		SpellIDs:   []int{4, 14},
@@ -313,8 +313,8 @@ func TestApplySummonerSpellsAllCandidatesFailRespectsPriority(t *testing.T) {
 	writeLockfile(t, fallbackPath, mustServerPort(t, fallbackServer.URL))
 
 	client := NewClient(true, fallbackPath)
-	client.discoverOpenClientConnections = func(context.Context) []clientConnectionCandidate {
-		return []clientConnectionCandidate{staticConnectionCandidate("process:1234", lockfileInfo{
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate {
+		return []connectionCandidate{staticCandidate("process:1234", connectionInfo{
 			Port:     autoPort,
 			Password: "secret",
 			Protocol: "http",

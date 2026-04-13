@@ -50,7 +50,7 @@ func (c *Client) ApplySummonerSpells(ctx context.Context, req ports.ApplySummone
 		return nil
 	}
 
-	if err := validateApplySummonerSpellsRequest(req); err != nil {
+	if err := validateSpellApplyRequest(req); err != nil {
 		return err
 	}
 
@@ -62,7 +62,7 @@ func (c *Client) ApplySummonerSpells(ctx context.Context, req ports.ApplySummone
 		seenConnection               = false
 	)
 
-	for _, candidate := range c.connectionCandidates(ctx) {
+	for _, candidate := range c.candidates(ctx) {
 		info, err := candidate.resolve()
 		if err != nil {
 			if !errors.Is(err, ErrLockfileNotFound) {
@@ -103,8 +103,8 @@ func (c *Client) ApplySummonerSpells(ctx context.Context, req ports.ApplySummone
 			continue
 		}
 
-		spell1ID, spell2ID := preserveFlashSlot(req.SpellIDs, member.Spell1ID, member.Spell2ID)
-		if err := c.patchMySelectionSpells(ctx, info, spell1ID, spell2ID); err != nil {
+		spell1ID, spell2ID := keepFlashSlot(req.SpellIDs, member.Spell1ID, member.Spell2ID)
+		if err := c.patchSelectionSpells(ctx, info, spell1ID, spell2ID); err != nil {
 			if errors.Is(err, ErrChampSelectUnavailable) {
 				seenSessionUnavailable = true
 			}
@@ -131,7 +131,7 @@ func (c *Client) ApplySummonerSpells(ctx context.Context, req ports.ApplySummone
 	return withLastCandidateError(ErrSummonerSpellsApplyFailed, lastErr)
 }
 
-func validateApplySummonerSpellsRequest(req ports.ApplySummonerSpellsRequest) error {
+func validateSpellApplyRequest(req ports.ApplySummonerSpellsRequest) error {
 	if req.ChampionID <= 0 {
 		return fmt.Errorf("%w: championID must be > 0", ErrInvalidSummonerSpellsRequest)
 	}
@@ -147,7 +147,7 @@ func validateApplySummonerSpellsRequest(req ports.ApplySummonerSpellsRequest) er
 	return nil
 }
 
-func preserveFlashSlot(spellIDs []int, currentSpell1ID int, currentSpell2ID int) (int, int) {
+func keepFlashSlot(spellIDs []int, currentSpell1ID int, currentSpell2ID int) (int, int) {
 	var (
 		spell1ID = spellIDs[0]
 		spell2ID = spellIDs[1]
@@ -177,7 +177,7 @@ func preserveFlashSlot(spellIDs []int, currentSpell1ID int, currentSpell2ID int)
 	}
 }
 
-func (c *Client) patchMySelectionSpells(ctx context.Context, info lockfileInfo, spell1ID int, spell2ID int) error {
+func (c *Client) patchSelectionSpells(ctx context.Context, info connectionInfo, spell1ID int, spell2ID int) error {
 	payload, err := json.Marshal(champSelectMySelectionPatch{
 		Spell1ID: spell1ID,
 		Spell2ID: spell2ID,
@@ -192,7 +192,7 @@ func (c *Client) patchMySelectionSpells(ctx context.Context, info lockfileInfo, 
 		return fmt.Errorf("%w: build request: %v", ErrSummonerSpellsApplyFailed, err)
 	}
 
-	applyLCUHeaders(req, info.Password)
+	applyHeaders(req, info.Password)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient(info.Protocol).Do(req)
