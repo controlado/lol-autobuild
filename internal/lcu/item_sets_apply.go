@@ -164,19 +164,19 @@ func upsertManagedItemSet(existing itemSetsPayload, fallbackAccountID int64, man
 
 	managedUID := strings.TrimSpace(managed.UID)
 	outSets := make([]json.RawMessage, 0, len(existing.ItemSets)+1)
-	replaced := false
+	isItemSetReplaced := false
 	for _, raw := range existing.ItemSets {
 		if managedUID != "" && itemSetUIDFromRaw(raw) == managedUID {
-			if !replaced {
+			if !isItemSetReplaced {
 				outSets = append(outSets, json.RawMessage(managedRaw))
-				replaced = true
+				isItemSetReplaced = true
 			}
 			continue
 		}
 		outSets = append(outSets, append(json.RawMessage(nil), raw...))
 	}
 
-	if !replaced {
+	if !isItemSetReplaced {
 		outSets = append(outSets, json.RawMessage(managedRaw))
 	}
 
