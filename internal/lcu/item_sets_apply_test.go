@@ -40,7 +40,7 @@ func TestApplyItemSetDryRunSkipsIO(t *testing.T) {
 		Blocks: []ports.ApplyItemSetBlock{
 			{Type: "Starter", ItemIDs: []int{1055, 3006}},
 		},
-		DryRun:     true,
+		DryRun: true,
 	})
 	if err != nil {
 		t.Fatalf("expected nil error in dry-run, got %v", err)

@@ -189,16 +189,16 @@ func upsertManagedItemSet(existing itemSetsPayload, fallbackAccountID int64, man
 
 func newManagedItemSet(req ports.ApplyItemSetRequest, blocks []itemSetBlock) itemSet {
 	return itemSet{
-		UID:             managedItemSetUID(req.ChampionID, req.Role),
-		Title:           managedItemSetTitle(req),
-		Mode:            "any",
-		Map:             "any",
-		Type:            "custom",
-		SortRank:        0,
-		StartedFrom:     "blank",
-		AssociatedChamp: []int{req.ChampionID},
-		AssociatedMaps:  []int{11},
-		Blocks:             blocks,
+		UID:               managedItemSetUID(req.ChampionID, req.Role),
+		Title:             managedItemSetTitle(req),
+		Mode:              "any",
+		Map:               "any",
+		Type:              "custom",
+		SortRank:          0,
+		StartedFrom:       "blank",
+		AssociatedChamp:   []int{req.ChampionID},
+		AssociatedMaps:    []int{11},
+		Blocks:            blocks,
 		PreferredItemSlot: []any{},
 	}
 }
