@@ -73,8 +73,6 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 	})
 
 	for idx, stage := range stageSpecs {
-		idx := idx
-		stage := stage
 		g.Go(func() error {
 			stats, err := s.deps.Coachless.GetItemStats(gctx, accessToken, ports.ItemStatsRequest{
 				CommonFilters:         filters,
