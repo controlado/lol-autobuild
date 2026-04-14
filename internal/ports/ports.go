@@ -116,7 +116,6 @@ type ApplyItemSetRequest struct {
 	Role       string
 	Patch      string
 	Blocks     []ApplyItemSetBlock
-	ItemIDs    []int
 	DryRun     bool
 }
 

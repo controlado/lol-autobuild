@@ -20,7 +20,9 @@ func TestApplyItemSetReturnsNotConfiguredWhenDisabled(t *testing.T) {
 	client := NewClient(false, "")
 	err := client.ApplyItemSet(context.Background(), ports.ApplyItemSetRequest{
 		ChampionID: 240,
-		ItemIDs:    []int{1055, 3006},
+		Blocks: []ports.ApplyItemSetBlock{
+			{Type: "Starter", ItemIDs: []int{1055, 3006}},
+		},
 	})
 	if !errors.Is(err, ErrNotConfigured) {
 		t.Fatalf("expected ErrNotConfigured, got %v", err)
@@ -35,7 +37,9 @@ func TestApplyItemSetDryRunSkipsIO(t *testing.T) {
 
 	err := client.ApplyItemSet(context.Background(), ports.ApplyItemSetRequest{
 		ChampionID: 240,
-		ItemIDs:    []int{1055, 3006},
+		Blocks: []ports.ApplyItemSetBlock{
+			{Type: "Starter", ItemIDs: []int{1055, 3006}},
+		},
 		DryRun:     true,
 	})
 	if err != nil {
@@ -54,21 +58,34 @@ func TestApplyItemSetInvalidRequest(t *testing.T) {
 			name: "champion must be > 0",
 			req: ports.ApplyItemSetRequest{
 				ChampionID: 0,
-				ItemIDs:    []int{1055, 3006},
+				Blocks: []ports.ApplyItemSetBlock{
+					{Type: "Starter", ItemIDs: []int{1055, 3006}},
+				},
 			},
 		},
 		{
-			name: "requires at least one item",
+			name: "requires at least one block",
 			req: ports.ApplyItemSetRequest{
 				ChampionID: 240,
-				ItemIDs:    []int{},
+				Blocks:     []ports.ApplyItemSetBlock{},
+			},
+		},
+		{
+			name: "block type is required",
+			req: ports.ApplyItemSetRequest{
+				ChampionID: 240,
+				Blocks: []ports.ApplyItemSetBlock{
+					{Type: "", ItemIDs: []int{1055, 3006}},
+				},
 			},
 		},
 		{
 			name: "item ids must be > 0",
 			req: ports.ApplyItemSetRequest{
 				ChampionID: 240,
-				ItemIDs:    []int{1055, 0},
+				Blocks: []ports.ApplyItemSetBlock{
+					{Type: "Starter", ItemIDs: []int{1055, 0}},
+				},
 			},
 		},
 	}
@@ -143,7 +160,9 @@ func TestApplyItemSetSuccessUpsertsManagedSet(t *testing.T) {
 		ChampionID: 240,
 		Role:       "Support",
 		Patch:      "16.7",
-		ItemIDs:    []int{1055, 3006, 1055},
+		Blocks: []ports.ApplyItemSetBlock{
+			{Type: "Starter", ItemIDs: []int{1055, 3006, 1055}},
+		},
 	})
 	if err != nil {
 		t.Fatalf("ApplyItemSet() error = %v", err)
@@ -187,7 +206,7 @@ func TestApplyItemSetSuccessUpsertsManagedSet(t *testing.T) {
 	if managed.Title != "AutoBuild 240 support 16.7" {
 		t.Fatalf("unexpected managed title: %q", managed.Title)
 	}
-	if len(managed.Blocks) != 1 || managed.Blocks[0].Type != "Core" {
+	if len(managed.Blocks) != 1 || managed.Blocks[0].Type != "Starter" {
 		t.Fatalf("unexpected managed blocks: %#v", managed.Blocks)
 	}
 	if len(managed.Blocks[0].Items) != 2 {
@@ -248,7 +267,9 @@ func TestApplyItemSetFallsBackWhenProcessCandidateFails(t *testing.T) {
 		ChampionID: 240,
 		Role:       "support",
 		Patch:      "16.7",
-		ItemIDs:    []int{1055, 3006},
+		Blocks: []ports.ApplyItemSetBlock{
+			{Type: "Starter", ItemIDs: []int{1055, 3006}},
+		},
 	})
 	if err != nil {
 		t.Fatalf("ApplyItemSet() error = %v", err)
@@ -288,7 +309,9 @@ func TestApplyItemSetAllCandidatesFailRespectsPriority(t *testing.T) {
 		ChampionID: 240,
 		Role:       "support",
 		Patch:      "16.7",
-		ItemIDs:    []int{1055, 3006},
+		Blocks: []ports.ApplyItemSetBlock{
+			{Type: "Starter", ItemIDs: []int{1055, 3006}},
+		},
 	})
 	if !errors.Is(err, ErrChampionSelectionChanged) {
 		t.Fatalf("expected ErrChampionSelectionChanged priority, got %v", err)
@@ -315,7 +338,9 @@ func TestApplyItemSetFailsWhenChampionIsNotSelected(t *testing.T) {
 		ChampionID: 240,
 		Role:       "support",
 		Patch:      "16.7",
-		ItemIDs:    []int{1055, 3006},
+		Blocks: []ports.ApplyItemSetBlock{
+			{Type: "Starter", ItemIDs: []int{1055, 3006}},
+		},
 	})
 	if !errors.Is(err, ErrChampionNotSelected) {
 		t.Fatalf("expected ErrChampionNotSelected priority, got %v", err)

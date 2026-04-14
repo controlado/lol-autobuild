@@ -163,13 +163,15 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 
 	if req.ApplyItems {
 		blocks := make([]ports.ApplyItemSetBlock, 0, len(stageSpecs))
-		itemIDs := make([]int, 0)
+		hasAnyItems := false
 		for idx, stage := range stageSpecs {
 			filtered := filterAndLimitItemStats(stageStats[idx], s.deps.Policy.MinOccurrence, s.deps.Policy.TopItems)
 			blockItemIDs := make([]int, 0, len(filtered))
 			for _, stat := range filtered {
 				blockItemIDs = append(blockItemIDs, stat.ItemID)
-				itemIDs = append(itemIDs, stat.ItemID)
+			}
+			if len(blockItemIDs) > 0 {
+				hasAnyItems = true
 			}
 
 			blocks = append(blocks, ports.ApplyItemSetBlock{
@@ -178,14 +180,13 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 			})
 		}
 
-		if len(itemIDs) == 0 {
+		if !hasAnyItems {
 			result.Warnings = append(result.Warnings, "apply items requested but no item recommendation was available")
 		} else if err := s.deps.LCU.ApplyItemSet(ctx, ports.ApplyItemSetRequest{
 			ChampionID: selection.ChampionID,
 			Role:       selection.Role,
 			Patch:      patchLabel,
 			Blocks:     blocks,
-			ItemIDs:    itemIDs,
 			DryRun:     false,
 		}); err != nil {
 			result.Warnings = append(result.Warnings, "failed to apply item set: "+err.Error())
