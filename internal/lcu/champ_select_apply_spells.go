@@ -21,56 +21,50 @@ func (c *Client) ApplySummonerSpells(ctx context.Context, req ports.ApplySummone
 		return err
 	}
 
-	var attempt = newConnectionAttempt()
-	for _, candidate := range c.candidates(ctx) {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		info, err := candidate.resolve()
-		if err != nil {
-			if !errors.Is(err, ErrLockfileNotFound) {
-				attempt.markResolvableCandidate()
+	var (
+		attempt          = newConnectionAttempt()
+		candidateHandler = func(info connectionInfo, candidateLabel string) (success bool) {
+			session, err := c.fetchChampSelectSession(ctx, info)
+			if err != nil {
+				attempt.observe(candidateLabel, ErrChampSelectUnavailable, err)
+				return false
 			}
-			attempt.observe(candidate.label(), ErrLockfileNotFound, err)
-			continue
-		}
-		attempt.markResolvableCandidate()
 
-		session, err := c.fetchChampSelectSession(ctx, info)
-		if err != nil {
-			attempt.observe(candidate.label(), ErrChampSelectUnavailable, err)
-			continue
-		}
-
-		member, err := localPlayerFromSession(session)
-		if err != nil {
-			attempt.observe(candidate.label(), ErrChampSelectUnavailable, err)
-			continue
-		}
-
-		if member.ChampionID <= 0 {
-			err = fmt.Errorf("expected championId %d, got any", req.ChampionID)
-			attempt.observe(candidate.label(), ErrChampionNotSelected, err)
-			continue
-		}
-
-		if member.ChampionID != req.ChampionID {
-			err := fmt.Errorf("expected championId %d, got %d", req.ChampionID, member.ChampionID)
-			attempt.observe(candidate.label(), ErrChampionSelectionChanged, err)
-			continue
-		}
-
-		spell1ID, spell2ID := keepFlashSlot(req.SpellIDs, member.Spell1ID, member.Spell2ID)
-		if err := c.patchSelectionSpells(ctx, info, spell1ID, spell2ID); err != nil {
-			if errors.Is(err, ErrChampSelectUnavailable) {
-				attempt.observe(candidate.label(), ErrChampSelectUnavailable, err)
-			} else {
-				attempt.observe(candidate.label(), nil, err)
+			member, err := localPlayerFromSession(session)
+			if err != nil {
+				attempt.observe(candidateLabel, ErrChampSelectUnavailable, err)
+				return false
 			}
-			continue
-		}
 
+			if member.ChampionID <= 0 {
+				err = fmt.Errorf("expected championId %d, got %d", req.ChampionID, member.ChampionID)
+				attempt.observe(candidateLabel, ErrChampionNotSelected, err)
+				return false
+			}
+
+			if member.ChampionID != req.ChampionID {
+				err := fmt.Errorf("expected championId %d, got %d", req.ChampionID, member.ChampionID)
+				attempt.observe(candidateLabel, ErrChampionSelectionChanged, err)
+				return false
+			}
+
+			spell1ID, spell2ID := keepFlashSlot(req.SpellIDs, member.Spell1ID, member.Spell2ID)
+			if err := c.patchSelectionSpells(ctx, info, spell1ID, spell2ID); err != nil {
+				if errors.Is(err, ErrChampSelectUnavailable) {
+					attempt.observe(candidateLabel, ErrChampSelectUnavailable, err)
+				} else {
+					attempt.observe(candidateLabel, nil, err)
+				}
+				return false
+			}
+
+			return true
+		}
+	)
+
+	if success, err := c.ForEachCandidate(ctx, attempt, candidateHandler); err != nil {
+		return err
+	} else if success {
 		return nil
 	}
 
