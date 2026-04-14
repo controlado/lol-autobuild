@@ -20,7 +20,9 @@ func TestApplyItemSetReturnsNotConfiguredWhenDisabled(t *testing.T) {
 	client := NewClient(false, "")
 	err := client.ApplyItemSet(context.Background(), ports.ApplyItemSetRequest{
 		ChampionID: 240,
-		ItemIDs:    []int{1055, 3006},
+		Blocks: []ports.ApplyItemSetBlock{
+			{Type: "Starter", ItemIDs: []int{1055, 3006}},
+		},
 	})
 	if !errors.Is(err, ErrNotConfigured) {
 		t.Fatalf("expected ErrNotConfigured, got %v", err)
@@ -35,8 +37,10 @@ func TestApplyItemSetDryRunSkipsIO(t *testing.T) {
 
 	err := client.ApplyItemSet(context.Background(), ports.ApplyItemSetRequest{
 		ChampionID: 240,
-		ItemIDs:    []int{1055, 3006},
-		DryRun:     true,
+		Blocks: []ports.ApplyItemSetBlock{
+			{Type: "Starter", ItemIDs: []int{1055, 3006}},
+		},
+		DryRun: true,
 	})
 	if err != nil {
 		t.Fatalf("expected nil error in dry-run, got %v", err)
@@ -54,21 +58,43 @@ func TestApplyItemSetInvalidRequest(t *testing.T) {
 			name: "champion must be > 0",
 			req: ports.ApplyItemSetRequest{
 				ChampionID: 0,
-				ItemIDs:    []int{1055, 3006},
+				Blocks: []ports.ApplyItemSetBlock{
+					{Type: "Starter", ItemIDs: []int{1055, 3006}},
+				},
 			},
 		},
 		{
-			name: "requires at least one item",
+			name: "requires at least one block",
 			req: ports.ApplyItemSetRequest{
 				ChampionID: 240,
-				ItemIDs:    []int{},
+				Blocks:     []ports.ApplyItemSetBlock{},
+			},
+		},
+		{
+			name: "requires at least one item id",
+			req: ports.ApplyItemSetRequest{
+				ChampionID: 240,
+				Blocks: []ports.ApplyItemSetBlock{
+					{Type: "Starter", ItemIDs: []int{}},
+				},
+			},
+		},
+		{
+			name: "block type is required",
+			req: ports.ApplyItemSetRequest{
+				ChampionID: 240,
+				Blocks: []ports.ApplyItemSetBlock{
+					{Type: "", ItemIDs: []int{1055, 3006}},
+				},
 			},
 		},
 		{
 			name: "item ids must be > 0",
 			req: ports.ApplyItemSetRequest{
 				ChampionID: 240,
-				ItemIDs:    []int{1055, 0},
+				Blocks: []ports.ApplyItemSetBlock{
+					{Type: "Starter", ItemIDs: []int{1055, 0}},
+				},
 			},
 		},
 	}
@@ -143,7 +169,9 @@ func TestApplyItemSetSuccessUpsertsManagedSet(t *testing.T) {
 		ChampionID: 240,
 		Role:       "Support",
 		Patch:      "16.7",
-		ItemIDs:    []int{1055, 3006, 1055},
+		Blocks: []ports.ApplyItemSetBlock{
+			{Type: "Starter", ItemIDs: []int{1055, 3006, 1055}},
+		},
 	})
 	if err != nil {
 		t.Fatalf("ApplyItemSet() error = %v", err)
@@ -187,7 +215,7 @@ func TestApplyItemSetSuccessUpsertsManagedSet(t *testing.T) {
 	if managed.Title != "AutoBuild 240 support 16.7" {
 		t.Fatalf("unexpected managed title: %q", managed.Title)
 	}
-	if len(managed.Blocks) != 1 || managed.Blocks[0].Type != "Core" {
+	if len(managed.Blocks) != 1 || managed.Blocks[0].Type != "Starter" {
 		t.Fatalf("unexpected managed blocks: %#v", managed.Blocks)
 	}
 	if len(managed.Blocks[0].Items) != 2 {
@@ -195,6 +223,89 @@ func TestApplyItemSetSuccessUpsertsManagedSet(t *testing.T) {
 	}
 	if managed.Blocks[0].Items[0].ID != "1055" || managed.Blocks[0].Items[1].ID != "3006" {
 		t.Fatalf("unexpected managed items: %#v", managed.Blocks[0].Items)
+	}
+}
+
+func TestApplyItemSetPreservesOrderedBlocksAndEmptyBlocks(t *testing.T) {
+	t.Parallel()
+
+	type collection struct {
+		Timestamp uint64            `json:"timestamp"`
+		AccountID uint64            `json:"accountId"`
+		ItemSets  []json.RawMessage `json:"itemSets"`
+	}
+
+	var gotPut collection
+
+	expectedAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("riot:secret"))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != expectedAuth {
+			t.Fatalf("unexpected auth header: %q", r.Header.Get("Authorization"))
+		}
+
+		switch r.URL.Path {
+		case "/lol-champ-select/v1/session":
+			_, _ = fmt.Fprint(w, `{"queueId":420,"localPlayerCellId":1,"myTeam":[{"cellId":1,"championId":240,"spell1Id":4,"spell2Id":14}]}`)
+		case "/lol-summoner/v1/current-summoner":
+			_, _ = fmt.Fprint(w, `{"summonerId":321,"accountId":654}`)
+		case "/lol-item-sets/v1/item-sets/321/sets":
+			if r.Method == http.MethodGet {
+				_, _ = fmt.Fprint(w, `{"timestamp":42,"accountId":654,"itemSets":[]}`)
+				return
+			}
+			if err := json.NewDecoder(r.Body).Decode(&gotPut); err != nil {
+				t.Fatalf("decode put body: %v", err)
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	lockfilePath := filepath.Join(t.TempDir(), "lockfile")
+	writeLockfile(t, lockfilePath, mustServerPort(t, server.URL))
+
+	client := NewClient(true, lockfilePath)
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
+
+	err := client.ApplyItemSet(context.Background(), ports.ApplyItemSetRequest{
+		ChampionID: 240,
+		Role:       "Support",
+		Patch:      "16.7",
+		Blocks: []ports.ApplyItemSetBlock{
+			{Type: "Starter", ItemIDs: []int{1055, 3006, 1055}},
+			{Type: "1st Item", ItemIDs: []int{}},
+			{Type: "Boots", ItemIDs: []int{3006}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ApplyItemSet() error = %v", err)
+	}
+
+	if len(gotPut.ItemSets) != 1 {
+		t.Fatalf("expected 1 item set after upsert, got %d", len(gotPut.ItemSets))
+	}
+
+	var managed itemSet
+	if err := json.Unmarshal(gotPut.ItemSets[0], &managed); err != nil {
+		t.Fatalf("unmarshal managed set: %v", err)
+	}
+
+	if len(managed.Blocks) != 3 {
+		t.Fatalf("expected 3 blocks, got %#v", managed.Blocks)
+	}
+	if managed.Blocks[0].Type != "Starter" || managed.Blocks[1].Type != "1st Item" || managed.Blocks[2].Type != "Boots" {
+		t.Fatalf("unexpected block order/types: %#v", managed.Blocks)
+	}
+	if len(managed.Blocks[0].Items) != 2 || managed.Blocks[0].Items[0].ID != "1055" || managed.Blocks[0].Items[1].ID != "3006" {
+		t.Fatalf("unexpected starter block items: %#v", managed.Blocks[0].Items)
+	}
+	if len(managed.Blocks[1].Items) != 0 {
+		t.Fatalf("expected empty block to be preserved, got %#v", managed.Blocks[1].Items)
+	}
+	if len(managed.Blocks[2].Items) != 1 || managed.Blocks[2].Items[0].ID != "3006" {
+		t.Fatalf("unexpected boots block items: %#v", managed.Blocks[2].Items)
 	}
 }
 
@@ -248,7 +359,9 @@ func TestApplyItemSetFallsBackWhenProcessCandidateFails(t *testing.T) {
 		ChampionID: 240,
 		Role:       "support",
 		Patch:      "16.7",
-		ItemIDs:    []int{1055, 3006},
+		Blocks: []ports.ApplyItemSetBlock{
+			{Type: "Starter", ItemIDs: []int{1055, 3006}},
+		},
 	})
 	if err != nil {
 		t.Fatalf("ApplyItemSet() error = %v", err)
@@ -288,7 +401,9 @@ func TestApplyItemSetAllCandidatesFailRespectsPriority(t *testing.T) {
 		ChampionID: 240,
 		Role:       "support",
 		Patch:      "16.7",
-		ItemIDs:    []int{1055, 3006},
+		Blocks: []ports.ApplyItemSetBlock{
+			{Type: "Starter", ItemIDs: []int{1055, 3006}},
+		},
 	})
 	if !errors.Is(err, ErrChampionSelectionChanged) {
 		t.Fatalf("expected ErrChampionSelectionChanged priority, got %v", err)
@@ -315,7 +430,9 @@ func TestApplyItemSetFailsWhenChampionIsNotSelected(t *testing.T) {
 		ChampionID: 240,
 		Role:       "support",
 		Patch:      "16.7",
-		ItemIDs:    []int{1055, 3006},
+		Blocks: []ports.ApplyItemSetBlock{
+			{Type: "Starter", ItemIDs: []int{1055, 3006}},
+		},
 	})
 	if !errors.Is(err, ErrChampionNotSelected) {
 		t.Fatalf("expected ErrChampionNotSelected priority, got %v", err)

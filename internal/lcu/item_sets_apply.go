@@ -19,13 +19,13 @@ func (c *Client) ApplyItemSet(ctx context.Context, req ports.ApplyItemSetRequest
 		return nil
 	}
 
-	itemIDs, err := validateItemSetApplyRequest(req)
+	blocks, err := validateItemSetApplyRequest(req)
 	if err != nil {
 		return err
 	}
 
 	var (
-		managedSet       = newManagedItemSet(req, itemIDs)
+		managedSet       = newManagedItemSet(req, blocks)
 		attempt          = newConnectionAttempt()
 		candidateHandler = func(info connectionInfo, candidateLabel string) (shouldTerminate bool) {
 			session, err := c.fetchChampSelectSession(ctx, info)
@@ -93,33 +93,54 @@ func (c *Client) ApplyItemSet(ctx context.Context, req ports.ApplyItemSetRequest
 	)
 }
 
-func validateItemSetApplyRequest(req ports.ApplyItemSetRequest) ([]int, error) {
+func validateItemSetApplyRequest(req ports.ApplyItemSetRequest) ([]itemSetBlock, error) {
 	if req.ChampionID <= 0 {
 		return nil, fmt.Errorf("%w: championID must be > 0", ErrInvalidItemSetRequest)
 	}
-	if len(req.ItemIDs) == 0 {
-		return nil, fmt.Errorf("%w: at least one item ID is required", ErrInvalidItemSetRequest)
+	if len(req.Blocks) == 0 {
+		return nil, fmt.Errorf("%w: at least one item block is required", ErrInvalidItemSetRequest)
 	}
 
-	seen := make(map[int]struct{}, len(req.ItemIDs))
-	itemIDs := make([]int, 0, len(req.ItemIDs))
-	for _, itemID := range req.ItemIDs {
-		if itemID <= 0 {
-			return nil, fmt.Errorf("%w: item IDs must be > 0", ErrInvalidItemSetRequest)
-		}
-		if _, ok := seen[itemID]; ok {
-			continue
+	hasAnyItems := false
+	blocks := make([]itemSetBlock, 0, len(req.Blocks))
+	for idx, block := range req.Blocks {
+		blockType := strings.TrimSpace(block.Type)
+		if blockType == "" {
+			return nil, fmt.Errorf("%w: block[%d] type is required", ErrInvalidItemSetRequest, idx)
 		}
 
-		seen[itemID] = struct{}{}
-		itemIDs = append(itemIDs, itemID)
+		seen := make(map[int]struct{}, len(block.ItemIDs))
+		items := make([]itemSetEntry, 0, len(block.ItemIDs))
+		for _, itemID := range block.ItemIDs {
+			if itemID <= 0 {
+				return nil, fmt.Errorf("%w: block[%d] item IDs must be > 0", ErrInvalidItemSetRequest, idx)
+			}
+			if _, ok := seen[itemID]; ok {
+				continue
+			}
+
+			seen[itemID] = struct{}{}
+			items = append(items, itemSetEntry{
+				ID:    strconv.Itoa(itemID),
+				Count: 1,
+			})
+		}
+
+		if len(items) > 0 {
+			hasAnyItems = true
+		}
+
+		blocks = append(blocks, itemSetBlock{
+			Type:  blockType,
+			Items: items,
+		})
 	}
 
-	if len(itemIDs) == 0 {
-		return nil, fmt.Errorf("%w: at least one unique item ID is required", ErrInvalidItemSetRequest)
+	if !hasAnyItems {
+		return nil, fmt.Errorf("%w: at least one item id is required", ErrInvalidItemSetRequest)
 	}
 
-	return itemIDs, nil
+	return blocks, nil
 }
 
 func upsertManagedItemSet(existing itemSetsPayload, fallbackAccountID int64, managed itemSet) (itemSetsPayload, error) {
@@ -143,19 +164,19 @@ func upsertManagedItemSet(existing itemSetsPayload, fallbackAccountID int64, man
 
 	managedUID := strings.TrimSpace(managed.UID)
 	outSets := make([]json.RawMessage, 0, len(existing.ItemSets)+1)
-	replaced := false
+	isItemSetReplaced := false
 	for _, raw := range existing.ItemSets {
 		if managedUID != "" && itemSetUIDFromRaw(raw) == managedUID {
-			if !replaced {
+			if !isItemSetReplaced {
 				outSets = append(outSets, json.RawMessage(managedRaw))
-				replaced = true
+				isItemSetReplaced = true
 			}
 			continue
 		}
 		outSets = append(outSets, append(json.RawMessage(nil), raw...))
 	}
 
-	if !replaced {
+	if !isItemSetReplaced {
 		outSets = append(outSets, json.RawMessage(managedRaw))
 	}
 
@@ -166,31 +187,18 @@ func upsertManagedItemSet(existing itemSetsPayload, fallbackAccountID int64, man
 	}, nil
 }
 
-func newManagedItemSet(req ports.ApplyItemSetRequest, itemIDs []int) itemSet {
-	items := make([]itemSetEntry, 0, len(itemIDs))
-	for _, itemID := range itemIDs {
-		items = append(items, itemSetEntry{
-			ID:    strconv.Itoa(itemID),
-			Count: 1,
-		})
-	}
-
+func newManagedItemSet(req ports.ApplyItemSetRequest, blocks []itemSetBlock) itemSet {
 	return itemSet{
-		UID:             managedItemSetUID(req.ChampionID, req.Role),
-		Title:           managedItemSetTitle(req),
-		Mode:            "any",
-		Map:             "any",
-		Type:            "custom",
-		SortRank:        0,
-		StartedFrom:     "blank",
-		AssociatedChamp: []int{req.ChampionID},
-		AssociatedMaps:  []int{11},
-		Blocks: []itemSetBlock{
-			{
-				Type:  "Core",
-				Items: items,
-			},
-		},
+		UID:               managedItemSetUID(req.ChampionID, req.Role),
+		Title:             managedItemSetTitle(req),
+		Mode:              "any",
+		Map:               "any",
+		Type:              "custom",
+		SortRank:          0,
+		StartedFrom:       "blank",
+		AssociatedChamp:   []int{req.ChampionID},
+		AssociatedMaps:    []int{11},
+		Blocks:            blocks,
 		PreferredItemSlot: []any{},
 	}
 }
