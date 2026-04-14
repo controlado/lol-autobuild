@@ -115,8 +115,14 @@ type ApplyItemSetRequest struct {
 	ChampionID int
 	Role       string
 	Patch      string
+	Blocks     []ApplyItemSetBlock
 	ItemIDs    []int
 	DryRun     bool
+}
+
+type ApplyItemSetBlock struct {
+	Type    string
+	ItemIDs []int
 }
 
 type ApplyRunePageRequest struct {
