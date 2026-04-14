@@ -3,6 +3,7 @@ package lolautobuild
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/controlado/lol-autobuild/internal/ports"
@@ -28,6 +29,7 @@ func (t tokenProviderStub) Refresh(ctx context.Context) (ports.TokenPair, error)
 }
 
 type coachlessStub struct {
+	mu             sync.Mutex
 	getPatchesCalls int
 	keystoneCalls   []ports.KeystoneRequest
 	spellCalls      []ports.SummonerSpellStatsRequest
@@ -46,16 +48,21 @@ func (c *coachlessStub) Refresh(ctx context.Context, refreshToken string) (ports
 func (c *coachlessStub) GetPatches(ctx context.Context, accessToken string) ([]ports.PatchInfo, error) {
 	_ = ctx
 	_ = accessToken
+	c.mu.Lock()
 	c.getPatchesCalls++
+	c.mu.Unlock()
 	return []ports.PatchInfo{{Label: "16.7", Major: 16, Patch: 7, MatchCount: 1}}, nil
 }
 
 func (c *coachlessStub) GetKeystoneData(ctx context.Context, accessToken string, req ports.KeystoneRequest) ([]ports.KeystoneStat, error) {
 	_ = ctx
 	_ = accessToken
+	c.mu.Lock()
 	c.keystoneCalls = append(c.keystoneCalls, req)
-	if c.keystoneErr != nil {
-		return nil, c.keystoneErr
+	err := c.keystoneErr
+	c.mu.Unlock()
+	if err != nil {
+		return nil, err
 	}
 	return []ports.KeystoneStat{{Rune: 8437, WPAOverall: 1.4, Occurrence: 1000}}, nil
 }
@@ -63,9 +70,12 @@ func (c *coachlessStub) GetKeystoneData(ctx context.Context, accessToken string,
 func (c *coachlessStub) GetSummonerSpellStats(ctx context.Context, accessToken string, req ports.SummonerSpellStatsRequest) ([]ports.SummonerSpellStat, error) {
 	_ = ctx
 	_ = accessToken
+	c.mu.Lock()
 	c.spellCalls = append(c.spellCalls, req)
-	if c.spellErr != nil {
-		return nil, c.spellErr
+	err := c.spellErr
+	c.mu.Unlock()
+	if err != nil {
+		return nil, err
 	}
 	return []ports.SummonerSpellStat{
 		{SummonerSpell: 4, WPAOverall: 0.8, Occurrence: 500},
@@ -76,9 +86,12 @@ func (c *coachlessStub) GetSummonerSpellStats(ctx context.Context, accessToken s
 func (c *coachlessStub) GetItemStats(ctx context.Context, accessToken string, req ports.ItemStatsRequest) ([]ports.ItemStat, error) {
 	_ = ctx
 	_ = accessToken
+	c.mu.Lock()
 	c.itemCalls = append(c.itemCalls, req)
-	if c.itemErr != nil {
-		return nil, c.itemErr
+	err := c.itemErr
+	c.mu.Unlock()
+	if err != nil {
+		return nil, err
 	}
 	return []ports.ItemStat{
 		{ItemID: 1055, WPAOverall: 1.0, Occurrence: 900},

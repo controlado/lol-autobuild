@@ -3,6 +3,7 @@ package lolautobuild
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/controlado/lol-autobuild/internal/ports"
@@ -223,4 +224,92 @@ func TestSyncReturnsErrorWhenRecommendationQueryFails(t *testing.T) {
 	if len(lcu.itemSetCalls)+len(lcu.runePageCalls)+len(lcu.spellCalls) != 0 {
 		t.Fatalf("LCU apply should not run when recommendation query fails")
 	}
+}
+
+func TestSyncBuildsCoachlessStyleItemBlocks(t *testing.T) {
+	t.Parallel()
+
+	coachless := &coachlessStub{}
+	lcu := &lcuStub{
+		detectedSelection: ports.DetectedSelection{
+			ChampionID:   777,
+			Role:         "support",
+			QueueID:      440,
+			IsAutofilled: false,
+		},
+	}
+
+	svc, err := NewService(ServiceDeps{
+		Coachless:   coachless,
+		Tokens:      tokenProviderStub{token: "t"},
+		LCU:         lcu,
+		Recommender: recommend.NewEngine(),
+		Policy:      RecommendationPolicy{MinOccurrence: 100, TopItems: 1, TopSpells: 2},
+	})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	got, err := svc.Sync(context.Background(), SyncRequest{
+		ApplyItems:  true,
+		ApplyRunes:  true,
+		ApplySpells: true,
+		DryRun:      false,
+	})
+	if err != nil {
+		t.Fatalf("Sync() error = %v", err)
+	}
+	if !got.ItemSetApplied {
+		t.Fatalf("expected item set to be applied, got %#v", got)
+	}
+	if len(lcu.itemSetCalls) != 1 {
+		t.Fatalf("expected one item set apply call, got %d", len(lcu.itemSetCalls))
+	}
+
+	blocks := lcu.itemSetCalls[0].Blocks
+	wantBlockTypes := []string{"Starter", "1st Item", "2nd Item", "Boots", "3rd Item", "4th+ Item"}
+	if len(blocks) != len(wantBlockTypes) {
+		t.Fatalf("expected %d blocks, got %d (%#v)", len(wantBlockTypes), len(blocks), blocks)
+	}
+	for idx, block := range blocks {
+		if block.Type != wantBlockTypes[idx] {
+			t.Fatalf("unexpected block order/type at index %d: got %q want %q", idx, block.Type, wantBlockTypes[idx])
+		}
+		if len(block.ItemIDs) != 1 || block.ItemIDs[0] != 1055 {
+			t.Fatalf("unexpected block items at index %d: %#v", idx, block.ItemIDs)
+		}
+	}
+
+	if len(coachless.itemCalls) != 6 {
+		t.Fatalf("expected 6 staged item calls, got %d", len(coachless.itemCalls))
+	}
+	if !hasItemCall(coachless.itemCalls, 6, nil, false) {
+		t.Fatalf("missing starter item query in %+v", coachless.itemCalls)
+	}
+	if !hasItemCall(coachless.itemCalls, 3, []int{1}, true) {
+		t.Fatalf("missing support-first-item query in %+v", coachless.itemCalls)
+	}
+	if !hasItemCall(coachless.itemCalls, 1, []int{2}, false) {
+		t.Fatalf("missing 2nd-item query in %+v", coachless.itemCalls)
+	}
+	if !hasItemCall(coachless.itemCalls, 2, nil, false) {
+		t.Fatalf("missing boots query in %+v", coachless.itemCalls)
+	}
+	if !hasItemCall(coachless.itemCalls, 1, []int{3}, false) {
+		t.Fatalf("missing 3rd-item query in %+v", coachless.itemCalls)
+	}
+	if !hasItemCall(coachless.itemCalls, 1, []int{4, 5, 6}, false) {
+		t.Fatalf("missing 4th+-item query in %+v", coachless.itemCalls)
+	}
+}
+
+func hasItemCall(calls []ports.ItemStatsRequest, itemType int, itemSlots []int, includeSupportItems bool) bool {
+	for _, call := range calls {
+		if call.ItemType == itemType &&
+			reflect.DeepEqual(call.ItemSlots, itemSlots) &&
+			call.IncludeSupportItems == includeSupportItems {
+			return true
+		}
+	}
+	return false
 }
