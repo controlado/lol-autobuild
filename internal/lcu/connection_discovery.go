@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -34,7 +35,7 @@ func staticCandidate(source string, info connectionInfo) connectionCandidate {
 	}
 }
 
-func lockfileCandidate(source string, lockfilePath string, readLockfile func(string) (connectionInfo, error)) connectionCandidate {
+func lockfileCandidate(source string, lockfilePath string) connectionCandidate {
 	return connectionCandidate{
 		source: source,
 		resolve: func() (connectionInfo, error) {
@@ -52,7 +53,7 @@ func (c *Client) candidates(ctx context.Context) []connectionCandidate {
 	if c.LockfilePath != "" {
 		lockfilePath := filepath.Clean(strings.TrimSpace(c.LockfilePath))
 		if lockfilePath != "" && lockfilePath != "." {
-			raw = append(raw, lockfileCandidate("config:lcu.lockfile_path", lockfilePath, c.readLockfile))
+			raw = append(raw, lockfileCandidate("config:lcu.lockfile_path", lockfilePath))
 		}
 	}
 
@@ -162,4 +163,13 @@ func parseArgValues(args []string) map[string]string {
 	}
 
 	return values
+}
+
+func readLockfile(path string) (connectionInfo, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return connectionInfo{}, fmt.Errorf("%w: %v", ErrLockfileNotFound, err)
+	}
+
+	return parseLockfile(raw)
 }

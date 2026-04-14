@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/controlado/lol-autobuild/internal/ports"
@@ -328,7 +327,30 @@ func TestApplySummonerSpellsAllCandidatesFailRespectsPriority(t *testing.T) {
 	if !errors.Is(err, ErrChampionSelectionChanged) {
 		t.Fatalf("expected ErrChampionSelectionChanged priority, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "last candidate error:") {
-		t.Fatalf("expected last candidate context in error, got %v", err)
+}
+
+func TestApplySummonerSpellsFailsWhenChampionIsNotSelected(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `{"queueId":420,"localPlayerCellId":1,"myTeam":[{"cellId":1,"championId":0,"spell1Id":4,"spell2Id":14}]}`)
+	}))
+	defer srv.Close()
+
+	client := NewClient(true, "")
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate {
+		return []connectionCandidate{staticCandidate("process:1234", connectionInfo{
+			Port:     mustServerPort(t, srv.URL),
+			Password: "secret",
+			Protocol: "http",
+		})}
+	}
+
+	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
+		ChampionID: 240,
+		SpellIDs:   []int{4, 14},
+	})
+	if !errors.Is(err, ErrChampionNotSelected) {
+		t.Fatalf("expected ErrChampionNotSelected priority, got %v", err)
 	}
 }

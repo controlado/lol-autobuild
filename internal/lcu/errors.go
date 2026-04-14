@@ -1,6 +1,8 @@
 package lcu
 
-import "errors"
+import (
+	"errors"
+)
 
 var (
 	ErrNotConfigured                 = errors.New("lcu client is not configured")
@@ -11,6 +13,8 @@ var (
 	ErrRoleDetectionUnsupportedQueue = errors.New("role detection is unsupported for this queue")
 	ErrRoleNotAssigned               = errors.New("local role is not assigned")
 	ErrRoleUnknown                   = errors.New("local role is unknown")
+	ErrInvalidItemSetRequest         = errors.New("invalid item set apply request")
+	ErrItemSetApplyFailed            = errors.New("apply item set failed")
 	ErrInvalidSummonerSpellsRequest  = errors.New("invalid summoner spells apply request")
 	ErrChampionSelectionChanged      = errors.New("champion selection changed during apply")
 	ErrSummonerSpellsApplyFailed     = errors.New("apply summoner spells failed")

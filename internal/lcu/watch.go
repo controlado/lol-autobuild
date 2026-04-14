@@ -75,41 +75,35 @@ func (c *Client) watchReconnectDelay() time.Duration {
 	return c.WatchReconnectDelay
 }
 
-func (c *Client) dialEventStream(ctx context.Context) (*websocket.Conn, error) {
-	var lastErr error
-	seenConnection := false
-
-	for _, candidate := range c.candidates(ctx) {
-		info, err := candidate.resolve()
-		if err != nil {
-			if !errors.Is(err, ErrLockfileNotFound) {
-				seenConnection = true
+func (c *Client) dialEventStream(ctx context.Context) (conn *websocket.Conn, err error) {
+	var (
+		attempt          = newConnectionAttempt()
+		candidateHandler = func(info connectionInfo, candidateLabel string) (shouldTerminate bool) {
+			conn, err = dialWebsocket(ctx, info)
+			if err != nil {
+				attempt.observe(candidateLabel, nil, err)
+				return false
 			}
-			lastErr = fmt.Errorf("candidate %q: %w", candidate.label(), err)
-			continue
-		}
-		seenConnection = true
 
-		conn, err := dialWebsocket(ctx, info)
-		if err != nil {
-			lastErr = fmt.Errorf("candidate %q: %w", candidate.label(), err)
-			continue
-		}
+			var message = []any{5, eventTopic}
+			if err := conn.WriteJSON(message); err != nil {
+				_ = conn.Close()
+				err = fmt.Errorf("subscribe %q: %w", eventTopic, err)
+				attempt.observe(candidateLabel, nil, err)
+				return false
+			}
 
-		if err := conn.WriteJSON([]any{5, eventTopic}); err != nil {
-			_ = conn.Close()
-			lastErr = fmt.Errorf("candidate %q: subscribe %q: %w", candidate.label(), eventTopic, err)
-			continue
+			return true
 		}
+	)
 
+	if success, err := c.ForEachCandidate(ctx, attempt, candidateHandler); err != nil {
+		return nil, err
+	} else if success {
 		return conn, nil
 	}
 
-	if !seenConnection {
-		return nil, ErrLockfileNotFound
-	}
-
-	return nil, withLastCandidateError(ErrWatchEventStreamFailed, lastErr)
+	return nil, attempt.finish(ErrWatchEventStreamFailed)
 }
 
 func dialWebsocket(ctx context.Context, info connectionInfo) (*websocket.Conn, error) {
