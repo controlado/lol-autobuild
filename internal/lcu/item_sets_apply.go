@@ -3,7 +3,6 @@ package lcu
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -26,71 +25,63 @@ func (c *Client) ApplyItemSet(ctx context.Context, req ports.ApplyItemSetRequest
 	}
 
 	var (
-		managedSet = newManagedItemSet(req, itemIDs)
-		attempt    = newConnectionAttempt()
-	)
-	for _, candidate := range c.candidates(ctx) {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		info, err := candidate.resolve()
-		if err != nil {
-			if !errors.Is(err, ErrLockfileNotFound) {
-				attempt.markResolvableCandidate()
+		managedSet       = newManagedItemSet(req, itemIDs)
+		attempt          = newConnectionAttempt()
+		candidateHandler = func(info connectionInfo, candidateLabel string) (shouldTerminate bool) {
+			session, err := c.fetchChampSelectSession(ctx, info)
+			if err != nil {
+				attempt.observe(candidateLabel, ErrChampSelectUnavailable, err)
+				return false
 			}
-			attempt.observe(candidate.label(), ErrLockfileNotFound, err)
-			continue
-		}
-		attempt.markResolvableCandidate()
 
-		session, err := c.fetchChampSelectSession(ctx, info)
-		if err != nil {
-			attempt.observe(candidate.label(), ErrChampSelectUnavailable, err)
-			continue
-		}
+			member, err := localPlayerFromSession(session)
+			if err != nil {
+				attempt.observe(candidateLabel, ErrChampSelectUnavailable, err)
+				return false
+			}
 
-		member, err := localPlayerFromSession(session)
-		if err != nil {
-			attempt.observe(candidate.label(), ErrChampSelectUnavailable, err)
-			continue
-		}
+			if member.ChampionID <= 0 {
+				err = fmt.Errorf("expected championId %d, got %d", req.ChampionID, member.ChampionID)
+				attempt.observe(candidateLabel, ErrChampionNotSelected, err)
+				return false
+			}
 
-		if member.ChampionID <= 0 {
-			err = fmt.Errorf("expected championId %d, got any", req.ChampionID)
-			attempt.observe(candidate.label(), ErrChampionNotSelected, err)
-			continue
-		}
+			if member.ChampionID != req.ChampionID {
+				err := fmt.Errorf("expected championId %d, got %d", req.ChampionID, member.ChampionID)
+				attempt.observe(candidateLabel, ErrChampionSelectionChanged, err)
+				return false
+			}
 
-		if member.ChampionID != req.ChampionID {
-			err := fmt.Errorf("expected championId %d, got %d", req.ChampionID, member.ChampionID)
-			attempt.observe(candidate.label(), ErrChampionSelectionChanged, err)
-			continue
-		}
+			summoner, err := c.fetchCurrentSummoner(ctx, info)
+			if err != nil {
+				attempt.observe(candidateLabel, nil, err)
+				return false
+			}
 
-		summoner, err := c.fetchCurrentSummoner(ctx, info)
-		if err != nil {
-			attempt.observe(candidate.label(), nil, err)
-			continue
-		}
+			existing, err := c.fetchItemSets(ctx, info, summoner.SummonerID)
+			if err != nil {
+				attempt.observe(candidateLabel, nil, err)
+				return false
+			}
 
-		existing, err := c.fetchItemSets(ctx, info, summoner.SummonerID)
-		if err != nil {
-			attempt.observe(candidate.label(), nil, err)
-			continue
-		}
+			payload, err := upsertManagedItemSet(existing, summoner.AccountID, managedSet)
+			if err != nil {
+				attempt.observe(candidateLabel, nil, err)
+				return false
+			}
 
-		payload, err := upsertManagedItemSet(existing, summoner.AccountID, managedSet)
-		if err != nil {
-			attempt.observe(candidate.label(), nil, err)
-			continue
-		}
+			if err := c.putItemSets(ctx, info, summoner.SummonerID, payload); err != nil {
+				attempt.observe(candidateLabel, nil, err)
+				return false
+			}
 
-		if err := c.putItemSets(ctx, info, summoner.SummonerID, payload); err != nil {
-			attempt.observe(candidate.label(), nil, err)
-			continue
+			return true
 		}
+	)
 
+	if success, err := c.ForEachCandidate(ctx, attempt, candidateHandler); err != nil {
+		return err
+	} else if success {
 		return nil
 	}
 

@@ -18,40 +18,34 @@ const (
 	queueCustomDraftPick queueID = 3110
 )
 
-func (c *Client) DetectSelection(ctx context.Context) (ports.DetectedSelection, error) {
+func (c *Client) DetectSelection(ctx context.Context) (detectedSelection ports.DetectedSelection, err error) {
 	if !c.Enabled {
 		return ports.DetectedSelection{}, ErrNotConfigured
 	}
 
-	var attempt = newConnectionAttempt()
-	for _, candidate := range c.candidates(ctx) {
-		if err := ctx.Err(); err != nil {
-			return ports.DetectedSelection{}, err
-		}
-
-		info, err := candidate.resolve()
-		if err != nil {
-			if !errors.Is(err, ErrLockfileNotFound) {
-				attempt.markResolvableCandidate()
+	var (
+		attempt          = newConnectionAttempt()
+		candidateHandler = func(info connectionInfo, candidateLabel string) (shouldTerminate bool) {
+			session, err := c.fetchChampSelectSession(ctx, info)
+			if err != nil {
+				attempt.observe(candidateLabel, nil, err)
+				return false
 			}
-			attempt.observe(candidate.label(), ErrLockfileNotFound, err)
-			continue
-		}
-		attempt.markResolvableCandidate()
 
-		session, err := c.fetchChampSelectSession(ctx, info)
-		if err != nil {
-			attempt.observe(candidate.label(), nil, err)
-			continue
-		}
+			detectedSelection, err = selectionFromSession(session)
+			if err != nil {
+				attempt.observe(candidateLabel, classifyDetectSelectionError(err), err)
+				return false
+			}
 
-		selection, err := selectionFromSession(session)
-		if err != nil {
-			attempt.observe(candidate.label(), classifyDetectSelectionError(err), err)
-			continue
+			return true
 		}
+	)
 
-		return selection, nil
+	if success, err := c.ForEachCandidate(ctx, attempt, candidateHandler); err != nil {
+		return ports.DetectedSelection{}, err
+	} else if success {
+		return detectedSelection, nil
 	}
 
 	return ports.DetectedSelection{}, attempt.finish(
