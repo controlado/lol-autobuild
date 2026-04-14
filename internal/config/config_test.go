@@ -30,6 +30,8 @@ recommendation:
   top_spells: 2
 lcu:
   enabled: false
+env_file:
+  path: .env.local
 `
 	)
 
@@ -48,6 +50,82 @@ lcu:
 
 	if cfg.Recommendation.TopItems != 5 {
 		t.Fatalf("unexpected top items: %d", cfg.Recommendation.TopItems)
+	}
+
+	if cfg.EnvFile.Path != ".env.local" {
+		t.Fatalf("unexpected env file path: %s", cfg.EnvFile.Path)
+	}
+}
+
+func TestLoadAcceptsMissingOrEmptyEnvFilePath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{
+			name: "missing env_file section",
+			raw: `
+log_level: debug
+coachless:
+  api_base_url: https://api.coachless.gg
+  timeout_seconds: 15
+auth:
+  auto_enabled: true
+  manual_fallback_enabled: true
+  token_skew_seconds: 20
+secrets:
+  service_name: lol-autobuild
+recommendation:
+  min_occurrence: 50
+  top_items: 5
+  top_spells: 2
+lcu:
+  enabled: false
+`,
+		},
+		{
+			name: "empty env_file path",
+			raw: `
+log_level: debug
+coachless:
+  api_base_url: https://api.coachless.gg
+  timeout_seconds: 15
+auth:
+  auto_enabled: true
+  manual_fallback_enabled: true
+  token_skew_seconds: 20
+env_file:
+  path: ""
+secrets:
+  service_name: lol-autobuild
+recommendation:
+  min_occurrence: 50
+  top_items: 5
+  top_spells: 2
+lcu:
+  enabled: false
+`,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			path := filepath.Join(dir, "config.yaml")
+
+			if err := os.WriteFile(path, []byte(tc.raw), 0o600); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
+
+			if _, err := Load(path); err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+		})
 	}
 }
 

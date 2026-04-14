@@ -29,7 +29,7 @@ Automate League of Legends setup from Coachless data.
 | Rune page apply | Pending | Current adapter returns not configured. |
 | Watch mode (`dev watch`) | Implemented | Startup sync + debounced champ select event sync. |
 | Browser-assisted auth capture | Pending | Browser source exists but is not implemented yet. |
-| Manual auth fallback via environment | Implemented | Reads `COACHLESS_ACCESS_TOKEN`, optional refresh and exp fields. |
+| Manual auth fallback via environment | Implemented | Reads `COACHLESS_ACCESS_TOKEN`, optional refresh and exp fields from process env. |
 
 ## Prerequisites
 
@@ -39,7 +39,7 @@ Automate League of Legends setup from Coachless data.
 - `lcu.enabled: true` when you want detection and LCU apply operations.
 - Coachless token access through one of these paths:
   - Token pair already persisted in OS keyring.
-  - Environment fallback (`COACHLESS_ACCESS_TOKEN`, optional `COACHLESS_REFRESH_TOKEN`, optional `COACHLESS_ACCESS_TOKEN_EXP`).
+  - Environment fallback (`COACHLESS_ACCESS_TOKEN`, optional `COACHLESS_REFRESH_TOKEN`, optional `COACHLESS_ACCESS_TOKEN_EXP`), with optional preload from `env_file.path`.
 
 ## Quick start
 
@@ -97,6 +97,7 @@ Flags:
 | `auth.auto_enabled` | bool | `true` | Enables browser-assisted source (pending implementation). |
 | `auth.manual_fallback_enabled` | bool | `true` | Enables env-based fallback source. |
 | `auth.token_skew_seconds` | int | `30` | Token validity skew before expiry. |
+| `env_file.path` | string | `""` | Optional path to `.env` file loaded before bootstrap. |
 | `secrets.service_name` | string | `lol-autobuild` | OS keyring service name. |
 | `recommendation.min_occurrence` | int | `100` | Minimum sample threshold for recommendations. |
 | `recommendation.top_items` | int | `6` | Max recommended item count. |
@@ -105,6 +106,8 @@ Flags:
 | `lcu.lockfile_path` | string | `""` | Optional lockfile fallback path. |
 | `watch.debounce_millis` | int | `500` | Debounce window for watch-triggered sync. |
 | `watch.reconnect_delay_millis` | int | `1000` | Delay before websocket reconnect attempts. |
+
+When `env_file.path` is set, the CLI loads that file before service bootstrap. Relative paths are resolved from the config file directory. Existing process environment variables keep precedence over values from the file. Startup fails if the configured file does not exist.
 
 LCU connection discovery tries League process args first (`--app-port`, `--remoting-auth-token`, optional `--app-protocol`), then falls back to `lcu.lockfile_path`.
 

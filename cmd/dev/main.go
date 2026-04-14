@@ -156,6 +156,10 @@ func loadConfigAndLogging(configPath string) (config.Config, error) {
 		return config.Config{}, err
 	}
 
+	if err := loadEnvFileFromConfig(configPath, cfg); err != nil {
+		return config.Config{}, err
+	}
+
 	configureLogging(cfg.LogLevel)
 	return cfg, nil
 }

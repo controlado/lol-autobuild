@@ -9,6 +9,9 @@ auth:
   manual_fallback_enabled: true
   token_skew_seconds: 30
 
+env_file:
+  path: ""
+
 secrets:
   service_name: lol-autobuild
 

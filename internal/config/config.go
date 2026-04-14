@@ -13,6 +13,7 @@ type Config struct {
 	LogLevel       string               `yaml:"log_level"`
 	Coachless      CoachlessConfig      `yaml:"coachless"`
 	Auth           AuthConfig           `yaml:"auth"`
+	EnvFile        EnvFileConfig        `yaml:"env_file"`
 	Secrets        SecretsConfig        `yaml:"secrets"`
 	Recommendation RecommendationConfig `yaml:"recommendation"`
 	LCU            LCUConfig            `yaml:"lcu"`
@@ -28,6 +29,10 @@ type AuthConfig struct {
 	AutoEnabled           bool `yaml:"auto_enabled"`
 	ManualFallbackEnabled bool `yaml:"manual_fallback_enabled"`
 	TokenSkewSeconds      int  `yaml:"token_skew_seconds"`
+}
+
+type EnvFileConfig struct {
+	Path string `yaml:"path"`
 }
 
 type SecretsConfig struct {
