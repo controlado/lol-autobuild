@@ -71,6 +71,15 @@ func TestApplyItemSetInvalidRequest(t *testing.T) {
 			},
 		},
 		{
+			name: "requires at least one item id",
+			req: ports.ApplyItemSetRequest{
+				ChampionID: 240,
+				Blocks: []ports.ApplyItemSetBlock{
+					{Type: "Starter", ItemIDs: []int{}},
+				},
+			},
+		},
+		{
 			name: "block type is required",
 			req: ports.ApplyItemSetRequest{
 				ChampionID: 240,

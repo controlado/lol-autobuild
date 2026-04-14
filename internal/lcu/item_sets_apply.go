@@ -101,6 +101,7 @@ func validateItemSetApplyRequest(req ports.ApplyItemSetRequest) ([]itemSetBlock,
 		return nil, fmt.Errorf("%w: at least one item block is required", ErrInvalidItemSetRequest)
 	}
 
+	hasAnyItems := false
 	blocks := make([]itemSetBlock, 0, len(req.Blocks))
 	for idx, block := range req.Blocks {
 		blockType := strings.TrimSpace(block.Type)
@@ -125,10 +126,18 @@ func validateItemSetApplyRequest(req ports.ApplyItemSetRequest) ([]itemSetBlock,
 			})
 		}
 
+		if len(items) > 0 {
+			hasAnyItems = true
+		}
+
 		blocks = append(blocks, itemSetBlock{
 			Type:  blockType,
 			Items: items,
 		})
+	}
+
+	if !hasAnyItems {
+		return nil, fmt.Errorf("%w: at least one item id is required", ErrInvalidItemSetRequest)
 	}
 
 	return blocks, nil
