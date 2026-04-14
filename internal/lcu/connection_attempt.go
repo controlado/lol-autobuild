@@ -53,7 +53,7 @@ func (ca *connectionAttempt) observe(label string, base, err error) {
 	}
 
 	detail := fmt.Errorf("candidate %q: %w", label, err)
-	ca.lastErr = err
+	ca.lastErr = detail
 
 	if base != nil {
 		ca.byBase[base] = detail
@@ -63,6 +63,9 @@ func (ca *connectionAttempt) observe(label string, base, err error) {
 func (ca *connectionAttempt) finish(defaultErr error, priority ...error) error {
 	for _, base := range priority {
 		if detail, ok := ca.byBase[base]; ok {
+			if errors.Is(detail, base) {
+				return detail
+			}
 			return fmt.Errorf("%w: %w", base, detail)
 		}
 	}
@@ -72,6 +75,9 @@ func (ca *connectionAttempt) finish(defaultErr error, priority ...error) error {
 	}
 
 	if ca.lastErr != nil {
+		if errors.Is(ca.lastErr, defaultErr) {
+			return ca.lastErr
+		}
 		return fmt.Errorf("%w: %w", defaultErr, ca.lastErr)
 	}
 
