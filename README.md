@@ -8,6 +8,8 @@ Automate League of Legends setup from Coachless data.
 
 </div>
 
+This project was originally developed in a private repository and is now open source.
+
 ## What it does
 
 `lol-autobuild` runs a sync cycle that:
