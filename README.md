@@ -10,6 +10,10 @@ Automate League of Legends setup from Coachless data.
 
 This project was originally developed in a private repository and is now open source.
 
+## Disclaimer
+
+`lol-autobuild` is an independent open source project. It has no affiliation with `coachless.gg`; it only reads Coachless data and local League Client APIs. Riot Games does not endorse or sponsor this repository, and it has no official connection to League of Legends. `League of Legends` and `Riot Games` are trademarks or registered trademarks of Riot Games, Inc.
+
 ## What it does
 
 `lol-autobuild` runs a sync cycle that:
