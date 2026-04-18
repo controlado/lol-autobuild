@@ -97,6 +97,9 @@ func validateItemSetApplyRequest(req ports.ApplyItemSetRequest) ([]itemSetBlock,
 	if req.ChampionID <= 0 {
 		return nil, fmt.Errorf("%w: championID must be > 0", ErrInvalidItemSetRequest)
 	}
+	if !req.Position.IsValid() {
+		return nil, fmt.Errorf("%w: invalid position %q", ErrInvalidItemSetRequest, req.Position)
+	}
 	if len(req.Blocks) == 0 {
 		return nil, fmt.Errorf("%w: at least one item block is required", ErrInvalidItemSetRequest)
 	}
@@ -189,7 +192,7 @@ func upsertManagedItemSet(existing itemSetsPayload, fallbackAccountID int64, man
 
 func newManagedItemSet(req ports.ApplyItemSetRequest, blocks []itemSetBlock) itemSet {
 	return itemSet{
-		UID:               managedItemSetUID(req.ChampionID, req.Role),
+		UID:               managedItemSetUID(req),
 		Title:             managedItemSetTitle(req),
 		Mode:              "any",
 		Map:               "any",
@@ -203,35 +206,19 @@ func newManagedItemSet(req ports.ApplyItemSetRequest, blocks []itemSetBlock) ite
 	}
 }
 
-func managedItemSetUID(championID int, role string) string {
-	return fmt.Sprintf("lol-autobuild:%d:%s", championID, normalizeItemSetRole(role))
+func managedItemSetUID(req ports.ApplyItemSetRequest) string {
+	return fmt.Sprintf("lol-autobuild:%d:%s", req.ChampionID, req.Position.String())
 }
 
 func managedItemSetTitle(req ports.ApplyItemSetRequest) string {
-	title := fmt.Sprintf("AutoBuild %d %s", req.ChampionID, normalizeItemSetRole(req.Role))
+	title := fmt.Sprintf("AutoBuild %d %s", req.ChampionID, req.Position.String())
+
 	patch := strings.TrimSpace(req.Patch)
 	if patch != "" {
 		title += " " + patch
 	}
 
 	return title
-}
-
-func normalizeItemSetRole(role string) string {
-	switch strings.ToLower(strings.TrimSpace(role)) {
-	case "middle":
-		return "mid"
-	case "bot":
-		return "adc"
-	case "sup":
-		return "support"
-	default:
-		normalized := strings.ToLower(strings.TrimSpace(role))
-		if normalized == "" {
-			return "unknown"
-		}
-		return strings.ReplaceAll(normalized, " ", "-")
-	}
 }
 
 func itemSetUIDFromRaw(raw json.RawMessage) string {

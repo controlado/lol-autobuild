@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/controlado/lol-autobuild/internal/ports"
+	"github.com/controlado/lol-autobuild/internal/position"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -33,16 +33,14 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 		return SyncResult{}, err
 	}
 
-	roleCode := roleToCode(selection.Role)
-
 	filters := ports.CommonFilters{
 		Patch:       patchFilter,
 		ChampionIDs: []int{selection.ChampionID},
 		LeagueTiers: []int{5, 6, 7},
-		Role:        roleCode,
+		Role:        selection.Position.Code(),
 	}
 
-	stageSpecs := itemStageSpecsForRole(selection.Role)
+	stageSpecs := itemStageSpecsForPosition(selection.Position)
 
 	var keystoneStats []ports.KeystoneStat
 	var spellStats []ports.SummonerSpellStat
@@ -110,7 +108,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 
 	result := SyncResult{
 		DetectedChampionID: selection.ChampionID,
-		DetectedRole:       selection.Role,
+		DetectedPosition:   selection.Position.String(),
 		DetectedQueueID:    selection.QueueID,
 		Warnings:           append([]string{}, rec.Warnings...),
 	}
@@ -129,7 +127,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 			result.Warnings = append(result.Warnings, "apply runes requested but no keystone recommendation was available")
 		} else if err := s.deps.LCU.ApplyRunePage(ctx, ports.ApplyRunePageRequest{
 			ChampionID: selection.ChampionID,
-			Role:       selection.Role,
+			Position:   selection.Position,
 			KeystoneID: rec.Keystone.Rune,
 			DryRun:     false,
 		}); err != nil {
@@ -149,7 +147,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 			result.Warnings = append(result.Warnings, "apply spells requested but no spell recommendation was available")
 		} else if err := s.deps.LCU.ApplySummonerSpells(ctx, ports.ApplySummonerSpellsRequest{
 			ChampionID: selection.ChampionID,
-			Role:       selection.Role,
+			Position:   selection.Position,
 			SpellIDs:   spellIDs,
 			DryRun:     false,
 		}); err != nil {
@@ -182,7 +180,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 			result.Warnings = append(result.Warnings, "apply items requested but no item recommendation was available")
 		} else if err := s.deps.LCU.ApplyItemSet(ctx, ports.ApplyItemSetRequest{
 			ChampionID: selection.ChampionID,
-			Role:       selection.Role,
+			Position:   selection.Position,
 			Patch:      patchLabel,
 			Blocks:     blocks,
 			DryRun:     false,
@@ -210,9 +208,9 @@ type itemStageSpec struct {
 	IncludeSupportItems bool
 }
 
-func itemStageSpecsForRole(role string) []itemStageSpec {
+func itemStageSpecsForPosition(p position.Position) []itemStageSpec {
 	firstItemType := itemTypeLegendaries
-	if isSupportRole(role) {
+	if p.IsSupport() {
 		firstItemType = itemTypeSupport
 	}
 
@@ -246,15 +244,6 @@ func itemStageSpecsForRole(role string) []itemStageSpec {
 			ItemType:  itemTypeLegendaries,
 			ItemSlots: []int{4, 5, 6},
 		},
-	}
-}
-
-func isSupportRole(role string) bool {
-	switch strings.ToLower(strings.TrimSpace(role)) {
-	case "support", "sup", "4":
-		return true
-	default:
-		return false
 	}
 }
 
@@ -306,24 +295,4 @@ func resolvePatch(rawPatch string, patches []ports.PatchInfo) (ports.PatchFilter
 		Patch:          selected.Patch,
 		PatchAdditions: 2,
 	}, selected.Label, nil
-}
-
-func roleToCode(role string) int {
-	switch strings.ToLower(strings.TrimSpace(role)) {
-	case "top":
-		return 0
-	case "jungle":
-		return 1
-	case "mid", "middle":
-		return 2
-	case "adc", "bot":
-		return 3
-	case "support", "sup":
-		return 4
-	default:
-		if v, err := strconv.Atoi(role); err == nil {
-			return v
-		}
-		return 0
-	}
 }

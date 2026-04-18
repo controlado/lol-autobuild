@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"github.com/controlado/lol-autobuild/internal/position"
 )
 
 type PatchInfo struct {
@@ -113,7 +115,7 @@ type SecretStore interface {
 
 type ApplyItemSetRequest struct {
 	ChampionID int
-	Role       string
+	Position   position.Position
 	Patch      string
 	Blocks     []ApplyItemSetBlock
 	DryRun     bool
@@ -126,21 +128,21 @@ type ApplyItemSetBlock struct {
 
 type ApplyRunePageRequest struct {
 	ChampionID int
-	Role       string
+	Position   position.Position
 	KeystoneID int
 	DryRun     bool
 }
 
 type ApplySummonerSpellsRequest struct {
 	ChampionID int
-	Role       string
+	Position   position.Position
 	SpellIDs   []int
 	DryRun     bool
 }
 
 type DetectedSelection struct {
 	ChampionID   int
-	Role         string
+	Position     position.Position
 	QueueID      int
 	IsAutofilled bool
 }

@@ -237,7 +237,7 @@ func logWatchCycle(cycle lolautobuild.WatchCycle) {
 
 	logger = logger.
 		Int("champion_id", cycle.Result.DetectedChampionID).
-		Str("role", cycle.Result.DetectedRole).
+		Str("position", cycle.Result.DetectedPosition).
 		Int("queue_id", cycle.Result.DetectedQueueID).
 		Bool("item_set_applied", cycle.Result.ItemSetApplied).
 		Bool("rune_page_applied", cycle.Result.RunePageApplied).

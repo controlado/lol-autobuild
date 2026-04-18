@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Added champion and role autodetection through LCU champ select session reads.
+- Added champion and position autodetection through LCU champ select session reads.
 - Added detected selection fields to `SyncResult` (`DetectedChampionID`, `DetectedRole`, `DetectedQueueID`).
 - Added item set apply flow with managed set upsert in LCU.
 - Added staged item set block apply in LCU with ordered block support.
@@ -18,11 +18,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- `SyncRequest` no longer accepts manual champion or role input. Sync now relies on LCU detection.
+- `SyncRequest` no longer accepts manual champion or position input. Sync now relies on LCU detection.
 - `ApplyItemSetRequest` now accepts staged `Blocks` and no longer accepts legacy flat `ItemIDs`.
-- `lcu.enabled` now gates champion and role detection plus apply operations.
+- `lcu.enabled` now gates champion and position detection plus apply operations.
 - LCU connection discovery now checks League process arguments first, then falls back to `lcu.lockfile_path`.
-- Role detection now supports queue IDs `400`, `420`, `440`, and `3110`.
+- Position detection now supports queue IDs `400`, `420`, `440`, and `3110`.
 - Sync item recommendations now build ordered staged blocks (`Starter`, `1st Item`, `2nd Item`, `Boots`, `3rd Item`, `4th+ Item`) with per-block filtering.
 - `dev sync` and `dev watch` continue to default to `--dry-run=true`.
 

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/controlado/lol-autobuild/internal/ports"
+	"github.com/controlado/lol-autobuild/internal/position"
 	"github.com/controlado/lol-autobuild/internal/recommend"
 )
 
@@ -16,7 +17,7 @@ func TestWatchRunsStartupSyncAndStopsGracefully(t *testing.T) {
 	lcu := &lcuStub{
 		detectedSelection: ports.DetectedSelection{
 			ChampionID: 240,
-			Role:       "mid",
+			Position:   position.Mid,
 			QueueID:    420,
 		},
 		watchEventsFn: func(ctx context.Context, out chan<- ports.LCUEvent) error {
@@ -93,7 +94,7 @@ func TestWatchFiltersAndDebouncesEvents(t *testing.T) {
 	lcu := &lcuStub{
 		detectedSelection: ports.DetectedSelection{
 			ChampionID: 240,
-			Role:       "mid",
+			Position:   position.Mid,
 			QueueID:    420,
 		},
 		watchEventsFn: func(ctx context.Context, out chan<- ports.LCUEvent) error {

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/controlado/lol-autobuild/internal/ports"
+	"github.com/controlado/lol-autobuild/internal/position"
 	"github.com/controlado/lol-autobuild/internal/recommend"
 )
 
@@ -17,7 +18,7 @@ func TestSyncDryRunDetectsChampionButDoesNotApplyLCU(t *testing.T) {
 	lcu := &lcuStub{
 		detectedSelection: ports.DetectedSelection{
 			ChampionID:   240,
-			Role:         "top",
+			Position:     position.Top,
 			QueueID:      420,
 			IsAutofilled: false,
 		},
@@ -46,8 +47,8 @@ func TestSyncDryRunDetectsChampionButDoesNotApplyLCU(t *testing.T) {
 	if got.DetectedChampionID != 240 {
 		t.Fatalf("unexpected detected champion id: %d", got.DetectedChampionID)
 	}
-	if got.DetectedRole != "top" {
-		t.Fatalf("unexpected detected role: %q", got.DetectedRole)
+	if got.DetectedPosition != position.Top.String() {
+		t.Fatalf("unexpected detected position: %q", got.DetectedPosition)
 	}
 	if got.DetectedQueueID != 420 {
 		t.Fatalf("unexpected detected queue id: %d", got.DetectedQueueID)
@@ -83,7 +84,7 @@ func TestSyncUsesDetectedChampionIDInApplyRequests(t *testing.T) {
 	lcu := &lcuStub{
 		detectedSelection: ports.DetectedSelection{
 			ChampionID:   777,
-			Role:         "support",
+			Position:     position.Support,
 			QueueID:      440,
 			IsAutofilled: true,
 		},
@@ -99,6 +100,7 @@ func TestSyncUsesDetectedChampionIDInApplyRequests(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
+	wantPosition := position.Support
 	got, err := svc.Sync(context.Background(), SyncRequest{
 		ApplyItems:  true,
 		ApplyRunes:  true,
@@ -112,8 +114,8 @@ func TestSyncUsesDetectedChampionIDInApplyRequests(t *testing.T) {
 	if got.DetectedChampionID != 777 {
 		t.Fatalf("expected detected champion 777, got %d", got.DetectedChampionID)
 	}
-	if got.DetectedRole != "support" {
-		t.Fatalf("expected detected role support, got %q", got.DetectedRole)
+	if got.DetectedPosition != wantPosition.String() {
+		t.Fatalf("expected detected position support, got %q", got.DetectedPosition)
 	}
 	if got.DetectedQueueID != 440 {
 		t.Fatalf("expected detected queue 440, got %d", got.DetectedQueueID)
@@ -129,7 +131,7 @@ func TestSyncUsesDetectedChampionIDInApplyRequests(t *testing.T) {
 	if lcu.itemSetCalls[0].ChampionID != 777 || lcu.runePageCalls[0].ChampionID != 777 || lcu.spellCalls[0].ChampionID != 777 {
 		t.Fatalf("apply calls must use detected champion id")
 	}
-	if lcu.itemSetCalls[0].Role != "support" || lcu.runePageCalls[0].Role != "support" || lcu.spellCalls[0].Role != "support" {
+	if lcu.itemSetCalls[0].Position != wantPosition || lcu.runePageCalls[0].Position != wantPosition || lcu.spellCalls[0].Position != wantPosition {
 		t.Fatalf("apply calls must use detected role")
 	}
 	if len(coachless.keystoneCalls) != 1 {
@@ -191,7 +193,7 @@ func TestSyncReturnsErrorWhenRecommendationQueryFails(t *testing.T) {
 	lcu := &lcuStub{
 		detectedSelection: ports.DetectedSelection{
 			ChampionID:   240,
-			Role:         "top",
+			Position:     position.Top,
 			QueueID:      420,
 			IsAutofilled: false,
 		},
@@ -233,7 +235,7 @@ func TestSyncBuildsCoachlessStyleItemBlocks(t *testing.T) {
 	lcu := &lcuStub{
 		detectedSelection: ports.DetectedSelection{
 			ChampionID:   777,
-			Role:         "support",
+			Position:     position.Support,
 			QueueID:      440,
 			IsAutofilled: false,
 		},

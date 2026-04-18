@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/controlado/lol-autobuild/internal/position"
 )
 
 func TestDetectSelectionReturnsNotConfiguredWhenDisabled(t *testing.T) {
@@ -91,8 +93,8 @@ func TestDetectSelectionFromChampSelect(t *testing.T) {
 	if selection.ChampionID != 240 {
 		t.Fatalf("expected champion id 240, got %d", selection.ChampionID)
 	}
-	if selection.Role != "mid" {
-		t.Fatalf("expected role mid, got %q", selection.Role)
+	if selection.Position != "mid" {
+		t.Fatalf("expected position mid, got %q", selection.Position)
 	}
 	if selection.QueueID != 420 {
 		t.Fatalf("expected queue id 420, got %d", selection.QueueID)
@@ -123,7 +125,7 @@ func TestDetectSelectionReturnsChampionNotSelected(t *testing.T) {
 	}
 }
 
-func TestDetectSelectionReturnsRoleNotAssigned(t *testing.T) {
+func TestDetectSelectionReturnsPositionNotAssigned(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -139,12 +141,12 @@ func TestDetectSelectionReturnsRoleNotAssigned(t *testing.T) {
 	client := NewClient(true, lockfilePath)
 	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	_, err := client.DetectSelection(context.Background())
-	if !errors.Is(err, ErrRoleNotAssigned) {
-		t.Fatalf("expected ErrRoleNotAssigned, got %v", err)
+	if !errors.Is(err, position.ErrNotAssigned) {
+		t.Fatalf("expected position.ErrNotAssigned, got %v", err)
 	}
 }
 
-func TestDetectSelectionReturnsRoleUnknown(t *testing.T) {
+func TestDetectSelectionReturnsPositionUnknown(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -160,8 +162,8 @@ func TestDetectSelectionReturnsRoleUnknown(t *testing.T) {
 	client := NewClient(true, lockfilePath)
 	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	_, err := client.DetectSelection(context.Background())
-	if !errors.Is(err, ErrRoleUnknown) {
-		t.Fatalf("expected ErrRoleUnknown, got %v", err)
+	if !errors.Is(err, position.ErrUnknown) {
+		t.Fatalf("expected position.ErrUnknown, got %v", err)
 	}
 }
 
@@ -181,8 +183,8 @@ func TestDetectSelectionReturnsUnsupportedQueue(t *testing.T) {
 	client := NewClient(true, lockfilePath)
 	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	_, err := client.DetectSelection(context.Background())
-	if !errors.Is(err, ErrRoleDetectionUnsupportedQueue) {
-		t.Fatalf("expected ErrRoleDetectionUnsupportedQueue, got %v", err)
+	if !errors.Is(err, ErrPositionDetectionUnsupportedQueue) {
+		t.Fatalf("expected ErrPositionDetectionUnsupportedQueue, got %v", err)
 	}
 }
 
@@ -247,12 +249,12 @@ func TestDetectSelectionFallsBackWhenProcessCandidateFails(t *testing.T) {
 		t.Fatalf("DetectSelection() error = %v", err)
 	}
 
-	if selection.ChampionID != 67 || selection.Role != "adc" || selection.QueueID != 440 {
+	if selection.ChampionID != 67 || selection.Position != "adc" || selection.QueueID != 440 {
 		t.Fatalf("unexpected selection: %#v", selection)
 	}
 }
 
-func TestDetectSelectionFallsBackAfterRoleNotAssigned(t *testing.T) {
+func TestDetectSelectionFallsBackAfterPositionNotAssigned(t *testing.T) {
 	t.Parallel()
 
 	autoServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -281,7 +283,7 @@ func TestDetectSelectionFallsBackAfterRoleNotAssigned(t *testing.T) {
 		t.Fatalf("DetectSelection() error = %v", err)
 	}
 
-	if selection.ChampionID != 777 || selection.Role != "support" || !selection.IsAutofilled {
+	if selection.ChampionID != 777 || selection.Position != "support" || !selection.IsAutofilled {
 		t.Fatalf("unexpected selection: %#v", selection)
 	}
 }

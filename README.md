@@ -18,7 +18,7 @@ This project was originally developed in a private repository and is now open so
 
 `lol-autobuild` runs a sync cycle that:
 
-- Detects your current champion and role from the local LCU champ select session.
+- Detects your current champion and Position from the local LCU champ select session.
 - Pulls Coachless patch, keystone, summoner spell, and item stats.
 - Builds recommendations.
 - Applies supported changes in LCU, or reports the plan when `--dry-run=true`.
@@ -27,8 +27,8 @@ This project was originally developed in a private repository and is now open so
 
 | Capability | Status | Notes |
 | --- | --- | --- |
-| Champion and role detection from LCU | Implemented | Detection runs against `/lol-champ-select/v1/session`. |
-| Role detection queues | Implemented | Supported queue IDs: `400`, `420`, `440`, `3110`. |
+| Champion and Position detection from LCU | Implemented | Detection runs against `/lol-champ-select/v1/session`. |
+| Position detection queues | Implemented | Supported queue IDs: `400`, `420`, `440`, `3110`. |
 | Coachless API ingestion | Implemented | Uses API-first flow from `https://api.coachless.gg`. |
 | Item set apply | Implemented | Upserts a managed item set in LCU. |
 | Summoner spells apply | Implemented | Applies two spells and preserves the current Flash slot when possible. |
@@ -119,8 +119,8 @@ LCU connection discovery tries League process args first (`--app-port`, `--remot
 
 ## Operational limits
 
-- Sync requires a working LCU connection, even in dry-run mode, because champion and role detection always runs first.
-- Sync fails early when champ select is unavailable, champion is not selected, or the queue is not in the supported role-detection list.
+- Sync requires a working LCU connection, even in dry-run mode, because champion and position detection always runs first.
+- Sync fails early when champ select is unavailable, champion is not selected, or the queue is not in the supported position-detection list.
 - When apply fails for one subsystem, the service keeps running the others and reports warnings in `SyncResult`.
 - Watch mode only reacts to champ select session `Create` and `Update` events from `/lol-champ-select/v1/session`.
 - Rune page apply is not implemented yet.
@@ -130,5 +130,5 @@ LCU connection discovery tries League process args first (`--app-port`, `--remot
 
 - Implement LCU rune page apply path.
 - Implement browser-assisted auth capture flow.
-- Expand queue coverage for role detection.
+- Expand queue coverage for position detection.
 - Add richer operational diagnostics around auth and LCU failures.

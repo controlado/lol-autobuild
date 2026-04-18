@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/controlado/lol-autobuild/internal/ports"
+	"github.com/controlado/lol-autobuild/internal/position"
 )
 
 type queueID int
@@ -51,9 +51,9 @@ func (c *Client) DetectSelection(ctx context.Context) (detectedSelection ports.D
 	return ports.DetectedSelection{}, attempt.finish(
 		ErrChampSelectUnavailable,
 		ErrChampionNotSelected,
-		ErrRoleNotAssigned,
-		ErrRoleUnknown,
-		ErrRoleDetectionUnsupportedQueue,
+		position.ErrNotAssigned,
+		position.ErrUnknown,
+		ErrPositionDetectionUnsupportedQueue,
 	)
 }
 
@@ -61,20 +61,20 @@ func classifyDetectSelectionError(err error) error {
 	switch {
 	case errors.Is(err, ErrChampionNotSelected):
 		return ErrChampionNotSelected
-	case errors.Is(err, ErrRoleNotAssigned):
-		return ErrRoleNotAssigned
-	case errors.Is(err, ErrRoleUnknown):
-		return ErrRoleUnknown
-	case errors.Is(err, ErrRoleDetectionUnsupportedQueue):
-		return ErrRoleDetectionUnsupportedQueue
+	case errors.Is(err, position.ErrNotAssigned):
+		return position.ErrNotAssigned
+	case errors.Is(err, position.ErrUnknown):
+		return position.ErrUnknown
+	case errors.Is(err, ErrPositionDetectionUnsupportedQueue):
+		return ErrPositionDetectionUnsupportedQueue
 	default:
 		return nil
 	}
 }
 
 func selectionFromSession(session champSelectSession) (ports.DetectedSelection, error) {
-	if !isRoleDetectionQueueSupported(session.QueueID) {
-		return ports.DetectedSelection{}, fmt.Errorf("%w: queueId %d", ErrRoleDetectionUnsupportedQueue, session.QueueID)
+	if !isPositionDetectionQueueSupported(session.QueueID) {
+		return ports.DetectedSelection{}, fmt.Errorf("%w: queueId %d", ErrPositionDetectionUnsupportedQueue, session.QueueID)
 	}
 
 	member, err := localPlayerFromSession(session)
@@ -86,43 +86,24 @@ func selectionFromSession(session champSelectSession) (ports.DetectedSelection, 
 		return ports.DetectedSelection{}, ErrChampionNotSelected
 	}
 
-	role, err := normalizeAssignedRole(member.AssignedPosition)
+	position, err := position.FromRaw(member.AssignedPosition)
 	if err != nil {
 		return ports.DetectedSelection{}, err
 	}
 
 	return ports.DetectedSelection{
 		ChampionID:   member.ChampionID,
-		Role:         role,
+		Position:     position,
 		QueueID:      session.QueueID,
 		IsAutofilled: member.IsAutofilled,
 	}, nil
 }
 
-func isRoleDetectionQueueSupported(queueIDValue int) bool {
+func isPositionDetectionQueueSupported(queueIDValue int) bool {
 	switch queueID(queueIDValue) {
 	case queueDraftPick, queueSoloDuo, queueFlex, queueCustomDraftPick:
 		return true
 	default:
 		return false
-	}
-}
-
-func normalizeAssignedRole(assignedPosition string) (string, error) {
-	switch strings.ToUpper(strings.TrimSpace(assignedPosition)) {
-	case "TOP":
-		return "top", nil
-	case "JUNGLE":
-		return "jungle", nil
-	case "MIDDLE":
-		return "mid", nil
-	case "BOTTOM":
-		return "adc", nil
-	case "UTILITY":
-		return "support", nil
-	case "", "FILL", "UNSELECTED":
-		return "", fmt.Errorf("%w: assignedPosition %q", ErrRoleNotAssigned, assignedPosition)
-	default:
-		return "", fmt.Errorf("%w: assignedPosition %q", ErrRoleUnknown, assignedPosition)
 	}
 }

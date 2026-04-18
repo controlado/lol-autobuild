@@ -22,7 +22,7 @@ type SyncRequest struct {
 
 type SyncResult struct {
 	DetectedChampionID int
-	DetectedRole       string
+	DetectedPosition   string
 	DetectedQueueID    int
 	ItemSetApplied     bool
 	RunePageApplied    bool

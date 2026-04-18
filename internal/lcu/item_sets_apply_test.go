@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/controlado/lol-autobuild/internal/ports"
+	"github.com/controlado/lol-autobuild/internal/position"
 )
 
 func TestApplyItemSetReturnsNotConfiguredWhenDisabled(t *testing.T) {
@@ -57,7 +58,18 @@ func TestApplyItemSetInvalidRequest(t *testing.T) {
 		{
 			name: "champion must be > 0",
 			req: ports.ApplyItemSetRequest{
+				Position:   position.Top,
 				ChampionID: 0,
+				Blocks: []ports.ApplyItemSetBlock{
+					{Type: "Starter", ItemIDs: []int{1055, 3006}},
+				},
+			},
+		},
+		{
+			name: "position must be valid",
+			req: ports.ApplyItemSetRequest{
+				Position:   "invalid",
+				ChampionID: 240,
 				Blocks: []ports.ApplyItemSetBlock{
 					{Type: "Starter", ItemIDs: []int{1055, 3006}},
 				},
@@ -66,6 +78,7 @@ func TestApplyItemSetInvalidRequest(t *testing.T) {
 		{
 			name: "requires at least one block",
 			req: ports.ApplyItemSetRequest{
+				Position:   position.Top,
 				ChampionID: 240,
 				Blocks:     []ports.ApplyItemSetBlock{},
 			},
@@ -73,6 +86,7 @@ func TestApplyItemSetInvalidRequest(t *testing.T) {
 		{
 			name: "requires at least one item id",
 			req: ports.ApplyItemSetRequest{
+				Position:   position.Top,
 				ChampionID: 240,
 				Blocks: []ports.ApplyItemSetBlock{
 					{Type: "Starter", ItemIDs: []int{}},
@@ -82,6 +96,7 @@ func TestApplyItemSetInvalidRequest(t *testing.T) {
 		{
 			name: "block type is required",
 			req: ports.ApplyItemSetRequest{
+				Position:   position.Top,
 				ChampionID: 240,
 				Blocks: []ports.ApplyItemSetBlock{
 					{Type: "", ItemIDs: []int{1055, 3006}},
@@ -91,6 +106,7 @@ func TestApplyItemSetInvalidRequest(t *testing.T) {
 		{
 			name: "item ids must be > 0",
 			req: ports.ApplyItemSetRequest{
+				Position:   position.Top,
 				ChampionID: 240,
 				Blocks: []ports.ApplyItemSetBlock{
 					{Type: "Starter", ItemIDs: []int{1055, 0}},
@@ -107,6 +123,7 @@ func TestApplyItemSetInvalidRequest(t *testing.T) {
 			client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 
 			err := client.ApplyItemSet(context.Background(), tt.req)
+			fmt.Println(err)
 			if !errors.Is(err, ErrInvalidItemSetRequest) {
 				t.Fatalf("expected ErrInvalidItemSetRequest, got %v", err)
 			}
@@ -167,7 +184,7 @@ func TestApplyItemSetSuccessUpsertsManagedSet(t *testing.T) {
 
 	err := client.ApplyItemSet(context.Background(), ports.ApplyItemSetRequest{
 		ChampionID: 240,
-		Role:       "Support",
+		Position:   position.Support,
 		Patch:      "16.7",
 		Blocks: []ports.ApplyItemSetBlock{
 			{Type: "Starter", ItemIDs: []int{1055, 3006, 1055}},
@@ -271,7 +288,7 @@ func TestApplyItemSetPreservesOrderedBlocksAndEmptyBlocks(t *testing.T) {
 
 	err := client.ApplyItemSet(context.Background(), ports.ApplyItemSetRequest{
 		ChampionID: 240,
-		Role:       "Support",
+		Position:   position.Support,
 		Patch:      "16.7",
 		Blocks: []ports.ApplyItemSetBlock{
 			{Type: "Starter", ItemIDs: []int{1055, 3006, 1055}},
@@ -357,7 +374,7 @@ func TestApplyItemSetFallsBackWhenProcessCandidateFails(t *testing.T) {
 
 	err := client.ApplyItemSet(context.Background(), ports.ApplyItemSetRequest{
 		ChampionID: 240,
-		Role:       "support",
+		Position:   position.Support,
 		Patch:      "16.7",
 		Blocks: []ports.ApplyItemSetBlock{
 			{Type: "Starter", ItemIDs: []int{1055, 3006}},
@@ -399,7 +416,7 @@ func TestApplyItemSetAllCandidatesFailRespectsPriority(t *testing.T) {
 
 	err := client.ApplyItemSet(context.Background(), ports.ApplyItemSetRequest{
 		ChampionID: 240,
-		Role:       "support",
+		Position:   position.Support,
 		Patch:      "16.7",
 		Blocks: []ports.ApplyItemSetBlock{
 			{Type: "Starter", ItemIDs: []int{1055, 3006}},
@@ -428,7 +445,7 @@ func TestApplyItemSetFailsWhenChampionIsNotSelected(t *testing.T) {
 
 	err := client.ApplyItemSet(context.Background(), ports.ApplyItemSetRequest{
 		ChampionID: 240,
-		Role:       "support",
+		Position:   position.Support,
 		Patch:      "16.7",
 		Blocks: []ports.ApplyItemSetBlock{
 			{Type: "Starter", ItemIDs: []int{1055, 3006}},
