@@ -11,21 +11,6 @@ import (
 	"github.com/shirou/gopsutil/v4/process"
 )
 
-type connectionCandidate struct {
-	source  string
-	resolve func() (connectionInfo, error)
-}
-
-func (candidate connectionCandidate) label() string {
-	source := strings.TrimSpace(candidate.source)
-
-	if source == "" {
-		return "unknown"
-	}
-
-	return source
-}
-
 func staticCandidate(source string, info connectionInfo) connectionCandidate {
 	return connectionCandidate{
 		source: source,

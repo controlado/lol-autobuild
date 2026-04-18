@@ -11,12 +11,6 @@ import (
 	"github.com/controlado/lol-autobuild/internal/ports"
 )
 
-type connectionInfo struct {
-	Port     int
-	Password string
-	Protocol string
-}
-
 type Client struct {
 	Enabled             bool
 	LockfilePath        string
