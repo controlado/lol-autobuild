@@ -8,7 +8,7 @@ import (
 
 type candidateHandler func(info connectionInfo, candidateLabel string) (shouldTerminate bool)
 
-func (c *Client) ForEachCandidate(ctx context.Context, attempt *connectionAttempt, handler candidateHandler) (success bool, ctxErr error) {
+func (c *Client) forEachCandidate(ctx context.Context, attempt *connectionAttempt, handler candidateHandler) (success bool, ctxErr error) {
 	for _, candidate := range c.connectionCandidates(ctx) {
 		if ctxErr = ctx.Err(); ctxErr != nil {
 			return false, ctxErr

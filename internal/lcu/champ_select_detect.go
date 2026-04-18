@@ -42,7 +42,7 @@ func (c *Client) DetectSelection(ctx context.Context) (detectedSelection ports.D
 		}
 	)
 
-	if success, err := c.ForEachCandidate(ctx, attempt, candidateHandler); err != nil {
+	if success, err := c.forEachCandidate(ctx, attempt, candidateHandler); err != nil {
 		return ports.DetectedSelection{}, err
 	} else if success {
 		return detectedSelection, nil

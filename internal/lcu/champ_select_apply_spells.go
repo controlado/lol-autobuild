@@ -62,7 +62,7 @@ func (c *Client) ApplySummonerSpells(ctx context.Context, req ports.ApplySummone
 		}
 	)
 
-	if success, err := c.ForEachCandidate(ctx, attempt, candidateHandler); err != nil {
+	if success, err := c.forEachCandidate(ctx, attempt, candidateHandler); err != nil {
 		return err
 	} else if success {
 		return nil

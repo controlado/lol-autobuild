@@ -97,7 +97,7 @@ func (c *Client) dialEventStream(ctx context.Context) (conn *websocket.Conn, err
 		}
 	)
 
-	if success, err := c.ForEachCandidate(ctx, attempt, candidateHandler); err != nil {
+	if success, err := c.forEachCandidate(ctx, attempt, candidateHandler); err != nil {
 		return nil, err
 	} else if success {
 		return conn, nil
