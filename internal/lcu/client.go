@@ -2,7 +2,6 @@ package lcu
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net/http"
 	"strings"
@@ -41,21 +40,4 @@ func (c *Client) ApplyRunePage(ctx context.Context, req ports.ApplyRunePageReque
 	}
 
 	return fmt.Errorf("apply rune page: %w", ErrNotConfigured)
-}
-
-func (c *Client) httpClient(protocol string) *http.Client {
-	if c.HTTPClient != nil {
-		return c.HTTPClient
-	}
-
-	client := &http.Client{Timeout: 3 * time.Second}
-	if protocol == "https" {
-		client.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		}
-	}
-
-	return client
 }
