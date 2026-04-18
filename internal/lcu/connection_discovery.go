@@ -29,7 +29,7 @@ func lockfileCandidate(source string, lockfilePath string) connectionCandidate {
 	}
 }
 
-func (c *Client) candidates(ctx context.Context) []connectionCandidate {
+func (c *Client) connectionCandidates(ctx context.Context) []connectionCandidate {
 	raw := make([]connectionCandidate, 0, 4)
 	if c.discoverProcessConnections != nil {
 		raw = append(raw, c.discoverProcessConnections(ctx)...)
