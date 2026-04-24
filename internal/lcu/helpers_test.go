@@ -2,6 +2,7 @@ package lcu
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"strconv"
@@ -31,4 +32,20 @@ func writeLockfile(t *testing.T, path string, port int) {
 	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
 		t.Fatalf("write lockfile: %v", err)
 	}
+}
+
+func mustClosedTCPPort(t *testing.T) int {
+	t.Helper()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen on test port: %v", err)
+	}
+
+	port := listener.Addr().(*net.TCPAddr).Port
+	if err := listener.Close(); err != nil {
+		t.Fatalf("close test listener: %v", err)
+	}
+
+	return port
 }

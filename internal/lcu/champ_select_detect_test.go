@@ -254,6 +254,41 @@ func TestDetectSelectionFallsBackWhenProcessCandidateFails(t *testing.T) {
 	}
 }
 
+func TestDetectSelectionFallsBackToInferredProcessLockfileWhenProcessPortRefused(t *testing.T) {
+	t.Parallel()
+
+	fallbackServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `{"queueId":440,"localPlayerCellId":1,"myTeam":[{"cellId":1,"championId":67,"assignedPosition":"BOTTOM","isAutofilled":false}]}`)
+	}))
+	defer fallbackServer.Close()
+
+	badPort := mustClosedTCPPort(t)
+	processDir := t.TempDir()
+	writeLockfile(t, filepath.Join(processDir, "lockfile"), mustServerPort(t, fallbackServer.URL))
+
+	inferredLockfileCandidate, ok := processLockfileCandidate("process:1234", filepath.Join(processDir, "LeagueClientUx.exe"))
+	if !ok {
+		t.Fatal("expected inferred process lockfile candidate")
+	}
+
+	client := NewClient(true, "")
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate {
+		return []connectionCandidate{
+			staticCandidate("process:1234", connectionInfo{Port: badPort, Password: "secret", Protocol: "http"}),
+			inferredLockfileCandidate,
+		}
+	}
+
+	selection, err := client.DetectSelection(context.Background())
+	if err != nil {
+		t.Fatalf("DetectSelection() error = %v", err)
+	}
+
+	if selection.ChampionID != 67 || selection.Position != "adc" || selection.QueueID != 440 {
+		t.Fatalf("unexpected selection: %#v", selection)
+	}
+}
+
 func TestDetectSelectionFallsBackAfterPositionNotAssigned(t *testing.T) {
 	t.Parallel()
 

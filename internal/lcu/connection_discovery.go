@@ -29,6 +29,20 @@ func lockfileCandidate(source string, lockfilePath string) connectionCandidate {
 	}
 }
 
+func processLockfileCandidate(source string, exePath string) (connectionCandidate, bool) {
+	exePath = strings.TrimSpace(exePath)
+	if exePath == "" {
+		return connectionCandidate{}, false
+	}
+
+	dir := filepath.Dir(filepath.Clean(exePath))
+	if dir == "" || dir == "." {
+		return connectionCandidate{}, false
+	}
+
+	return lockfileCandidate(source+":lockfile", filepath.Join(dir, "lockfile")), true
+}
+
 func (c *Client) connectionCandidates(ctx context.Context) []connectionCandidate {
 	raw := make([]connectionCandidate, 0, 4)
 	if c.discoverProcessConnections != nil {
@@ -66,7 +80,7 @@ func discoverProcessConnections(ctx context.Context) []connectionCandidate {
 	}
 
 	seen := make(map[string]struct{})
-	out := make([]connectionCandidate, 0, len(processes))
+	out := make([]connectionCandidate, 0, len(processes)*2)
 	for _, proc := range processes {
 		if proc == nil {
 			continue
@@ -88,7 +102,16 @@ func discoverProcessConnections(ctx context.Context) []connectionCandidate {
 		}
 		seen[connectionKey] = struct{}{}
 
-		out = append(out, staticCandidate(fmt.Sprintf("process:%d", proc.Pid), info))
+		source := fmt.Sprintf("process:%d", proc.Pid)
+		out = append(out, staticCandidate(source, info))
+
+		exePath, err := proc.ExeWithContext(ctx)
+		if err != nil {
+			continue
+		}
+		if candidate, ok := processLockfileCandidate(source, exePath); ok {
+			out = append(out, candidate)
+		}
 	}
 
 	return out
