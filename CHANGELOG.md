@@ -25,6 +25,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Position detection now supports queue IDs `400`, `420`, `440`, and `3110`.
 - Sync item recommendations now build ordered staged blocks (`Starter`, `1st Item`, `2nd Item`, `Boots`, `3rd Item`, `4th+ Item`) with per-block filtering.
 - `dev sync` and `dev watch` continue to default to `--dry-run=true`.
+- `dev watch` no longer syncs at startup. It syncs once per champ select when the session timer enters `FINALIZATION`.
 
 ### Removed
 

@@ -2,6 +2,7 @@ package lolautobuild
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -10,17 +11,15 @@ import (
 	"github.com/controlado/lol-autobuild/internal/ports"
 )
 
-const defaultWatchDebounce = 500 * time.Millisecond
+const (
+	defaultWatchDebounce  = 500 * time.Millisecond
+	champSelectSessionURI = "/lol-champ-select/v1/session"
+)
 
 func (s *syncService) Watch(ctx context.Context, req WatchRequest) error {
 	debounce := req.Debounce
 	if debounce <= 0 {
 		debounce = defaultWatchDebounce
-	}
-
-	_ = s.runWatchCycle(ctx, req, WatchTriggerStartup, nil)
-	if ctx.Err() != nil {
-		return nil
 	}
 
 	events := make(chan ports.LCUEvent, 64)
@@ -35,6 +34,7 @@ func (s *syncService) Watch(ctx context.Context, req WatchRequest) error {
 		timerCh      <-chan time.Time
 		hasPending   bool
 		pendingEvent ports.LCUEvent
+		didFinalize  bool
 	)
 	defer stopWatchTimer(timer)
 
@@ -48,10 +48,23 @@ func (s *syncService) Watch(ctx context.Context, req WatchRequest) error {
 			}
 			return fmt.Errorf("watch lcu events: %w", err)
 		case event := <-events:
-			if !isChampSelectSessionEvent(event) {
+			eventType, isSessionEvent, isFinalizationEvent := classifyChampSelectSessionEvent(event)
+			if isSessionEvent && (eventType == "delete" || (eventType == "create" && !isFinalizationEvent)) {
+				didFinalize = false
+				hasPending = false
+				pendingEvent = ports.LCUEvent{}
+
+				stopWatchTimer(timer)
+				timer = nil
+				timerCh = nil
 				continue
 			}
 
+			if !isFinalizationEvent || didFinalize {
+				continue
+			}
+
+			didFinalize = true
 			hasPending = true
 			pendingEvent = event
 			timer, timerCh = resetWatchTimer(timer, debounce)
@@ -103,18 +116,31 @@ func (r WatchRequest) syncRequest() SyncRequest {
 	}
 }
 
-func isChampSelectSessionEvent(event ports.LCUEvent) bool {
-	uri := strings.TrimSpace(event.URI)
-	if uri != "/lol-champ-select/v1/session" {
-		return false
+func classifyChampSelectSessionEvent(event ports.LCUEvent) (eventType string, isSessionEvent bool, isFinalizationEvent bool) {
+	eventType = strings.ToLower(strings.TrimSpace(event.EventType))
+	if strings.TrimSpace(event.URI) != champSelectSessionURI {
+		return eventType, false, false
 	}
 
-	switch strings.ToLower(strings.TrimSpace(event.EventType)) {
+	switch eventType {
 	case "create", "update":
-		return true
 	default:
-		return false
+		return eventType, true, false
 	}
+
+	var payload struct {
+		Timer struct {
+			Phase string `json:"phase"`
+		} `json:"timer"`
+	}
+	if len(event.Data) == 0 {
+		return eventType, true, false
+	}
+	if err := json.Unmarshal(event.Data, &payload); err != nil {
+		return eventType, true, false
+	}
+
+	return eventType, true, strings.EqualFold(strings.TrimSpace(payload.Timer.Phase), "FINALIZATION")
 }
 
 func resetWatchTimer(timer *time.Timer, delay time.Duration) (*time.Timer, <-chan time.Time) {
