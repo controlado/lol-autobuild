@@ -32,6 +32,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `dev watch` no longer syncs at startup. It syncs once per champ select when the session timer enters `FINALIZATION`.
 - Free Coachless users now default to the latest non-Premium patch and cannot request the newest Premium patch.
 - The default command now opens the local settings UI.
+- Release archives now use the `lol-autobuild` binary name and include README, license, and sample config.
 
 ### Removed
 

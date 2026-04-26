@@ -10,7 +10,7 @@ before:
 builds:
   - id: lol-autobuild
     main: ./cmd/dev
-    binary: lol-autobuild-dev
+    binary: lol-autobuild
     env:
       - CGO_ENABLED=0
     goos:
@@ -24,6 +24,10 @@ archives:
   - id: default
     formats:
       - zip
+    files:
+      - README.md
+      - LICENSE
+      - config.example.yaml
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
 
