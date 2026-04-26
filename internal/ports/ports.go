@@ -94,6 +94,15 @@ type TokenPair struct {
 	ExpiresAt    time.Time
 }
 
+type TokenClaims struct {
+	Exp             int64  `json:"exp"`
+	IsSubscribedRaw string `json:"isSubscribed"`
+}
+
+func (tc *TokenClaims) IsSubscribed() bool {
+	return tc.IsSubscribedRaw == "1"
+}
+
 type CoachlessClient interface {
 	Refresh(ctx context.Context, refreshToken string) (TokenPair, error)
 	GetPatches(ctx context.Context, accessToken string) ([]PatchInfo, error)
@@ -105,6 +114,7 @@ type CoachlessClient interface {
 type TokenProvider interface {
 	AccessToken(ctx context.Context) (string, error)
 	Refresh(ctx context.Context) (TokenPair, error)
+	Claims(ctx context.Context) (TokenClaims, error)
 }
 
 type SecretStore interface {

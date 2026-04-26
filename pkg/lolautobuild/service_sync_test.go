@@ -305,6 +305,61 @@ func TestSyncBuildsCoachlessStyleItemBlocks(t *testing.T) {
 	}
 }
 
+func TestResolvePatchHonorsFreePatchLimits(t *testing.T) {
+	t.Parallel()
+
+	patches := []ports.PatchInfo{
+		{Label: "16.6", Major: 16, Patch: 6},
+		{Label: "16.7", Major: 16, Patch: 7},
+		{Label: "16.8", Major: 16, Patch: 8},
+	}
+
+	got, label, err := resolvePatch("", patches, false)
+	if err != nil {
+		t.Fatalf("resolvePatch() error = %v", err)
+	}
+	if label != "16.7" {
+		t.Fatalf("expected latest free patch 16.7, got %q", label)
+	}
+	if got.PatchAdditions != 0 {
+		t.Fatalf("free patch additions = %d, want 0", got.PatchAdditions)
+	}
+
+	got, label, err = resolvePatch("16.6", patches, false)
+	if err != nil {
+		t.Fatalf("resolvePatch(explicit free patch) error = %v", err)
+	}
+	if label != "16.6" || got.Patch != 6 || got.PatchAdditions != 0 {
+		t.Fatalf("unexpected explicit free patch: filter=%#v label=%q", got, label)
+	}
+
+	_, _, err = resolvePatch("16.8", patches, false)
+	if err == nil {
+		t.Fatal("expected premium error for newest free patch")
+	}
+}
+
+func TestResolvePatchAllowsPremiumPatchAdditions(t *testing.T) {
+	t.Parallel()
+
+	patches := []ports.PatchInfo{
+		{Label: "16.6", Major: 16, Patch: 6},
+		{Label: "16.7", Major: 16, Patch: 7},
+		{Label: "16.8", Major: 16, Patch: 8},
+	}
+
+	got, label, err := resolvePatch("", patches, true)
+	if err != nil {
+		t.Fatalf("resolvePatch() error = %v", err)
+	}
+	if label != "16.8" {
+		t.Fatalf("expected premium latest patch 16.8, got %q", label)
+	}
+	if got.PatchAdditions != 2 {
+		t.Fatalf("premium patch additions = %d, want 2", got.PatchAdditions)
+	}
+}
+
 func hasItemCall(calls []ports.ItemStatsRequest, itemType int, itemSlots []int, includeSupportItems bool) bool {
 	for _, call := range calls {
 		if call.ItemType == itemType &&

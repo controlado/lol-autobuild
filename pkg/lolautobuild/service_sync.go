@@ -23,12 +23,17 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 		return SyncResult{}, fmt.Errorf("get access token: %w", err)
 	}
 
+	tokenClaims, err := s.deps.Tokens.Claims(ctx)
+	if err != nil {
+		return SyncResult{}, fmt.Errorf("get token claims: %w", err)
+	}
+
 	patches, err := s.deps.Coachless.GetPatches(ctx, accessToken)
 	if err != nil {
 		return SyncResult{}, fmt.Errorf("get patches: %w", err)
 	}
 
-	patchFilter, patchLabel, err := resolvePatch(req.Patch, patches)
+	patchFilter, patchLabel, err := resolvePatch(req.Patch, patches, tokenClaims.IsSubscribed())
 	if err != nil {
 		return SyncResult{}, err
 	}
@@ -269,18 +274,18 @@ func filterAndLimitItemStats(in []ports.ItemStat, minOccurrence, topItems int) [
 	return out
 }
 
-func resolvePatch(rawPatch string, patches []ports.PatchInfo) (ports.PatchFilter, string, error) {
+func resolvePatch(rawPatch string, patches []ports.PatchInfo, subscribed bool) (ports.PatchFilter, string, error) {
 	if len(patches) == 0 {
 		return ports.PatchFilter{}, "", errors.New("no patch data available")
 	}
 
-	selected := patches[len(patches)-1]
+	selectedIndex := len(patches) - 1
 	if strings.TrimSpace(rawPatch) != "" {
 		wanted := strings.TrimSpace(rawPatch)
 		found := false
-		for _, p := range patches {
+		for idx, p := range patches {
 			if p.Label == wanted {
-				selected = p
+				selectedIndex = idx
 				found = true
 				break
 			}
@@ -288,11 +293,23 @@ func resolvePatch(rawPatch string, patches []ports.PatchInfo) (ports.PatchFilter
 		if !found {
 			return ports.PatchFilter{}, "", fmt.Errorf("requested patch %q not found", rawPatch)
 		}
+	} else if !subscribed && len(patches) > 1 {
+		selectedIndex = len(patches) - 2
+	}
+
+	if !subscribed && selectedIndex == len(patches)-1 && len(patches) > 1 {
+		return ports.PatchFilter{}, "", fmt.Errorf("requested patch %q requires Coachless Premium", patches[selectedIndex].Label)
+	}
+
+	selected := patches[selectedIndex]
+	patchAdditions := 0
+	if subscribed {
+		patchAdditions = min(2, selectedIndex)
 	}
 
 	return ports.PatchFilter{
 		Major:          selected.Major,
 		Patch:          selected.Patch,
-		PatchAdditions: 2,
+		PatchAdditions: patchAdditions,
 	}, selected.Label, nil
 }

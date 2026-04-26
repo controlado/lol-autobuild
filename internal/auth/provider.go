@@ -107,6 +107,15 @@ func (p *Provider) Refresh(ctx context.Context) (ports.TokenPair, error) {
 	return refreshed, nil
 }
 
+func (p *Provider) Claims(ctx context.Context) (ports.TokenClaims, error) {
+	accessToken, err := p.AccessToken(ctx)
+	if err != nil {
+		return ports.TokenClaims{}, err
+	}
+
+	return claimsFromJWT(accessToken)
+}
+
 func isTokenValid(exp time.Time, skew time.Duration) bool {
 	if exp.IsZero() {
 		return false
@@ -130,9 +139,22 @@ func ensureExpiry(pair ports.TokenPair) ports.TokenPair {
 }
 
 func expFromJWT(token string) (time.Time, error) {
+	claims, err := claimsFromJWT(token)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	if claims.Exp == 0 {
+		return time.Time{}, errors.New("exp claim missing")
+	}
+
+	return time.Unix(claims.Exp, 0).UTC(), nil
+}
+
+func claimsFromJWT(token string) (ports.TokenClaims, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) < 2 {
-		return time.Time{}, errors.New("invalid jwt format")
+		return ports.TokenClaims{}, errors.New("invalid jwt format")
 	}
 
 	payload := parts[1]
@@ -147,20 +169,13 @@ func expFromJWT(token string) (time.Time, error) {
 
 	decoded, err := base64.StdEncoding.DecodeString(payload)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("decode payload: %w", err)
+		return ports.TokenClaims{}, fmt.Errorf("decode payload: %w", err)
 	}
 
-	var body struct {
-		Exp int64 `json:"exp"`
-	}
-
+	var body ports.TokenClaims
 	if err := json.Unmarshal(decoded, &body); err != nil {
-		return time.Time{}, fmt.Errorf("parse payload: %w", err)
+		return ports.TokenClaims{}, fmt.Errorf("parse payload: %w", err)
 	}
 
-	if body.Exp == 0 {
-		return time.Time{}, errors.New("exp claim missing")
-	}
-
-	return time.Unix(body.Exp, 0).UTC(), nil
+	return body, nil
 }

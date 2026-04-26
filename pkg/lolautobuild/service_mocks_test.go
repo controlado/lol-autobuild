@@ -10,8 +10,9 @@ import (
 )
 
 type tokenProviderStub struct {
-	token string
-	err   error
+	token  string
+	claims ports.TokenClaims
+	err    error
 }
 
 func (t tokenProviderStub) AccessToken(ctx context.Context) (string, error) {
@@ -28,8 +29,17 @@ func (t tokenProviderStub) Refresh(ctx context.Context) (ports.TokenPair, error)
 	return ports.TokenPair{AccessToken: t.token, ExpiresAt: time.Now().Add(10 * time.Minute)}, t.err
 }
 
+func (t tokenProviderStub) Claims(ctx context.Context) (ports.TokenClaims, error) {
+	_ = ctx
+	if t.err != nil {
+		return ports.TokenClaims{}, t.err
+	}
+
+	return t.claims, nil
+}
+
 type coachlessStub struct {
-	mu             sync.Mutex
+	mu              sync.Mutex
 	getPatchesCalls int
 	keystoneCalls   []ports.KeystoneRequest
 	spellCalls      []ports.SummonerSpellStatsRequest

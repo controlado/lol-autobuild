@@ -129,6 +129,7 @@ LCU connection discovery tries League process args first (`--app-port`, `--remot
 - Watch mode only reacts to champ select session `Create` and `Update` events from `/lol-champ-select/v1/session` when `data.timer.phase == "FINALIZATION"`.
 - Watch mode attempts one sync per champ select. A session `Delete` or a new non-finalized `Create` event resets that lock.
 - If the finalization sync fails, watch mode waits for the next champ select before it tries again.
+- Free Coachless tokens use the latest non-Premium patch when the patch setting is blank. Requesting the newest Premium patch returns an error.
 - Rune page apply is not implemented yet.
 - Browser-assisted auth capture watches the Coachless login response and stores the token pair.
 

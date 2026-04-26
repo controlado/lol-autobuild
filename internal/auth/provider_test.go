@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"testing"
 	"time"
@@ -102,4 +103,35 @@ func TestAccessTokenFailsWhenNoSourceWorks(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected AccessToken() error")
 	}
+}
+
+func TestClaimsReadsAccessTokenClaims(t *testing.T) {
+	t.Parallel()
+
+	const exp = int64(1777253137)
+	p := NewProvider(
+		fakeCoachless{},
+		&fakeStore{pair: ports.TokenPair{
+			AccessToken: testJWT(`{"exp":1777253137,"isSubscribed":"1"}`),
+			ExpiresAt:   time.Now().Add(15 * time.Minute),
+		}},
+		nil,
+		nil,
+		ProviderOptions{TokenSkew: 10 * time.Second},
+	)
+
+	claims, err := p.Claims(context.Background())
+	if err != nil {
+		t.Fatalf("Claims() error = %v", err)
+	}
+	if claims.Exp != exp {
+		t.Fatalf("claims exp = %d, want %d", claims.Exp, exp)
+	}
+	if isSubscribed := claims.IsSubscribed(); !isSubscribed {
+		t.Fatalf("claims isSubscribed = %t, want true", isSubscribed)
+	}
+}
+
+func testJWT(payload string) string {
+	return "header." + base64.RawURLEncoding.EncodeToString([]byte(payload)) + ".signature"
 }
