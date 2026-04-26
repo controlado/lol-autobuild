@@ -39,7 +39,7 @@ This project was originally developed in a private repository and is now open so
 
 ## Prerequisites
 
-- Go `1.24+`.
+- Go `1.26+`.
 - League Client running, with champ select available.
 - A valid config file (start from `config.example.yaml`).
 - `lcu.enabled: true` when you want detection and LCU apply operations.
