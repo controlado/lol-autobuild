@@ -1,185 +1,61 @@
+<p align="center">
+  English | <a href="README.br.md">Português</a>
+</p>
+
 <div align="center">
 
 # lol-autobuild
 
-Automate League of Legends setup from Coachless data.
+Set up League of Legends item sets and summoner spells from Coachless data.
 
-[Quick Start](#quick-start) • [Local UI](#local-ui) • [Command Reference](#command-reference) • [Config Reference](#config-reference) • [Security](./SECURITY.md) • [Changelog](./CHANGELOG.md)
+<img width="1300" height="1000" alt="lol-autobuild local UI" src="https://github.com/user-attachments/assets/7d684e0c-a097-4939-895d-463a4408738e" />
 
 </div>
 
-This project was originally developed in a private repository and is now open source.
+## Download
 
-## Disclaimer
+[Download the latest release](https://github.com/controlado/lol-autobuild/releases/latest)
 
-`lol-autobuild` is an independent open source project. It has no affiliation with `coachless.gg`; it only reads Coachless data and local League Client APIs. Riot Games does not endorse or sponsor this repository, and it has no official connection to League of Legends. `League of Legends` and `Riot Games` are trademarks or registered trademarks of Riot Games, Inc.
+Pick the ZIP for your system, extract it, and run `lol-autobuild`.
 
 ## What it does
 
-`lol-autobuild` runs a sync cycle that:
+`lol-autobuild` connects to the League Client during champion select. It reads your champion and position, checks Coachless data, and prepares recommended item sets and summoner spells. Rune page apply is still pending.
 
-- Detects your current champion and Position from the local LCU champ select session.
-- Pulls Coachless patch, keystone, summoner spell, and item stats.
-- Builds recommendations.
-- Applies supported changes in LCU, or reports the plan when `--dry-run=true`.
+## First run
 
-## Capability matrix
+1. Open League of Legends.
+2. Start `lol-autobuild`.
+3. Use the local browser page that opens.
+4. Log in to Coachless when the app asks.
+5. Keep preview mode on until you trust the result.
 
-| Capability | Status | Notes |
-| --- | --- | --- |
-| Champion and Position detection from LCU | Implemented | Detection runs against `/lol-champ-select/v1/session`. |
-| Position detection queues | Implemented | Supported queue IDs: `400`, `420`, `440`, `3110`. |
-| Coachless API ingestion | Implemented | Uses API-first flow from `https://api.coachless.gg`. |
-| Item set apply | Implemented | Upserts a managed item set in LCU. |
-| Summoner spells apply | Implemented | Applies two spells and preserves the current Flash slot when possible. |
-| Rune page apply | Pending | Current adapter returns not configured. |
-| Watch mode (`watch`) | Implemented | Syncs once per champ select when the session timer enters `FINALIZATION`. |
-| Local settings UI | Implemented | Opens a local browser page served from `127.0.0.1`. |
-| Browser-assisted auth capture | Implemented | Opens Coachless login and stores tokens from the login response. |
-| Manual auth fallback via environment | Implemented | Reads `COACHLESS_ACCESS_TOKEN`, optional refresh and exp fields from process env. |
+The app runs on `127.0.0.1`, on your own computer.
 
-## Prerequisites
-
-- Go `1.26+`.
-- League Client running, with champ select available.
-- A valid config file (start from `config.example.yaml`).
-- `lcu.enabled: true` when you want detection and LCU apply operations.
-- Coachless token access through one of these paths:
-  - Token pair already persisted in OS keyring.
-  - Browser-assisted Coachless login.
-  - Environment fallback (`COACHLESS_ACCESS_TOKEN`, optional `COACHLESS_REFRESH_TOKEN`, optional `COACHLESS_ACCESS_TOKEN_EXP`), with optional preload from `env_file.path`.
-
-## Quick start
+## Basic commands
 
 Open the local UI:
 
 ```bash
-go run ./cmd/dev
+lol-autobuild
 ```
 
-Run one sync cycle in dry-run mode:
+Preview one sync:
 
 ```bash
-go run ./cmd/dev sync --config ./config.example.yaml --dry-run
+lol-autobuild sync --dry-run
 ```
 
-Run watch mode:
+Watch champion select and sync once during finalization:
 
 ```bash
-go run ./cmd/dev watch --config ./config.example.yaml --dry-run
+lol-autobuild watch --dry-run
 ```
 
-`watch` waits for champ select finalization before it syncs. It does not run a sync cycle at startup.
+Use `--dry-run=false` only when you want the app to apply changes to the League Client.
 
-`--dry-run` defaults to `true` for both commands. Use `--dry-run=false` only when you want live LCU changes.
+Advanced commands, config, and limits live in [USAGE.md](USAGE.md).
 
-## Local UI
+## Disclaimer
 
-The default command starts a local web server on `127.0.0.1`, opens your browser, and keeps running until you press `CTRL+C`.
-
-The UI lets you:
-
-- Change what sync updates: items, runes, and summoner spells.
-- Choose preview mode or live apply mode.
-- Run one sync.
-- Start or stop the watcher.
-- Check the current League Client connection state.
-
-Run the UI with a specific config file:
-
-```bash
-go run ./cmd/dev ui --config ./config.example.yaml
-```
-
-The API uses a per-run token in local URLs. The server does not listen on public network interfaces.
-
-## Command reference
-
-### `lol-autobuild`
-
-Opens the local settings UI.
-
-### `lol-autobuild ui`
-
-Opens the local settings UI.
-
-Flags:
-
-- `--config string` (default `"config.yaml"`)
-
-### `lol-autobuild sync`
-
-Runs one synchronization cycle.
-
-Flags:
-
-- `--apply-items` (default `true`)
-- `--apply-runes` (default `true`)
-- `--apply-spells` (default `true`)
-- `--config string` (default `"config.yaml"`)
-- `--dry-run` (default `true`)
-- `--patch string` (empty = latest patch from Coachless)
-
-### `lol-autobuild watch`
-
-Watches LCU champ select events. It runs one synchronization cycle per champ select when `/lol-champ-select/v1/session` reports `data.timer.phase == "FINALIZATION"`.
-
-Flags:
-
-- `--apply-items` (default `true`)
-- `--apply-runes` (default `true`)
-- `--apply-spells` (default `true`)
-- `--config string` (default `"config.yaml"`)
-- `--dry-run` (default `true`)
-- `--patch string` (empty = latest patch from Coachless)
-
-## Config reference
-
-`config.example.yaml` follows this structure:
-
-| Key | Type | Default in code | Purpose |
-| --- | --- | --- | --- |
-| `log_level` | string | `info` | Global log level. |
-| `coachless.api_base_url` | string | `https://api.coachless.gg` | Coachless API base URL. |
-| `coachless.timeout_seconds` | int | `20` | Coachless request timeout. |
-| `auth.auto_enabled` | bool | `true` | Enables browser-assisted Coachless token capture. |
-| `auth.manual_fallback_enabled` | bool | `true` | Enables env-based fallback source. |
-| `auth.token_skew_seconds` | int | `30` | Token validity skew before expiry. |
-| `env_file.path` | string | `""` | Optional path to `.env` file loaded before bootstrap. |
-| `secrets.service_name` | string | `lol-autobuild` | OS keyring service name. |
-| `recommendation.min_occurrence` | int | `100` | Minimum sample threshold for recommendations. |
-| `recommendation.top_items` | int | `6` | Max recommended item count. |
-| `recommendation.top_spells` | int | `2` | Max recommended spell count. |
-| `lcu.enabled` | bool | `false` | Enables LCU detection and apply paths. |
-| `lcu.lockfile_path` | string | `""` | Optional lockfile fallback path. |
-| `sync.patch` | string | `""` | Patch label used by the local UI. Empty means latest. |
-| `sync.apply_items` | bool | `true` | Local UI setting for item set apply. |
-| `sync.apply_runes` | bool | `true` | Local UI setting for rune page apply. |
-| `sync.apply_spells` | bool | `true` | Local UI setting for summoner spell apply. |
-| `sync.dry_run` | bool | `true` | Local UI preview mode. |
-| `watch.debounce_millis` | int | `500` | Debounce window after finalization events. |
-| `watch.reconnect_delay_millis` | int | `1000` | Delay before websocket reconnect attempts. |
-
-When `env_file.path` is set, the CLI loads that file before service bootstrap. Relative paths are resolved from the config file directory. Existing process environment variables keep precedence over values from the file. Startup fails if the configured file does not exist.
-
-LCU connection discovery tries League process args first (`--app-port`, `--remoting-auth-token`, optional `--app-protocol`), then falls back to `lcu.lockfile_path`.
-
-## Operational limits
-
-- Sync requires a working LCU connection, even in dry-run mode, because champion and position detection always runs first.
-- Sync fails early when champ select is unavailable, champion is not selected, or the queue is not in the supported position-detection list.
-- When apply fails for one subsystem, the service keeps running the others and reports warnings in `SyncResult`.
-- Watch mode ignores startup and early champ select phases.
-- Watch mode only reacts to champ select session `Create` and `Update` events from `/lol-champ-select/v1/session` when `data.timer.phase == "FINALIZATION"`.
-- Watch mode attempts one sync per champ select. A session `Delete` or a new non-finalized `Create` event resets that lock.
-- If the finalization sync fails, watch mode waits for the next champ select before it tries again.
-- The local UI uses the `sync` config section. CLI flags still control `sync` and `watch`.
-- Free Coachless tokens use the latest non-Premium patch when the patch setting is blank. Requesting the newest Premium patch returns an error.
-- Rune page apply is not implemented yet.
-- Browser-assisted auth capture watches the Coachless login response and stores the token pair.
-
-## Next work
-
-- Implement LCU rune page apply path.
-- Expand queue coverage for position detection.
-- Add richer operational diagnostics around auth and LCU failures.
+`lol-autobuild` is an independent open source project. It has no affiliation with `coachless.gg`; it only reads Coachless data and local League Client APIs. Riot Games does not endorse or sponsor this repository, and it has no official connection to League of Legends. `League of Legends` and `Riot Games` are trademarks or registered trademarks of Riot Games, Inc.
