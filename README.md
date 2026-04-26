@@ -22,6 +22,10 @@ Pick the ZIP for your system, extract it, and run `lol-autobuild`.
 
 `lol-autobuild` connects to the League Client during champion select. It reads your champion and position, checks Coachless data, and prepares recommended item sets and summoner spells. Rune page apply is still pending.
 
+## About Coachless
+
+[Coachless](https://coachless.gg/) is a standout League of Legends analytics site. It uses Win Probability Added (WPA) to compare items with more context than raw win rate. Players get a smarter way to judge builds. [xPetu](https://x.com/xPetu) leads the project; players know him for high-level Shen play and math-based League analysis.
+
 ## First run
 
 1. Open League of Legends.

@@ -22,6 +22,10 @@ Escolha o ZIP do seu sistema, extraia os arquivos e rode `lol-autobuild`.
 
 `lol-autobuild` conecta no client durante a seleção de campeões. Ele lê seu campeão e sua rota, consulta dados do Coachless e prepara itens e spells recomendadas. A aplicação de runas ainda está pendente.
 
+## Sobre o Coachless
+
+[Coachless](https://coachless.gg/) é um destaque entre os sites de análise para League of Legends. Ele usa Win Probability Added (WPA) para comparar itens com mais contexto que o win rate puro. Jogadores ganham um jeito mais inteligente de avaliar builds. [xPetu](https://x.com/xPetu) lidera o projeto; jogadores conhecem o trabalho dele pelo Shen em alto nível e pelas análises matemáticas sobre o jogo.
+
 ## Primeiro uso
 
 1. Abra o League of Legends.
