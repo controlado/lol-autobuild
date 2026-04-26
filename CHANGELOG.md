@@ -17,6 +17,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added LCU websocket event stream support with reconnect flow.
 - Added browser-assisted Coachless token capture.
 - Added persisted `sync` config settings for the local UI.
+- Added local settings UI served from `127.0.0.1`.
+- Added LCU connection status checks for the local UI.
 
 ### Changed
 
@@ -29,6 +31,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `dev sync` and `dev watch` continue to default to `--dry-run=true`.
 - `dev watch` no longer syncs at startup. It syncs once per champ select when the session timer enters `FINALIZATION`.
 - Free Coachless users now default to the latest non-Premium patch and cannot request the newest Premium patch.
+- The default command now opens the local settings UI.
 
 ### Removed
 

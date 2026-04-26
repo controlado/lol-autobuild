@@ -4,7 +4,7 @@
 
 Automate League of Legends setup from Coachless data.
 
-[Quick Start](#quick-start) • [Command Reference](#command-reference) • [Config Reference](#config-reference) • [Security](./SECURITY.md) • [Changelog](./CHANGELOG.md)
+[Quick Start](#quick-start) • [Local UI](#local-ui) • [Command Reference](#command-reference) • [Config Reference](#config-reference) • [Security](./SECURITY.md) • [Changelog](./CHANGELOG.md)
 
 </div>
 
@@ -33,7 +33,8 @@ This project was originally developed in a private repository and is now open so
 | Item set apply | Implemented | Upserts a managed item set in LCU. |
 | Summoner spells apply | Implemented | Applies two spells and preserves the current Flash slot when possible. |
 | Rune page apply | Pending | Current adapter returns not configured. |
-| Watch mode (`dev watch`) | Implemented | Syncs once per champ select when the session timer enters `FINALIZATION`. |
+| Watch mode (`watch`) | Implemented | Syncs once per champ select when the session timer enters `FINALIZATION`. |
+| Local settings UI | Implemented | Opens a local browser page served from `127.0.0.1`. |
 | Browser-assisted auth capture | Implemented | Opens Coachless login and stores tokens from the login response. |
 | Manual auth fallback via environment | Implemented | Reads `COACHLESS_ACCESS_TOKEN`, optional refresh and exp fields from process env. |
 
@@ -50,6 +51,12 @@ This project was originally developed in a private repository and is now open so
 
 ## Quick start
 
+Open the local UI:
+
+```bash
+go run ./cmd/dev
+```
+
 Run one sync cycle in dry-run mode:
 
 ```bash
@@ -62,13 +69,45 @@ Run watch mode:
 go run ./cmd/dev watch --config ./config.example.yaml --dry-run
 ```
 
-`dev watch` waits for champ select finalization before it syncs. It does not run a sync cycle at startup.
+`watch` waits for champ select finalization before it syncs. It does not run a sync cycle at startup.
 
 `--dry-run` defaults to `true` for both commands. Use `--dry-run=false` only when you want live LCU changes.
 
+## Local UI
+
+The default command starts a local web server on `127.0.0.1`, opens your browser, and keeps running until you press `CTRL+C`.
+
+The UI lets you:
+
+- Change what sync updates: items, runes, and summoner spells.
+- Choose preview mode or live apply mode.
+- Run one sync.
+- Start or stop the watcher.
+- Check the current League Client connection state.
+
+Run the UI with a specific config file:
+
+```bash
+go run ./cmd/dev ui --config ./config.example.yaml
+```
+
+The API uses a per-run token in local URLs. The server does not listen on public network interfaces.
+
 ## Command reference
 
-### `dev sync`
+### `lol-autobuild`
+
+Opens the local settings UI.
+
+### `lol-autobuild ui`
+
+Opens the local settings UI.
+
+Flags:
+
+- `--config string` (default `"config.yaml"`)
+
+### `lol-autobuild sync`
 
 Runs one synchronization cycle.
 
@@ -77,11 +116,11 @@ Flags:
 - `--apply-items` (default `true`)
 - `--apply-runes` (default `true`)
 - `--apply-spells` (default `true`)
-- `--config string` (default `"config.example.yaml"`)
+- `--config string` (default `"config.yaml"`)
 - `--dry-run` (default `true`)
 - `--patch string` (empty = latest patch from Coachless)
 
-### `dev watch`
+### `lol-autobuild watch`
 
 Watches LCU champ select events. It runs one synchronization cycle per champ select when `/lol-champ-select/v1/session` reports `data.timer.phase == "FINALIZATION"`.
 
@@ -90,7 +129,7 @@ Flags:
 - `--apply-items` (default `true`)
 - `--apply-runes` (default `true`)
 - `--apply-spells` (default `true`)
-- `--config string` (default `"config.example.yaml"`)
+- `--config string` (default `"config.yaml"`)
 - `--dry-run` (default `true`)
 - `--patch string` (empty = latest patch from Coachless)
 
@@ -134,6 +173,7 @@ LCU connection discovery tries League process args first (`--app-port`, `--remot
 - Watch mode only reacts to champ select session `Create` and `Update` events from `/lol-champ-select/v1/session` when `data.timer.phase == "FINALIZATION"`.
 - Watch mode attempts one sync per champ select. A session `Delete` or a new non-finalized `Create` event resets that lock.
 - If the finalization sync fails, watch mode waits for the next champ select before it tries again.
+- The local UI uses the `sync` config section. CLI flags still control `sync` and `watch`.
 - Free Coachless tokens use the latest non-Premium patch when the patch setting is blank. Requesting the newest Premium patch returns an error.
 - Rune page apply is not implemented yet.
 - Browser-assisted auth capture watches the Coachless login response and stores the token pair.

@@ -6,6 +6,7 @@ import (
 )
 
 type Service interface {
+	EnsureCoachlessAuth(ctx context.Context) error
 	Sync(ctx context.Context, req SyncRequest) (SyncResult, error)
 	Watch(ctx context.Context, req WatchRequest) error
 }

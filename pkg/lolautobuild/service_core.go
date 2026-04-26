@@ -1,6 +1,7 @@
 package lolautobuild
 
 import (
+	"context"
 	"errors"
 
 	"github.com/controlado/lol-autobuild/internal/ports"
@@ -48,4 +49,12 @@ func NewService(deps ServiceDeps) (Service, error) {
 	}
 
 	return &syncService{deps: deps}, nil
+}
+
+func (s *syncService) EnsureCoachlessAuth(ctx context.Context) error {
+	if _, err := s.deps.Tokens.AccessToken(ctx); err != nil {
+		return err
+	}
+
+	return nil
 }

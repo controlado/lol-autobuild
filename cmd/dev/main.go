@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,14 +13,18 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
+	"github.com/controlado/lol-autobuild/internal/app"
 	"github.com/controlado/lol-autobuild/internal/auth"
 	"github.com/controlado/lol-autobuild/internal/coachless"
 	"github.com/controlado/lol-autobuild/internal/config"
 	"github.com/controlado/lol-autobuild/internal/lcu"
 	"github.com/controlado/lol-autobuild/internal/recommend"
 	"github.com/controlado/lol-autobuild/internal/secrets"
+	"github.com/controlado/lol-autobuild/internal/ui"
 	"github.com/controlado/lol-autobuild/pkg/lolautobuild"
 )
+
+const defaultConfigPath = "config.yaml"
 
 type runFlags struct {
 	ConfigPath  string
@@ -31,6 +36,8 @@ type runFlags struct {
 }
 
 func main() {
+	cobra.MousetrapHelpText = "" // allows windows explorer launch
+
 	if err := rootCmd().Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
@@ -39,13 +46,35 @@ func main() {
 
 func rootCmd() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "dev",
-		Short: "Development CLI for lol-autobuild",
+		Use:   "lol-autobuild",
+		Short: "Automate League of Legends setup from Coachless data",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_ = args
+			return runUI(cmd.Context(), defaultConfigPath)
+		},
 	}
 
+	root.AddCommand(uiCmd())
 	root.AddCommand(syncCmd())
 	root.AddCommand(watchCmd())
 	return root
+}
+
+func uiCmd() *cobra.Command {
+	var configPath string
+
+	cmd := &cobra.Command{
+		Use:   "ui",
+		Short: "Open the local settings UI",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_ = args
+			return runUI(cmd.Context(), configPath)
+		},
+	}
+
+	cmd.Flags().StringVar(&configPath, "config", defaultConfigPath, "Path to YAML configuration file")
+	return cmd
 }
 
 func syncCmd() *cobra.Command {
@@ -65,15 +94,13 @@ func syncCmd() *cobra.Command {
 				return err
 			}
 
-			req := lolautobuild.SyncRequest{
+			result, err := svc.Sync(cmd.Context(), lolautobuild.SyncRequest{
 				Patch:       flags.Patch,
 				ApplyItems:  flags.ApplyItems,
 				ApplyRunes:  flags.ApplyRunes,
 				ApplySpells: flags.ApplySpells,
 				DryRun:      flags.DryRun,
-			}
-
-			result, err := svc.Sync(cmd.Context(), req)
+			})
 			if err != nil {
 				warnIfLCUNotConfigured(err)
 				return err
@@ -141,8 +168,39 @@ func watchCmd() *cobra.Command {
 	return cmd
 }
 
+func runUI(ctx context.Context, configPath string) error {
+	cfg, err := loadUIConfigAndLogging(configPath)
+	if err != nil {
+		return err
+	}
+
+	configStore, err := config.NewConfigStore(configPath)
+	if err != nil {
+		return err
+	}
+
+	application, err := app.New(buildService, checkLCUStatus, configStore, cfg)
+	if err != nil {
+		return err
+	}
+
+	server, err := ui.NewServer(ui.Options{
+		App:         application,
+		OpenBrowser: ui.OpenBrowser,
+		Out:         os.Stdout,
+	})
+	if err != nil {
+		return err
+	}
+
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
+	defer stop()
+
+	return server.Run(ctx)
+}
+
 func bindRunFlags(cmd *cobra.Command, flags *runFlags) {
-	cmd.Flags().StringVar(&flags.ConfigPath, "config", "config.example.yaml", "Path to YAML configuration file")
+	cmd.Flags().StringVar(&flags.ConfigPath, "config", defaultConfigPath, "Path to YAML configuration file")
 	cmd.Flags().StringVar(&flags.Patch, "patch", "", "Patch label (e.g. 16.7). Empty = latest")
 	cmd.Flags().BoolVar(&flags.ApplyItems, "apply-items", true, "Apply item set")
 	cmd.Flags().BoolVar(&flags.ApplyRunes, "apply-runes", true, "Apply rune page")
@@ -165,6 +223,21 @@ func loadConfigAndLogging(configPath string) (config.Config, error) {
 		return config.Config{}, err
 	}
 
+	configureLogging(cfg.LogLevel)
+	return cfg, nil
+}
+
+func loadUIConfigAndLogging(configPath string) (config.Config, error) {
+	cfg, err := loadConfigAndLogging(configPath)
+	if err == nil {
+		return cfg, nil
+	}
+
+	if !errors.Is(err, os.ErrNotExist) {
+		return config.Config{}, err
+	}
+
+	cfg = config.Defaults()
 	configureLogging(cfg.LogLevel)
 	return cfg, nil
 }
@@ -211,6 +284,10 @@ func buildService(cfg config.Config) (lolautobuild.Service, error) {
 			TopSpells:     cfg.Recommendation.TopSpells,
 		},
 	})
+}
+
+func checkLCUStatus(ctx context.Context, cfg config.Config) lcu.ConnectionStatus {
+	return lcu.NewClient(cfg.LCU.Enabled, cfg.LCU.LockfilePath).ConnectionStatus(ctx)
 }
 
 func warnIfLCUNotConfigured(err error) {

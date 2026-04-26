@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>lol-autobuild</title>
+  <style>
+    :root {
+      --bg: #000000;
+      --surface: #070908;
+      --surface-soft: #0d1210;
+      --surface-disabled: #151a18;
+      --ink: #e6eee9;
+      --muted: #9ba9a2;
+      --line: #1d2823;
+      --line-strong: #33433b;
+      --green: #54d98d;
+      --red: #ff7f76;
+      --amber: #e5bd63;
+      --blue: #82c9ff;
+      --focus: rgba(130, 201, 255, 0.26);
+      font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      color: var(--ink);
+      background: var(--bg);
+    }
+
+    main {
+      width: min(1040px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0;
+    }
+
+    .topbar {
+      display: flex;
+      gap: 18px;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1,
+    h2,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      margin-bottom: 0;
+      font-size: 1.55rem;
+      line-height: 1.15;
+      letter-spacing: 0;
+    }
+
+    .lede {
+      max-width: 430px;
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.45;
+    }
+
+    .label {
+      margin: 0 0 7px;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .status-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 18px;
+    }
+
+    .stat,
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+
+    .stat {
+      padding: 13px 14px;
+    }
+
+    .value {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+
+    .is-good {
+      color: var(--green);
+    }
+
+    .is-bad {
+      color: var(--red);
+    }
+
+    .is-warn {
+      color: var(--amber);
+    }
+
+    .is-info {
+      color: var(--blue);
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      padding: 20px;
+    }
+
+    .section-title {
+      margin-bottom: 18px;
+      font-size: 1.15rem;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    form {
+      display: grid;
+      gap: 16px;
+    }
+
+    fieldset {
+      min-width: 0;
+      margin: 0;
+      padding: 0;
+      border: 0;
+    }
+
+    .field {
+      display: grid;
+      gap: 7px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      min-height: 42px;
+      padding: 9px 11px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      color: var(--ink);
+      background: var(--surface);
+      font: inherit;
+      outline: none;
+    }
+
+    input[type="text"]:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px var(--focus);
+    }
+
+    .help {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.4;
+    }
+
+    .checks-help {
+      margin-top: 10px;
+    }
+
+    .checks {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 9px;
+    }
+
+    .check {
+      display: flex;
+      gap: 9px;
+      align-items: center;
+      min-height: 44px;
+      padding: 10px 11px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-soft);
+      color: var(--ink);
+      font-weight: 650;
+    }
+
+    .check input {
+      width: 17px;
+      height: 17px;
+      margin: 0;
+      accent-color: var(--blue);
+    }
+
+    .check.is-disabled {
+      color: var(--muted);
+      background: var(--surface-disabled);
+      cursor: not-allowed;
+    }
+
+    .check.is-disabled input {
+      cursor: not-allowed;
+    }
+
+    .tag {
+      margin-left: auto;
+      padding: 2px 6px;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      color: var(--muted);
+      background: var(--surface);
+      font-size: 0.76rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding-top: 2px;
+    }
+
+    button {
+      min-height: 40px;
+      padding: 0 14px;
+      border: 1px solid var(--ink);
+      border-radius: 8px;
+      color: #00120b;
+      background: var(--green);
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      border-color: var(--line-strong);
+      color: var(--ink);
+      background: var(--surface-soft);
+    }
+
+    button:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    button:disabled {
+      cursor: wait;
+      opacity: 0.62;
+    }
+
+    button:not(:disabled):hover {
+      background: #7af0a4;
+    }
+
+    button.secondary:not(:disabled):hover {
+      background: #121a16;
+    }
+
+    .result {
+      display: grid;
+      border-top: 1px solid var(--line);
+    }
+
+    .result-row {
+      display: grid;
+      grid-template-columns: minmax(120px, 0.9fr) minmax(0, 1.1fr);
+      gap: 14px;
+      align-items: baseline;
+      padding: 11px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .result-row span:first-child {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .cell-value {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .message {
+      min-height: 46px;
+      margin-top: 16px;
+      padding: 12px 13px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--muted);
+      background: var(--surface-soft);
+      line-height: 1.4;
+    }
+
+    .message.error {
+      border-color: rgba(168, 50, 42, 0.36);
+      color: var(--red);
+      background: #180706;
+    }
+
+    .cycle-log {
+      margin-top: 16px;
+    }
+
+    .log-list {
+      display: grid;
+      gap: 7px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.4;
+    }
+
+    .log-list li {
+      padding-left: 10px;
+      border-left: 3px solid var(--line-strong);
+    }
+
+    .log-list li.error {
+      color: var(--red);
+      border-left-color: var(--red);
+    }
+
+    .log-list li.warn {
+      color: var(--amber);
+      border-left-color: var(--amber);
+    }
+
+    @media (max-width: 860px) {
+      main {
+        width: min(100% - 22px, 680px);
+        padding: 20px 0;
+      }
+
+      .topbar,
+      .workspace,
+      .status-strip,
+      .checks {
+        grid-template-columns: 1fr;
+      }
+
+      .topbar {
+        display: grid;
+        gap: 10px;
+      }
+    }
+
+    @media (max-width: 520px) {
+      .result-row {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+
+      .cell-value {
+        text-align: left;
+      }
+
+      button {
+        flex: 1 1 100%;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main aria-busy="false">
+    <div class="topbar">
+      <div>
+        <p class="label">Local UI</p>
+        <h1>lol-autobuild</h1>
+      </div>
+      <p class="lede">Sync League Client item sets and summoner spells from Coachless while champ select is open.</p>
+    </div>
+
+    <section class="status-strip" aria-label="Current state">
+      <div class="stat">
+        <p class="label">League Client</p>
+        <p class="value is-info" id="lcuStatus">Checking LCU...</p>
+      </div>
+      <div class="stat">
+        <p class="label">Watcher</p>
+        <p class="value" id="watcherStatus">Stopped</p>
+      </div>
+      <div class="stat">
+        <p class="label">Write mode</p>
+        <p class="value is-info" id="modeStatus">Preview: no writes</p>
+      </div>
+    </section>
+
+    <div class="workspace">
+      <section class="panel">
+        <h2 class="section-title">Settings</h2>
+        <form id="settingsForm">
+          <label class="check">
+            <input type="checkbox" id="lcuEnabled">
+            Use League Client
+          </label>
+
+          <div class="field">
+            <label class="label" for="patch">Patch</label>
+            <input id="patch" type="text" autocomplete="off" placeholder="16.7">
+            <p class="help">Leave this blank to use the latest Coachless patch.</p>
+          </div>
+
+          <fieldset>
+            <legend class="label">Sync updates</legend>
+            <div class="checks">
+              <label class="check">
+                <input type="checkbox" id="applyItems">
+                Items
+              </label>
+              <label class="check is-disabled" aria-disabled="true">
+                <input type="checkbox" id="applyRunes" disabled>
+                Runes
+                <span class="tag">Pending</span>
+              </label>
+              <label class="check">
+                <input type="checkbox" id="applySpells">
+                Summoner spells
+              </label>
+              <label class="check">
+                <input type="checkbox" id="dryRun">
+                Preview only
+              </label>
+            </div>
+            <p class="help checks-help">Rune apply stays off until the LCU adapter supports it.</p>
+          </fieldset>
+
+          <div class="actions">
+            <button type="submit" id="saveButton">Save</button>
+            <button type="button" id="syncButton">Sync now</button>
+            <button type="button" id="watcherButton" class="secondary">Start watcher</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2 class="section-title">Last cycle</h2>
+        <div class="result" aria-label="Last sync result">
+          <div class="result-row">
+            <span>Updated</span>
+            <span class="cell-value" id="updatedValue">No sync yet</span>
+          </div>
+          <div class="result-row">
+            <span>Champion ID</span>
+            <span class="cell-value" id="championValue">No sync yet</span>
+          </div>
+          <div class="result-row">
+            <span>Position</span>
+            <span class="cell-value" id="positionValue">No sync yet</span>
+          </div>
+          <div class="result-row">
+            <span>Queue ID</span>
+            <span class="cell-value" id="queueValue">No sync yet</span>
+          </div>
+          <div class="result-row">
+            <span>Items</span>
+            <span class="cell-value" id="itemsValue">Not applied</span>
+          </div>
+          <div class="result-row">
+            <span>Spells</span>
+            <span class="cell-value" id="spellsValue">Not applied</span>
+          </div>
+        </div>
+        <div class="message" id="messageBox" role="status" aria-live="polite">No sync has run in this session.</div>
+      </section>
+    </div>
+
+    <section class="panel cycle-log">
+      <h2 class="section-title">Logs</h2>
+      <ul class="log-list" id="logList" aria-live="polite">
+        <li>No events yet.</li>
+      </ul>
+    </section>
+  </main>
+
+  <script>
+    const token = "__API_TOKEN__";
+    const noSyncText = "No sync yet";
+    const ids = {
+      main: document.querySelector("main"),
+      lcuStatus: document.getElementById("lcuStatus"),
+      watcherStatus: document.getElementById("watcherStatus"),
+      modeStatus: document.getElementById("modeStatus"),
+      messageBox: document.getElementById("messageBox"),
+      logList: document.getElementById("logList"),
+      form: document.getElementById("settingsForm"),
+      lcuEnabled: document.getElementById("lcuEnabled"),
+      patch: document.getElementById("patch"),
+      applyItems: document.getElementById("applyItems"),
+      applyRunes: document.getElementById("applyRunes"),
+      applySpells: document.getElementById("applySpells"),
+      dryRun: document.getElementById("dryRun"),
+      saveButton: document.getElementById("saveButton"),
+      syncButton: document.getElementById("syncButton"),
+      watcherButton: document.getElementById("watcherButton"),
+      updatedValue: document.getElementById("updatedValue"),
+      championValue: document.getElementById("championValue"),
+      positionValue: document.getElementById("positionValue"),
+      queueValue: document.getElementById("queueValue"),
+      itemsValue: document.getElementById("itemsValue"),
+      spellsValue: document.getElementById("spellsValue")
+    };
+    let watcherRunning = false;
+    let lastLogKey = "empty";
+    const logHistory = [{ text: "No events yet." }];
+
+    function api(path, options = {}) {
+      const join = path.includes("?") ? "&" : "?";
+      return fetch(`${path}${join}token=${encodeURIComponent(token)}`, {
+        headers: { "Content-Type": "application/json" },
+        ...options
+      }).then(async response => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.error || "Request failed.");
+        }
+        return data;
+      });
+    }
+
+    function readSettings() {
+      return {
+        lcu_enabled: ids.lcuEnabled.checked,
+        patch: ids.patch.value.trim(),
+        apply_items: ids.applyItems.checked,
+        apply_runes: false,
+        apply_spells: ids.applySpells.checked,
+        dry_run: ids.dryRun.checked
+      };
+    }
+
+    function setBusy(isBusy) {
+      ids.main.setAttribute("aria-busy", String(isBusy));
+      ids.saveButton.disabled = isBusy;
+      ids.syncButton.disabled = isBusy;
+      ids.watcherButton.disabled = isBusy;
+    }
+
+    function setMessage(text, isError = false) {
+      ids.messageBox.classList.toggle("error", isError);
+      ids.messageBox.setAttribute("role", isError ? "alert" : "status");
+      ids.messageBox.textContent = text || "No sync has run in this session.";
+    }
+
+    function setValue(element, text, tone = "") {
+      element.textContent = text;
+      element.className = `value${tone ? ` is-${tone}` : ""}`;
+    }
+
+    function setCell(element, text, tone = "") {
+      element.textContent = text;
+      element.className = `cell-value${tone ? ` is-${tone}` : ""}`;
+    }
+
+    function appliedText(value) {
+      return value ? "Applied" : "Not applied";
+    }
+
+    function formatTime(value) {
+      if (!value) {
+        return noSyncText;
+      }
+
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return value;
+      }
+
+      return new Intl.DateTimeFormat(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit"
+      }).format(date);
+    }
+
+    function renderLogList() {
+      ids.logList.replaceChildren(...logHistory.map(item => {
+        const li = document.createElement("li");
+        li.textContent = item.time ? `${item.time} - ${item.text}` : item.text;
+        if (item.tone) {
+          li.className = item.tone;
+        }
+        return li;
+      }));
+    }
+
+    function appendLog(items, key) {
+      if (key === lastLogKey) {
+        return;
+      }
+
+      lastLogKey = key;
+      if (logHistory.length === 1 && logHistory[0].text === "No events yet.") {
+        logHistory.length = 0;
+      }
+
+      const time = formatTime(new Date().toISOString());
+      logHistory.push(...items.map(item => ({ ...item, time })));
+      renderLogList();
+    }
+
+    function renderLog(state, sync) {
+      if (state.last_error) {
+        appendLog([{ text: state.last_error, tone: "error" }], `error:${state.last_error}`);
+        return;
+      }
+
+      if (sync && sync.Warnings && sync.Warnings.length > 0) {
+        appendLog(
+          sync.Warnings.map(warning => ({ text: warning, tone: "warn" })),
+          `warnings:${state.last_sync_at || ""}:${sync.Warnings.join("|")}`
+        );
+        return;
+      }
+
+      if (sync) {
+        appendLog([{ text: "Sync finished without warnings." }], `sync:${state.last_sync_at || JSON.stringify(sync)}`);
+        return;
+      }
+
+      if (state.watcher.running) {
+        appendLog([{ text: "Watcher is waiting for champ select finalization." }], "watcher:running");
+        return;
+      }
+
+      if (logHistory.length === 0) {
+        appendLog([{ text: "No events yet." }], "empty");
+      }
+    }
+
+    function renderForms(state) {
+      const settings = state.settings;
+      ids.lcuEnabled.checked = settings.lcu_enabled;
+      ids.patch.value = settings.patch || "";
+      ids.applyItems.checked = settings.apply_items;
+      ids.applyRunes.checked = false;
+      ids.applySpells.checked = settings.apply_spells;
+      ids.dryRun.checked = settings.dry_run;
+      setValue(ids.modeStatus, settings.dry_run ? "Preview: no writes" : "Live: writes enabled", settings.dry_run ? "info" : "warn");
+    }
+
+    function renderState(state) {
+      watcherRunning = state.watcher.running;
+      ids.watcherButton.textContent = watcherRunning ? "Stop watcher" : "Start watcher";
+      ids.watcherButton.setAttribute("aria-pressed", String(watcherRunning));
+      setValue(ids.watcherStatus, watcherRunning ? "Running" : "Stopped", watcherRunning ? "good" : "");
+
+      if (state.lcu.state === "connected") {
+        setValue(ids.lcuStatus, "Connected", "good");
+      } else if (state.lcu.state === "off") {
+        setValue(ids.lcuStatus, "LCU disabled", "warn");
+      } else {
+        setValue(ids.lcuStatus, state.lcu.message || "Not connected", "bad");
+      }
+
+      const sync = state.last_sync;
+      setCell(ids.updatedValue, formatTime(state.last_sync_at));
+      setCell(ids.championValue, sync ? String(sync.DetectedChampionID) : noSyncText);
+      setCell(ids.positionValue, sync ? sync.DetectedPosition || "Not detected" : noSyncText);
+      setCell(ids.queueValue, sync ? String(sync.DetectedQueueID) : noSyncText);
+      setCell(ids.itemsValue, sync ? appliedText(sync.ItemSetApplied) : "Not applied", sync && sync.ItemSetApplied ? "good" : "");
+      setCell(ids.spellsValue, sync ? appliedText(sync.SpellsApplied) : "Not applied", sync && sync.SpellsApplied ? "good" : "");
+
+      if (state.last_error) {
+        setMessage(state.last_error, true);
+      } else if (sync && sync.Warnings && sync.Warnings.length > 0) {
+        setMessage("Sync finished with warnings.");
+      } else if (sync) {
+        setMessage("Sync finished.");
+      } else if (state.watcher.running) {
+        setMessage("Watcher is waiting for champ select finalization.");
+      } else {
+        setMessage("No sync has run in this session.");
+      }
+
+      renderLog(state, sync);
+    }
+
+    async function loadForms() {
+      const state = await api("/api/state");
+      renderForms(state);
+    }
+
+    async function loadState() {
+      const state = await api("/api/state");
+      renderState(state);
+    }
+
+    async function post(path, body, progressText) {
+      setBusy(true);
+      setMessage(progressText);
+      appendLog([{ text: progressText }], `action:${progressText}`);
+      try {
+        const state = await api(path, {
+          method: "POST",
+          body: body ? JSON.stringify(body) : "{}"
+        });
+        if (path === "/api/config") {
+          renderForms(state);
+        }
+        renderState(state);
+      } catch (error) {
+        setMessage(error.message, true);
+        await loadState().catch(() => { });
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    ids.form.addEventListener("submit", event => {
+      event.preventDefault();
+      post("/api/config", readSettings(), "Saving settings...");
+    });
+
+    ids.syncButton.addEventListener("click", () => post("/api/sync", null, "Running sync..."));
+    ids.watcherButton.addEventListener("click", () => {
+      const path = watcherRunning ? "/api/watch/stop" : "/api/watch/start";
+      const message = watcherRunning ? "Stopping watcher..." : "Starting watcher...";
+      post(path, null, message);
+    });
+
+    loadForms().catch(error => setMessage(error.message, true));
+    loadState().catch(error => setMessage(error.message, true));
+    setInterval(() => loadState().catch(() => { }), 3000);
+  </script>
+</body>
+
+</html>
