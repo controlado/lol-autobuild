@@ -34,7 +34,7 @@ This project was originally developed in a private repository and is now open so
 | Summoner spells apply | Implemented | Applies two spells and preserves the current Flash slot when possible. |
 | Rune page apply | Pending | Current adapter returns not configured. |
 | Watch mode (`dev watch`) | Implemented | Syncs once per champ select when the session timer enters `FINALIZATION`. |
-| Browser-assisted auth capture | Pending | Browser source exists but is not implemented yet. |
+| Browser-assisted auth capture | Implemented | Opens Coachless login and stores tokens from the login response. |
 | Manual auth fallback via environment | Implemented | Reads `COACHLESS_ACCESS_TOKEN`, optional refresh and exp fields from process env. |
 
 ## Prerequisites
@@ -45,6 +45,7 @@ This project was originally developed in a private repository and is now open so
 - `lcu.enabled: true` when you want detection and LCU apply operations.
 - Coachless token access through one of these paths:
   - Token pair already persisted in OS keyring.
+  - Browser-assisted Coachless login.
   - Environment fallback (`COACHLESS_ACCESS_TOKEN`, optional `COACHLESS_REFRESH_TOKEN`, optional `COACHLESS_ACCESS_TOKEN_EXP`), with optional preload from `env_file.path`.
 
 ## Quick start
@@ -102,7 +103,7 @@ Flags:
 | `log_level` | string | `info` | Global log level. |
 | `coachless.api_base_url` | string | `https://api.coachless.gg` | Coachless API base URL. |
 | `coachless.timeout_seconds` | int | `20` | Coachless request timeout. |
-| `auth.auto_enabled` | bool | `true` | Enables browser-assisted source (pending implementation). |
+| `auth.auto_enabled` | bool | `true` | Enables browser-assisted Coachless token capture. |
 | `auth.manual_fallback_enabled` | bool | `true` | Enables env-based fallback source. |
 | `auth.token_skew_seconds` | int | `30` | Token validity skew before expiry. |
 | `env_file.path` | string | `""` | Optional path to `.env` file loaded before bootstrap. |
@@ -129,11 +130,10 @@ LCU connection discovery tries League process args first (`--app-port`, `--remot
 - Watch mode attempts one sync per champ select. A session `Delete` or a new non-finalized `Create` event resets that lock.
 - If the finalization sync fails, watch mode waits for the next champ select before it tries again.
 - Rune page apply is not implemented yet.
-- Browser-assisted auth capture is not implemented yet.
+- Browser-assisted auth capture watches the Coachless login response and stores the token pair.
 
 ## Next work
 
 - Implement LCU rune page apply path.
-- Implement browser-assisted auth capture flow.
 - Expand queue coverage for position detection.
 - Add richer operational diagnostics around auth and LCU failures.

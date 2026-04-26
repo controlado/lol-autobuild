@@ -15,6 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added summoner spell apply flow with Flash slot preservation behavior.
 - Added watch orchestration (`Service.Watch`) and `dev watch` command.
 - Added LCU websocket event stream support with reconnect flow.
+- Added browser-assisted Coachless token capture.
 
 ### Changed
 
@@ -35,4 +36,3 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Pending
 
 - Rune page apply is still pending in the LCU adapter.
-- Browser-assisted token capture source is still pending in auth flow.

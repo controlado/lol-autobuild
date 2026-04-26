@@ -183,7 +183,10 @@ func buildService(cfg config.Config) (lolautobuild.Service, error) {
 	provider := auth.NewProvider(
 		coachlessClient,
 		secretStore,
-		auth.BrowserSource{LoginURL: "https://coachless.gg/login-area/login"},
+		auth.BrowserSource{
+			LoginURL:       "https://coachless.gg/login-area/login",
+			AcquireTimeout: 3 * time.Minute,
+		},
 		auth.EnvManualSource{},
 		auth.ProviderOptions{
 			AutoEnabled:           cfg.Auth.AutoEnabled,

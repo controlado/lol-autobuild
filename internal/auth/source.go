@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 
 	"github.com/controlado/lol-autobuild/internal/ports"
@@ -25,17 +27,99 @@ type ManualSource interface {
 }
 
 type BrowserSource struct {
-	LoginURL string
+	LoginURL       string
+	AcquireTimeout time.Duration
 }
 
 func (s BrowserSource) Acquire(ctx context.Context) (ports.TokenPair, error) {
-	_ = chromedp.Tasks{}
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("headless", false),
+		chromedp.Flag("disable-gpu", false),
+		chromedp.Flag("no-first-run", true),
+		chromedp.Flag("no-default-browser-check", true),
+	)
+	allocCtx, cancelAlloc := chromedp.NewExecAllocator(ctx, opts...)
+	defer cancelAlloc()
 
-	if strings.TrimSpace(s.LoginURL) == "" {
-		return ports.TokenPair{}, fmt.Errorf("browser source: login URL is required")
+	browserCtx, cancelBrowser := chromedp.NewContext(allocCtx)
+	defer cancelBrowser()
+
+	ctx, cancel := context.WithTimeout(browserCtx, s.AcquireTimeout)
+	defer cancel()
+
+	tokenPairChannel := make(chan ports.TokenPair, 1)
+	onAuthResponse := func(e *network.EventResponseReceived) {
+		var (
+			body          []byte
+			bodyExtractor = func(ctx context.Context) (handlerErr error) {
+				body, handlerErr = network.GetResponseBody(e.RequestID).Do(ctx)
+				return
+			}
+			action = chromedp.ActionFunc(bodyExtractor)
+		)
+		if err := chromedp.Run(ctx, action); err != nil {
+			return
+		}
+
+		pair, ok := s.tokenPairFromRawBody(body)
+		if !ok {
+			return
+		}
+
+		select {
+		case tokenPairChannel <- pair:
+		default:
+		}
 	}
 
-	return ports.TokenPair{}, fmt.Errorf("browser source: %w", ErrNotImplemented)
+	chromedp.ListenTarget(ctx, func(ev any) {
+		switch e := ev.(type) {
+		case *network.EventResponseReceived:
+			if e.Response == nil || !strings.Contains(e.Response.URL, "/api/Auth/login") {
+				return
+			}
+			go onAuthResponse(e)
+		}
+	})
+
+	if err := chromedp.Run(
+		ctx,
+		network.Enable(),
+		chromedp.Navigate(s.LoginURL),
+	); err != nil {
+		return ports.TokenPair{}, fmt.Errorf("running browser: %w", err)
+	}
+
+	select {
+	case pair := <-tokenPairChannel:
+		return pair, nil
+	case <-ctx.Done():
+		return ports.TokenPair{}, ctx.Err()
+	}
+}
+
+func (s BrowserSource) tokenPairFromRawBody(raw []byte) (ports.TokenPair, bool) {
+	if len(raw) < 1 {
+		return ports.TokenPair{}, false
+	}
+
+	var dto = struct {
+		ActionResult int    `json:"actionResult"`
+		AccessToken  string `json:"accessToken"`
+		RefreshToken string `json:"refreshToken"`
+	}{}
+	if err := json.Unmarshal(raw, &dto); err != nil {
+		return ports.TokenPair{}, false
+	}
+
+	if dto.AccessToken == "" || dto.RefreshToken == "" {
+		return ports.TokenPair{}, false
+	}
+
+	return ports.TokenPair{
+		AccessToken:  dto.AccessToken,
+		RefreshToken: dto.RefreshToken,
+	}, true
 }
 
 type EnvManualSource struct{}
