@@ -24,6 +24,13 @@ lcu:
   enabled: true
   lockfile_path: ""
 
+sync:
+  patch: ""
+  apply_items: true
+  apply_runes: false
+  apply_spells: true
+  dry_run: true
+
 watch:
   debounce_millis: 500
   reconnect_delay_millis: 1000

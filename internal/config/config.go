@@ -2,11 +2,7 @@ package config
 
 import (
 	"errors"
-	"fmt"
-	"os"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
@@ -17,6 +13,7 @@ type Config struct {
 	Secrets        SecretsConfig        `yaml:"secrets"`
 	Recommendation RecommendationConfig `yaml:"recommendation"`
 	LCU            LCUConfig            `yaml:"lcu"`
+	Sync           SyncConfig           `yaml:"sync"`
 	Watch          WatchConfig          `yaml:"watch"`
 }
 
@@ -50,6 +47,14 @@ type LCUConfig struct {
 	LockfilePath string `yaml:"lockfile_path"`
 }
 
+type SyncConfig struct {
+	Patch       string `yaml:"patch"`
+	ApplyItems  bool   `yaml:"apply_items"`
+	ApplyRunes  bool   `yaml:"apply_runes"`
+	ApplySpells bool   `yaml:"apply_spells"`
+	DryRun      bool   `yaml:"dry_run"`
+}
+
 type WatchConfig struct {
 	DebounceMillis       int `yaml:"debounce_millis"`
 	ReconnectDelayMillis int `yaml:"reconnect_delay_millis"`
@@ -78,30 +83,17 @@ func Defaults() Config {
 		LCU: LCUConfig{
 			Enabled: false,
 		},
+		Sync: SyncConfig{
+			ApplyItems:  true,
+			ApplyRunes:  true,
+			ApplySpells: true,
+			DryRun:      true,
+		},
 		Watch: WatchConfig{
 			DebounceMillis:       500,
 			ReconnectDelayMillis: 1000,
 		},
 	}
-}
-
-func Load(path string) (Config, error) {
-	cfg := Defaults()
-
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return Config{}, fmt.Errorf("read config: %w", err)
-	}
-
-	if err := yaml.Unmarshal(raw, &cfg); err != nil {
-		return Config{}, fmt.Errorf("parse config: %w", err)
-	}
-
-	if err := cfg.Validate(); err != nil {
-		return Config{}, err
-	}
-
-	return cfg, nil
 }
 
 func (c Config) Validate() error {

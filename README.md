@@ -113,6 +113,11 @@ Flags:
 | `recommendation.top_spells` | int | `2` | Max recommended spell count. |
 | `lcu.enabled` | bool | `false` | Enables LCU detection and apply paths. |
 | `lcu.lockfile_path` | string | `""` | Optional lockfile fallback path. |
+| `sync.patch` | string | `""` | Patch label used by the local UI. Empty means latest. |
+| `sync.apply_items` | bool | `true` | Local UI setting for item set apply. |
+| `sync.apply_runes` | bool | `true` | Local UI setting for rune page apply. |
+| `sync.apply_spells` | bool | `true` | Local UI setting for summoner spell apply. |
+| `sync.dry_run` | bool | `true` | Local UI preview mode. |
 | `watch.debounce_millis` | int | `500` | Debounce window after finalization events. |
 | `watch.reconnect_delay_millis` | int | `1000` | Delay before websocket reconnect attempts. |
 

@@ -151,7 +151,12 @@ func bindRunFlags(cmd *cobra.Command, flags *runFlags) {
 }
 
 func loadConfigAndLogging(configPath string) (config.Config, error) {
-	cfg, err := config.Load(configPath)
+	configStore, err := config.NewConfigStore(configPath)
+	if err != nil {
+		return config.Config{}, err
+	}
+
+	cfg, err := configStore.Load()
 	if err != nil {
 		return config.Config{}, err
 	}

@@ -16,6 +16,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added watch orchestration (`Service.Watch`) and `dev watch` command.
 - Added LCU websocket event stream support with reconnect flow.
 - Added browser-assisted Coachless token capture.
+- Added persisted `sync` config settings for the local UI.
 
 ### Changed
 
