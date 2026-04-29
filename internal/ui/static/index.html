@@ -79,6 +79,33 @@
       justify-content: flex-end;
     }
 
+    .locale-control {
+      display: grid;
+      gap: 7px;
+    }
+
+    .locale-control select {
+      appearance: none;
+      -webkit-appearance: none;
+      min-height: 36px;
+      padding: 7px 40px 7px 10px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      color: var(--ink);
+      background-color: var(--surface-soft);
+      background-image: url("data:image/svg+xml,%3Csvg width='12' height='12' viewBox='0 0 12 12' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5' fill='none' stroke='%23e6eee9' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-position: right 14px center;
+      background-repeat: no-repeat;
+      background-size: 12px 12px;
+      font: inherit;
+      font-weight: 700;
+    }
+
+    .locale-control select:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+    }
+
     .label {
       margin: 0 0 7px;
       color: var(--muted);
@@ -213,7 +240,7 @@
       width: 100%;
     }
 
-    .sync-option-header > .check {
+    .sync-option-header>.check {
       min-width: 0;
     }
 
@@ -540,63 +567,72 @@
   <main aria-busy="false">
     <div class="topbar">
       <div>
-        <p class="label">Local UI</p>
-        <h1>lol-autobuild</h1>
+        <p class="label" data-i18n="header.local_ui">Local UI</p>
+        <h1 data-i18n="app.title">lol-autobuild</h1>
       </div>
       <div class="topbar-meta">
-        <p class="lede">Sync League Client item sets and summoner spells from Coachless while champ select is open.</p>
-        <button type="button" id="updateButton" class="secondary compact">Check updates</button>
+        <p class="lede" data-i18n="header.lede">Sync League Client item sets and summoner spells from Coachless while
+          champ select is open.</p>
+        <div class="locale-control">
+          <label class="label" for="localeSelect" data-i18n="locale.label">Language</label>
+          <select id="localeSelect" aria-label="Language" data-i18n-aria-label="locale.aria_label">
+            <option value="en">English</option>
+            <option value="pt-BR">Português (BR)</option>
+          </select>
+        </div>
+        <button type="button" id="updateButton" class="secondary compact" data-i18n="action.check_updates">Check
+          updates</button>
       </div>
     </div>
 
     <section class="update-banner" id="updateBanner" aria-live="polite" hidden>
       <div>
-        <p class="label">New version</p>
+        <p class="label" data-i18n="update.new_version">New version</p>
         <p class="update-copy" id="updateText"></p>
       </div>
       <a class="download-link" id="updateLink" href="https://github.com/controlado/lol-autobuild/releases/latest"
-        target="_blank" rel="noreferrer">Download update</a>
+        target="_blank" rel="noreferrer" data-i18n="update.download_link">Download update</a>
     </section>
 
-    <section class="status-strip" aria-label="Current state">
+    <section class="status-strip" aria-label="Current state" data-i18n-aria-label="state.current_state">
       <div class="stat">
-        <p class="label">League Client</p>
-        <p class="value is-info" id="lcuStatus">Checking LCU...</p>
+        <p class="label" data-i18n="state.league_client">League Client</p>
+        <p class="value is-info" id="lcuStatus" data-i18n="lcu.checking">Checking LCU...</p>
       </div>
       <div class="stat">
-        <p class="label">Watcher</p>
-        <p class="value" id="watcherStatus">Stopped</p>
+        <p class="label" data-i18n="state.watcher">Watcher</p>
+        <p class="value" id="watcherStatus" data-i18n="watcher.stopped">Stopped</p>
       </div>
       <div class="stat">
-        <p class="label">Write mode</p>
-        <p class="value is-info" id="modeStatus">Preview: no writes</p>
+        <p class="label" data-i18n="state.write_mode">Client changes</p>
+        <p class="value is-info" id="modeStatus">Simulation: no client changes</p>
       </div>
     </section>
 
     <div class="workspace">
       <section class="panel">
-        <h2 class="section-title">Settings</h2>
+        <h2 class="section-title" data-i18n="settings.title">Settings</h2>
         <form id="settingsForm">
           <label class="check">
             <input type="checkbox" id="lcuEnabled">
-            Use League Client
+            <span data-i18n="settings.use_league_client">Connect to League Client</span>
           </label>
 
           <div class="field">
-            <label class="label" for="patch">Patch</label>
+            <label class="label" for="patch" data-i18n="settings.patch">Patch</label>
             <input id="patch" type="text" autocomplete="off" placeholder="16.7">
-            <p class="help">Leave this blank to use the latest Coachless patch.</p>
+            <p class="help" data-i18n="settings.patch_help">Leave this blank to use the latest Coachless patch.</p>
           </div>
 
           <fieldset>
-            <legend class="label">Sync updates</legend>
+            <legend class="label" data-i18n="settings.sync_updates">Sync updates</legend>
             <div class="sync-options">
               <div class="sync-option">
                 <div class="sync-option-header">
                   <label class="check is-disabled" aria-disabled="true">
                     <input type="checkbox" id="applyRunes" disabled>
-                    Runes
-                    <span class="tag">Pending</span>
+                    <span data-i18n="settings.runes">Runes</span>
+                    <span class="tag" data-i18n="state.pending">Pending</span>
                   </label>
                 </div>
               </div>
@@ -604,7 +640,7 @@
                 <div class="sync-option-header">
                   <label class="check">
                     <input type="checkbox" id="applyItems">
-                    Items
+                    <span data-i18n="settings.items">Items</span>
                   </label>
                 </div>
               </div>
@@ -612,16 +648,17 @@
                 <div class="sync-dropdown-header">
                   <label class="check">
                     <input type="checkbox" id="applySpells">
-                    Summoner spells
+                    <span data-i18n="settings.summoner_spells">Summoner spells</span>
                   </label>
                   <button type="button" id="spellsOptionsButton" class="sync-dropdown-toggle"
                     aria-label="Toggle summoner spell options" aria-expanded="false" aria-controls="spellsSuboptions"
-                    aria-disabled="true" disabled></button>
+                    aria-disabled="true" data-i18n-aria-label="settings.toggle_spell_options" disabled></button>
                 </div>
-                <div class="sync-suboptions" id="spellsSuboptions" aria-label="Summoner spell advanced options" hidden>
+                <div class="sync-suboptions" id="spellsSuboptions" aria-label="Summoner spell advanced options"
+                  data-i18n-aria-label="settings.spell_options" hidden>
                   <label class="check is-disabled">
                     <input type="checkbox" id="keepFlash" disabled>
-                    Keep Flash
+                    <span data-i18n="settings.keep_flash">Keep Flash</span>
                   </label>
                 </div>
               </div>
@@ -629,67 +666,94 @@
                 <div class="sync-option-header">
                   <label class="check">
                     <input type="checkbox" id="dryRun">
-                    Preview only
+                    <span data-i18n="settings.preview_only">Simulate only</span>
                   </label>
                 </div>
               </div>
             </div>
-            <p class="help sync-options-help">Rune apply stays off until the LCU adapter supports it.</p>
+            <p class="help sync-options-help" data-i18n="settings.runes_help">Rune apply stays off until the LCU adapter
+              supports it.</p>
           </fieldset>
 
           <div class="actions">
-            <button type="submit" id="saveButton">Save</button>
-            <button type="button" id="syncButton">Sync now</button>
-            <button type="button" id="watcherButton" class="secondary">Start watcher</button>
+            <button type="submit" id="saveButton" data-i18n="action.save">Save</button>
+            <button type="button" id="syncButton" data-i18n="action.sync_now">Sync now</button>
+            <button type="button" id="watcherButton" class="secondary" data-i18n="action.start_watcher">Start
+              watcher</button>
           </div>
         </form>
       </section>
 
       <section class="panel">
-        <h2 class="section-title">Last cycle</h2>
-        <div class="result" aria-label="Last sync result">
+        <h2 class="section-title" data-i18n="result.title">Last cycle</h2>
+        <div class="result" aria-label="Last sync result" data-i18n-aria-label="result.last_sync_result">
           <div class="result-row">
-            <span>Updated</span>
-            <span class="cell-value" id="updatedValue">No sync yet</span>
+            <span data-i18n="result.updated">Sync time</span>
+            <span class="cell-value" id="updatedValue" data-i18n="state.no_sync_yet">No sync yet</span>
           </div>
           <div class="result-row">
-            <span>Champion ID</span>
-            <span class="cell-value" id="championValue">No sync yet</span>
+            <span data-i18n="result.champion_id">Champion ID</span>
+            <span class="cell-value" id="championValue" data-i18n="state.no_sync_yet">No sync yet</span>
           </div>
           <div class="result-row">
-            <span>Position</span>
-            <span class="cell-value" id="positionValue">No sync yet</span>
+            <span data-i18n="result.position">Position</span>
+            <span class="cell-value" id="positionValue" data-i18n="state.no_sync_yet">No sync yet</span>
           </div>
           <div class="result-row">
-            <span>Queue ID</span>
-            <span class="cell-value" id="queueValue">No sync yet</span>
+            <span data-i18n="result.queue_id">Queue ID</span>
+            <span class="cell-value" id="queueValue" data-i18n="state.no_sync_yet">No sync yet</span>
           </div>
           <div class="result-row">
-            <span>Items</span>
-            <span class="cell-value" id="itemsValue">Not applied</span>
+            <span data-i18n="result.items">Items</span>
+            <span class="cell-value" id="itemsValue" data-i18n="state.not_applied">Not applied</span>
           </div>
           <div class="result-row">
-            <span>Spells</span>
-            <span class="cell-value" id="spellsValue">Not applied</span>
+            <span data-i18n="result.spells">Spells</span>
+            <span class="cell-value" id="spellsValue" data-i18n="state.not_applied">Not applied</span>
           </div>
         </div>
-        <div class="message" id="messageBox" role="status" aria-live="polite">No sync has run in this session.</div>
+        <div class="message" id="messageBox" role="status" aria-live="polite" data-i18n="message.no_sync_session">No
+          sync has run in this session.</div>
       </section>
     </div>
 
     <section class="panel cycle-log">
-      <h2 class="section-title">Logs</h2>
+      <h2 class="section-title" data-i18n="logs.title">Logs</h2>
       <ul class="log-list" id="logList" aria-live="polite">
-        <li>No events yet.</li>
+        <li data-i18n="log.no_events">No events yet.</li>
       </ul>
     </section>
   </main>
 
   <script>
     const token = "__API_TOKEN__";
-    const noSyncText = "No sync yet";
+    const localeStorageKey = "lol-autobuild.locale";
+    const fallbackLocale = "en";
+    const localeFiles = {
+      "en": "/i18n/en.json",
+      "pt-BR": "/i18n/pt-BR.json"
+    };
+    const translations = Object.create(null);
+    const translationLoads = Object.create(null);
+    const knownMessageKeys = {
+      "LCU is off.": "lcu.off",
+      "LCU is off": "lcu.off",
+      "League Client is not open.": "lcu.lockfile_not_found",
+      "Champ select is not ready.": "lcu.champ_select_unavailable",
+      "Select a champion first.": "lcu.champion_not_selected",
+      "Coachless login is missing.": "coachless.login_missing",
+      "Another sync is already running": "sync.already_running",
+      "Watcher pre-start failed.": "watch.pre_start_failed",
+      "Watcher start failed.": "watch.start_failed",
+      "Invalid UI token.": "ui.invalid_token",
+      "Settings are invalid.": "ui.invalid_settings",
+      "Method is not allowed.": "ui.method_not_allowed",
+      "UI file is missing.": "ui.file_missing"
+    };
+    let currentLocale = resolveInitialLocale();
     const ids = {
       main: document.querySelector("main"),
+      localeSelect: document.getElementById("localeSelect"),
       lcuStatus: document.getElementById("lcuStatus"),
       watcherStatus: document.getElementById("watcherStatus"),
       modeStatus: document.getElementById("modeStatus"),
@@ -720,23 +784,213 @@
       spellsValue: document.getElementById("spellsValue")
     };
     let watcherRunning = false;
-    let lastLogKey = "empty";
-    let updateFeedbackTimer = 0;
-    const logHistory = [{ text: "No events yet." }];
 
-    function api(path, options = {}) {
-      const join = path.includes("?") ? "&" : "?";
-      return fetch(`${path}${join}token=${encodeURIComponent(token)}`, {
-        headers: { "Content-Type": "application/json" },
-        ...options
-      }).then(async response => {
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(data.error || "Request failed.");
+    let lastLogKey = "empty";
+    const logHistory = [{ key: "log.no_events" }];
+
+    let updateFeedbackTimer = 0;
+    let updateFeedbackKey = "";
+    let updateChecking = false;
+    let currentUpdateStatus = "idle";
+
+    let currentState = null;
+
+    let currentMessage = { key: "message.no_sync_session" };
+    let currentMessageIsError = false;
+
+    let formsLoaded = false;
+
+    function localeFrom(value) {
+      const normalized = String(value || "").replace("_", "-").toLowerCase();
+      if (normalized === "pt" || normalized.startsWith("pt-")) {
+        return "pt-BR";
+      }
+      if (normalized === "en" || normalized.startsWith("en-")) {
+        return "en";
+      }
+      return "";
+    }
+
+    function storedLocale() {
+      try {
+        return localStorage.getItem(localeStorageKey) || "";
+      } catch {
+        return "";
+      }
+    }
+
+    function resolveInitialLocale() {
+      const stored = localeFrom(storedLocale());
+      if (stored) {
+        return stored;
+      }
+
+      const browserLocales = Array.isArray(navigator.languages) && navigator.languages.length > 0
+        ? navigator.languages
+        : [navigator.language];
+
+      for (const browserLocale of browserLocales) {
+        const matched = localeFrom(browserLocale);
+        if (matched) {
+          return matched;
         }
-        return data;
+      }
+
+      return "en";
+    }
+
+    function saveLocale(locale) {
+      try {
+        localStorage.setItem(localeStorageKey, locale);
+      } catch {
+      }
+    }
+
+    async function loadLocale(locale) {
+      if (translations[locale]) {
+        return translations[locale];
+      }
+
+      const url = localeFiles[locale];
+      if (!url) {
+        throw new Error(`Unknown locale: ${locale}`);
+      }
+
+      if (!translationLoads[locale]) {
+        const jsonRequest = {
+          headers: { Accept: "application/json" }
+        };
+        translationLoads[locale] = fetch(url, jsonRequest).then(async response => {
+          if (!response.ok) {
+            throw new Error(`Could not load ${locale} translations.`);
+          }
+
+          const catalog = await response.json();
+          translations[locale] = catalog;
+          return catalog;
+        }).catch(error => {
+          delete translationLoads[locale];
+          throw error;
+        });
+      }
+
+      return translationLoads[locale];
+    }
+
+    async function ensureLocale(locale) {
+      const nextLocale = localeFrom(locale) || fallbackLocale;
+      await loadLocale(fallbackLocale);
+      if (nextLocale === fallbackLocale) {
+        return fallbackLocale;
+      }
+
+      try {
+        await loadLocale(nextLocale);
+        return nextLocale;
+      } catch (error) {
+        console.warn(error);
+        return fallbackLocale;
+      }
+    }
+
+    function hasTranslation(key) {
+      const catalog = translations[currentLocale] || {};
+      const fallbackCatalog = translations[fallbackLocale] || {};
+      return Boolean(key && (catalog[key] || fallbackCatalog[key]));
+    }
+
+    function t(key, params = {}, fallback = "") {
+      const catalog = translations[currentLocale] || {};
+      const fallbackCatalog = translations[fallbackLocale] || {};
+      const template = catalog[key] || fallbackCatalog[key];
+      if (!template) {
+        return fallback || key;
+      }
+
+      return template.replace(/\{(\w+)\}/g, (_match, name) => {
+        const value = params[name];
+        return value === undefined || value === null ? "" : String(value);
       });
     }
+
+    function textForDescriptor(descriptor) {
+      if (!descriptor) {
+        return "";
+      }
+
+      if (typeof descriptor === "string") {
+        if (hasTranslation(descriptor)) {
+          return t(descriptor);
+        }
+        const key = knownMessageKeys[descriptor] || "";
+        return key ? t(key) : descriptor;
+      }
+
+      const fallback = descriptor.fallback || "";
+      const key = descriptor.key || knownMessageKeys[fallback] || "";
+      if (hasTranslation(key)) {
+        return t(key, {}, fallback);
+      }
+
+      return fallback;
+    }
+
+    function applyStaticTranslations() {
+      document.documentElement.lang = currentLocale;
+      document.title = t("app.title");
+
+      document.querySelectorAll("[data-i18n]").forEach(element => {
+        element.textContent = t(element.dataset.i18n);
+      });
+
+      document.querySelectorAll("[data-i18n-aria-label]").forEach(element => {
+        element.setAttribute("aria-label", t(element.dataset.i18nAriaLabel));
+      });
+
+      ids.localeSelect.value = currentLocale;
+    }
+
+    async function setLocale(locale, shouldPersist = true) {
+      currentLocale = await ensureLocale(locale);
+      if (shouldPersist) {
+        saveLocale(currentLocale);
+      }
+
+      applyStaticTranslations();
+      renderUpdateButton();
+      if (formsLoaded) {
+        renderModeStatus(readSettings());
+      } else if (currentState && currentState.settings) {
+        renderModeStatus(currentState.settings);
+      }
+      if (currentState) {
+        renderState(currentState);
+      } else {
+        setMessage(currentMessage, currentMessageIsError);
+      }
+      renderLogList();
+    }
+
+    async function api(path, options = {}) {
+      const join = path.includes("?") ? "&" : "?";
+      const url = `${path}${join}token=${encodeURIComponent(token)}`;
+      const jsonRequest = {
+        headers: { "Content-Type": "application/json" },
+        ...options
+      };
+      const response = await fetch(url, jsonRequest);
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const error = new Error(data.error || t("api.request_failed"));
+        error.code = data.error_code || "";
+        error.fallback = data.error || "";
+        throw error;
+      }
+
+      return data;
+    }
+
 
     function readSettings() {
       return {
@@ -774,18 +1028,30 @@
       ids.watcherButton.disabled = isBusy;
     }
 
-    function resetUpdateButton() {
+    function renderUpdateButton() {
+      if (updateChecking || currentUpdateStatus === "checking") {
+        ids.updateButton.disabled = true;
+        ids.updateButton.textContent = t("action.checking");
+        return;
+      }
+
       ids.updateButton.disabled = false;
-      ids.updateButton.textContent = "Check updates";
+      ids.updateButton.textContent = updateFeedbackKey ? t(updateFeedbackKey) : t("action.check_updates");
     }
 
-    function setUpdateFeedback(text) {
+    function resetUpdateButton() {
+      updateFeedbackKey = "";
+      renderUpdateButton();
+    }
+
+    function setUpdateFeedback(key) {
       if (updateFeedbackTimer) {
         clearTimeout(updateFeedbackTimer);
       }
 
-      ids.updateButton.disabled = false;
-      ids.updateButton.textContent = text;
+      updateFeedbackKey = key;
+      renderUpdateButton();
+
       updateFeedbackTimer = setTimeout(() => {
         updateFeedbackTimer = 0;
         resetUpdateButton();
@@ -794,13 +1060,15 @@
 
     function renderUpdate(state) {
       const update = state.update || { status: "idle" };
+      currentUpdateStatus = update.status || "idle";
+
       const hasUpdate = update.status === "available";
       ids.updateBanner.hidden = !hasUpdate;
 
       if (hasUpdate) {
-        const version = update.latest_version || "the new version";
-        const current = update.current_version ? ` You have ${update.current_version}.` : "";
-        ids.updateText.textContent = `Download ${version}.${current}`;
+        const version = update.latest_version || t("update.new_version_generic");
+        const current = update.current_version ? t("update.current_version", { version: update.current_version }) : "";
+        ids.updateText.textContent = t("update.download_version", { version, current });
         ids.updateLink.href = update.download_url || "https://github.com/controlado/lol-autobuild/releases/latest";
       }
 
@@ -809,22 +1077,19 @@
           clearTimeout(updateFeedbackTimer);
           updateFeedbackTimer = 0;
         }
-        ids.updateButton.disabled = true;
-        ids.updateButton.textContent = "Checking...";
+        renderUpdateButton();
         return;
       }
 
-      if (!updateFeedbackTimer) {
-        resetUpdateButton();
-      } else {
-        ids.updateButton.disabled = false;
-      }
+      renderUpdateButton();
     }
 
-    function setMessage(text, isError = false) {
+    function setMessage(descriptor, isError = false) {
+      currentMessage = descriptor || { key: "message.no_sync_session" };
+      currentMessageIsError = isError;
       ids.messageBox.classList.toggle("error", isError);
       ids.messageBox.setAttribute("role", isError ? "alert" : "status");
-      ids.messageBox.textContent = text || "No sync has run in this session.";
+      ids.messageBox.textContent = textForDescriptor(currentMessage) || t("message.no_sync_session");
     }
 
     function setValue(element, text, tone = "") {
@@ -838,12 +1103,24 @@
     }
 
     function appliedText(value) {
-      return value ? "Applied" : "Not applied";
+      return value ? t("state.applied") : t("state.not_applied");
+    }
+
+    function renderModeStatus(settings) {
+      if (!settings) {
+        return;
+      }
+
+      setValue(
+        ids.modeStatus,
+        settings.dry_run ? t("mode.preview") : t("mode.live"),
+        settings.dry_run ? "info" : "warn",
+      );
     }
 
     function formatTime(value) {
       if (!value) {
-        return noSyncText;
+        return t("state.no_sync_yet");
       }
 
       const date = new Date(value);
@@ -851,7 +1128,7 @@
         return value;
       }
 
-      return new Intl.DateTimeFormat(undefined, {
+      return new Intl.DateTimeFormat(currentLocale, {
         year: "numeric",
         month: "short",
         day: "2-digit",
@@ -864,7 +1141,8 @@
     function renderLogList() {
       ids.logList.replaceChildren(...logHistory.map(item => {
         const li = document.createElement("li");
-        li.textContent = item.time ? `${item.time} - ${item.text}` : item.text;
+        const text = textForDescriptor(item);
+        li.textContent = item.time ? `${formatTime(item.time)} - ${text}` : text;
         if (item.tone) {
           li.className = item.tone;
         }
@@ -878,46 +1156,47 @@
       }
 
       lastLogKey = key;
-      if (logHistory.length === 1 && logHistory[0].text === "No events yet.") {
+      if (logHistory.length === 1 && logHistory[0].key === "log.no_events") {
         logHistory.length = 0;
       }
 
-      const time = formatTime(new Date().toISOString());
+      const time = new Date().toISOString();
       logHistory.push(...items.map(item => ({ ...item, time })));
       renderLogList();
     }
 
     function renderLog(state, sync) {
       if (state.last_error) {
-        appendLog([{ text: state.last_error, tone: "error" }], `error:${state.last_error}`);
+        appendLog([{ key: state.last_error_code, fallback: state.last_error, tone: "error" }], `error:${state.last_error_code || state.last_error}`);
         return;
       }
 
       if (sync && sync.Warnings && sync.Warnings.length > 0) {
         appendLog(
-          sync.Warnings.map(warning => ({ text: warning, tone: "warn" })),
+          sync.Warnings.map(warning => ({ fallback: warning, tone: "warn" })),
           `warnings:${state.last_sync_at || ""}:${sync.Warnings.join("|")}`
         );
         return;
       }
 
       if (sync) {
-        appendLog([{ text: "Sync finished without warnings." }], `sync:${state.last_sync_at || JSON.stringify(sync)}`);
+        appendLog([{ key: "log.sync_without_warnings" }], `sync:${state.last_sync_at || JSON.stringify(sync)}`);
         return;
       }
 
       if (state.watcher.running) {
-        appendLog([{ text: "Watcher is waiting for champ select finalization." }], "watcher:running");
+        appendLog([{ key: "log.watcher_waiting" }], "watcher:running");
         return;
       }
 
       if (logHistory.length === 0) {
-        appendLog([{ text: "No events yet." }], "empty");
+        appendLog([{ key: "log.no_events" }], "empty");
       }
     }
 
     function renderForms(state) {
       const settings = state.settings;
+      formsLoaded = true;
       ids.lcuEnabled.checked = settings.lcu_enabled;
       ids.patch.value = settings.patch || "";
       ids.applyItems.checked = settings.apply_items;
@@ -926,43 +1205,44 @@
       ids.keepFlash.checked = settings.keep_flash;
       ids.dryRun.checked = settings.dry_run;
       syncSpellsSuboptions();
-      setValue(ids.modeStatus, settings.dry_run ? "Preview: no writes" : "Live: writes enabled", settings.dry_run ? "info" : "warn");
+      renderModeStatus(settings);
     }
 
     function renderState(state) {
+      currentState = state;
       renderUpdate(state);
 
       watcherRunning = state.watcher.running;
-      ids.watcherButton.textContent = watcherRunning ? "Stop watcher" : "Start watcher";
+      ids.watcherButton.textContent = watcherRunning ? t("action.stop_watcher") : t("action.start_watcher");
       ids.watcherButton.setAttribute("aria-pressed", String(watcherRunning));
-      setValue(ids.watcherStatus, watcherRunning ? "Running" : "Stopped", watcherRunning ? "good" : "");
+      setValue(ids.watcherStatus, watcherRunning ? t("watcher.running") : t("watcher.stopped"), watcherRunning ? "good" : "");
 
       if (state.lcu.state === "connected") {
-        setValue(ids.lcuStatus, "Connected", "good");
+        setValue(ids.lcuStatus, t("lcu.connected"), "good");
       } else if (state.lcu.state === "off") {
-        setValue(ids.lcuStatus, "LCU disabled", "warn");
+        setValue(ids.lcuStatus, t("lcu.disabled"), "warn");
       } else {
-        setValue(ids.lcuStatus, state.lcu.message || "Not connected", "bad");
+        setValue(ids.lcuStatus, textForDescriptor(state.lcu.message || "lcu.not_connected"), "bad");
       }
 
       const sync = state.last_sync;
       setCell(ids.updatedValue, formatTime(state.last_sync_at));
-      setCell(ids.championValue, sync ? String(sync.DetectedChampionID) : noSyncText);
-      setCell(ids.positionValue, sync ? sync.DetectedPosition || "Not detected" : noSyncText);
-      setCell(ids.queueValue, sync ? String(sync.DetectedQueueID) : noSyncText);
-      setCell(ids.itemsValue, sync ? appliedText(sync.ItemSetApplied) : "Not applied", sync && sync.ItemSetApplied ? "good" : "");
-      setCell(ids.spellsValue, sync ? appliedText(sync.SpellsApplied) : "Not applied", sync && sync.SpellsApplied ? "good" : "");
+      setCell(ids.championValue, sync ? String(sync.DetectedChampionID) : t("state.no_sync_yet"));
+      setCell(ids.positionValue, sync ? sync.DetectedPosition || t("state.not_detected") : t("state.no_sync_yet"));
+      setCell(ids.queueValue, sync ? String(sync.DetectedQueueID) : t("state.no_sync_yet"));
+      setCell(ids.itemsValue, sync ? appliedText(sync.ItemSetApplied) : t("state.not_applied"), sync && sync.ItemSetApplied ? "good" : "");
+      setCell(ids.spellsValue, sync ? appliedText(sync.SpellsApplied) : t("state.not_applied"), sync && sync.SpellsApplied ? "good" : "");
 
       if (state.last_error) {
-        setMessage(state.last_error, true);
+        setMessage({ key: state.last_error_code, fallback: state.last_error }, true);
       } else if (sync && sync.Warnings && sync.Warnings.length > 0) {
-        setMessage("Sync finished with warnings.");
+        setMessage({ key: "message.sync_with_warnings" });
       } else if (sync) {
-        setMessage("Sync finished.");
+        setMessage({ key: "message.sync_finished" });
       } else if (state.watcher.running) {
-        setMessage("Watcher is waiting for champ select finalization.");
+        setMessage({ key: "message.watcher_waiting" });
       } else {
-        setMessage("No sync has run in this session.");
+        setMessage({ key: "message.no_sync_session" });
       }
 
       renderLog(state, sync);
@@ -979,8 +1259,8 @@
     }
 
     async function checkUpdates(isManual) {
-      ids.updateButton.disabled = true;
-      ids.updateButton.textContent = "Checking...";
+      updateChecking = true;
+      renderUpdateButton();
 
       try {
         const state = await api("/api/update/check", {
@@ -992,30 +1272,34 @@
         if (isManual) {
           const status = state.update && state.update.status;
           if (status === "current") {
-            setUpdateFeedback("Up to date");
+            setUpdateFeedback("update.up_to_date");
           } else if (status === "unavailable") {
-            setUpdateFeedback("Cannot check");
+            setUpdateFeedback("update.cannot_check");
           } else if (status === "error") {
-            setUpdateFeedback("Check failed");
+            setUpdateFeedback("update.check_failed");
           }
         }
       } catch (error) {
+        currentUpdateStatus = "idle";
         if (isManual) {
-          setUpdateFeedback("Check failed");
+          setUpdateFeedback("update.check_failed");
         } else {
           resetUpdateButton();
         }
       } finally {
+        updateChecking = false;
         if (!updateFeedbackTimer) {
           resetUpdateButton();
+        } else {
+          renderUpdateButton();
         }
       }
     }
 
-    async function post(path, body, progressText) {
+    async function post(path, body, progressKey) {
       setBusy(true);
-      setMessage(progressText);
-      appendLog([{ text: progressText }], `action:${progressText}`);
+      setMessage({ key: progressKey });
+      appendLog([{ key: progressKey }], `action:${progressKey}`);
       try {
         const state = await api(path, {
           method: "POST",
@@ -1026,35 +1310,51 @@
         }
         renderState(state);
       } catch (error) {
-        setMessage(error.message, true);
+        setMessage({ key: error.code, fallback: error.fallback || error.message }, true);
         await loadState().catch(() => { });
       } finally {
         setBusy(false);
       }
     }
 
+    async function initialize() {
+      currentLocale = await ensureLocale(currentLocale);
+      applyStaticTranslations();
+      loadForms().catch(error => setMessage({ key: error.code, fallback: error.fallback || error.message }, true));
+      loadState().catch(error => setMessage({ key: error.code, fallback: error.fallback || error.message }, true));
+      checkUpdates(false).catch(() => { });
+      setInterval(() => loadState().catch(() => { }), 3000);
+    }
+
+    ids.localeSelect.addEventListener("change", () => {
+      setLocale(ids.localeSelect.value).catch(error => {
+        console.error(error);
+        setMessage({ fallback: error.message }, true);
+      });
+    });
     ids.form.addEventListener("submit", event => {
       event.preventDefault();
-      post("/api/config", readSettings(), "Saving settings...");
+      post("/api/config", readSettings(), "action.saving_settings");
     });
 
     ids.applySpells.addEventListener("change", syncSpellsSuboptions);
+    ids.dryRun.addEventListener("change", () => renderModeStatus(readSettings()));
     ids.spellsOptionsButton.addEventListener("click", () => {
       const isOpen = ids.spellsOptionsButton.getAttribute("aria-expanded") === "true";
       setSpellsSuboptionsOpen(!isOpen);
     });
-    ids.syncButton.addEventListener("click", () => post("/api/sync", null, "Running sync..."));
+    ids.syncButton.addEventListener("click", () => post("/api/sync", null, "action.running_sync"));
     ids.updateButton.addEventListener("click", () => checkUpdates(true));
     ids.watcherButton.addEventListener("click", () => {
       const path = watcherRunning ? "/api/watch/stop" : "/api/watch/start";
-      const message = watcherRunning ? "Stopping watcher..." : "Starting watcher...";
+      const message = watcherRunning ? "action.stopping_watcher" : "action.starting_watcher";
       post(path, null, message);
     });
 
-    loadForms().catch(error => setMessage(error.message, true));
-    loadState().catch(error => setMessage(error.message, true));
-    checkUpdates(false).catch(() => { });
-    setInterval(() => loadState().catch(() => { }), 3000);
+    initialize().catch(error => {
+      console.error(error);
+      setMessage({ fallback: error.message || "Could not load translations." }, true);
+    });
   </script>
 </body>
 

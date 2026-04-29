@@ -18,7 +18,7 @@ import (
 	"github.com/controlado/lol-autobuild/internal/app"
 )
 
-//go:embed static/index.html
+//go:embed static/index.html static/i18n/*.json
 var staticFiles embed.FS
 
 type App interface {
@@ -36,6 +36,11 @@ var (
 	invalidSettingsMessage  = app.UserMessage{Code: "ui.invalid_settings", Text: "Settings are invalid."}
 	methodNotAllowedMessage = app.UserMessage{Code: "ui.method_not_allowed", Text: "Method is not allowed."}
 )
+
+var i18nAssetPaths = map[string]string{
+	"/i18n/en.json":    "static/i18n/en.json",
+	"/i18n/pt-BR.json": "static/i18n/pt-BR.json",
+}
 
 type Server struct {
 	app         App
@@ -115,6 +120,7 @@ func (s *Server) Run(ctx context.Context) error {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleIndex)
+	mux.HandleFunc("/i18n/", s.handleI18N)
 	mux.HandleFunc("/api/state", s.handleState)
 	mux.HandleFunc("/api/config", s.handleSaveConfig)
 	mux.HandleFunc("/api/sync", s.handleRunSync)
@@ -150,6 +156,28 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	page := strings.ReplaceAll(string(raw), "__API_TOKEN__", s.token)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = io.WriteString(w, page)
+}
+
+func (s *Server) handleI18N(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodGet) {
+		return
+	}
+
+	assetPath, ok := i18nAssetPaths[r.URL.Path]
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+
+	raw, err := staticFiles.ReadFile(assetPath)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, uiFileMissingMessage)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(raw)
 }
 
 func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
