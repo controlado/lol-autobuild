@@ -154,6 +154,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 			ChampionID: selection.ChampionID,
 			Position:   selection.Position,
 			SpellIDs:   spellIDs,
+			KeepFlash:  req.KeepFlash,
 			DryRun:     false,
 		}); err != nil {
 			result.Warnings = append(result.Warnings, "failed to apply summoner spells: "+err.Error())

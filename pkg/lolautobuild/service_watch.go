@@ -112,6 +112,7 @@ func (r WatchRequest) syncRequest() SyncRequest {
 		ApplyItems:  r.ApplyItems,
 		ApplyRunes:  r.ApplyRunes,
 		ApplySpells: r.ApplySpells,
+		KeepFlash:   r.KeepFlash,
 		DryRun:      r.DryRun,
 	}
 }

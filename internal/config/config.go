@@ -52,6 +52,7 @@ type SyncConfig struct {
 	ApplyItems  bool   `yaml:"apply_items"`
 	ApplyRunes  bool   `yaml:"apply_runes"`
 	ApplySpells bool   `yaml:"apply_spells"`
+	KeepFlash   bool   `yaml:"keep_flash"`
 	DryRun      bool   `yaml:"dry_run"`
 }
 
@@ -87,6 +88,7 @@ func Defaults() Config {
 			ApplyItems:  true,
 			ApplyRunes:  true,
 			ApplySpells: true,
+			KeepFlash:   true,
 			DryRun:      true,
 		},
 		Watch: WatchConfig{

@@ -8,6 +8,8 @@ import (
 	"github.com/controlado/lol-autobuild/internal/ports"
 )
 
+const flashSpellID = 4
+
 func (c *Client) ApplySummonerSpells(ctx context.Context, req ports.ApplySummonerSpellsRequest) error {
 	if !c.Enabled {
 		return ErrNotConfigured
@@ -48,7 +50,7 @@ func (c *Client) ApplySummonerSpells(ctx context.Context, req ports.ApplySummone
 				return false
 			}
 
-			spell1ID, spell2ID := keepFlashSlot(req.SpellIDs, member.Spell1ID, member.Spell2ID)
+			spell1ID, spell2ID := spellIDsForApply(req.SpellIDs, member.Spell1ID, member.Spell2ID, req.KeepFlash)
 			if err := c.patchSelectionSpells(ctx, info, spell1ID, spell2ID); err != nil {
 				if errors.Is(err, ErrChampSelectUnavailable) {
 					attempt.observe(candidateLabel, ErrChampSelectUnavailable, err)
@@ -92,6 +94,31 @@ func validateSpellApplyRequest(req ports.ApplySummonerSpellsRequest) error {
 	return nil
 }
 
+func spellIDsForApply(spellIDs []int, currentSpell1ID int, currentSpell2ID int, keepFlash bool) (int, int) {
+	if keepFlash {
+		if otherSpellID, ok := firstNonFlashSpellID(spellIDs); ok {
+			switch {
+			case currentSpell1ID == flashSpellID:
+				return flashSpellID, otherSpellID
+			case currentSpell2ID == flashSpellID:
+				return otherSpellID, flashSpellID
+			}
+		}
+	}
+
+	return keepFlashSlot(spellIDs, currentSpell1ID, currentSpell2ID)
+}
+
+func firstNonFlashSpellID(spellIDs []int) (int, bool) {
+	for _, spellID := range spellIDs {
+		if spellID != flashSpellID {
+			return spellID, true
+		}
+	}
+
+	return 0, false
+}
+
 func keepFlashSlot(spellIDs []int, currentSpell1ID int, currentSpell2ID int) (int, int) {
 	var (
 		spell1ID = spellIDs[0]
@@ -99,7 +126,7 @@ func keepFlashSlot(spellIDs []int, currentSpell1ID int, currentSpell2ID int) (in
 	)
 
 	// se não possui flash nas spells requisitadas
-	containsFlash := spell1ID == 4 || spell2ID == 4
+	containsFlash := spell1ID == flashSpellID || spell2ID == flashSpellID
 	if !containsFlash {
 		return spell1ID, spell2ID
 	}
@@ -108,15 +135,15 @@ func keepFlashSlot(spellIDs []int, currentSpell1ID int, currentSpell2ID int) (in
 	// se a primeira spell for flash, configura
 	// otherSpellID para a segunda spell
 	otherSpellID := spell1ID
-	if spell1ID == 4 {
+	if spell1ID == flashSpellID {
 		otherSpellID = spell2ID
 	}
 
 	switch {
-	case currentSpell1ID == 4:
-		return 4, otherSpellID
-	case currentSpell2ID == 4:
-		return otherSpellID, 4
+	case currentSpell1ID == flashSpellID:
+		return flashSpellID, otherSpellID
+	case currentSpell2ID == flashSpellID:
+		return otherSpellID, flashSpellID
 	default:
 		return spell1ID, spell2ID
 	}

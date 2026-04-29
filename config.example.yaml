@@ -17,7 +17,7 @@ secrets:
 
 recommendation:
   min_occurrence: 1_000
-  top_items: 6
+  top_items: 10
   top_spells: 2
 
 lcu:
@@ -29,6 +29,7 @@ sync:
   apply_items: true
   apply_runes: false
   apply_spells: true
+  keep_flash: true
   dry_run: true
 
 watch:

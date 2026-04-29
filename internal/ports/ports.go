@@ -147,6 +147,7 @@ type ApplySummonerSpellsRequest struct {
 	ChampionID int
 	Position   position.Position
 	SpellIDs   []int
+	KeepFlash  bool
 	DryRun     bool
 }
 

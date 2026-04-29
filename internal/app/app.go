@@ -134,6 +134,7 @@ func settingsFromConfig(cfg config.Config) Settings {
 		ApplyItems:  cfg.Sync.ApplyItems,
 		ApplyRunes:  cfg.Sync.ApplyRunes,
 		ApplySpells: cfg.Sync.ApplySpells,
+		KeepFlash:   cfg.Sync.KeepFlash,
 		DryRun:      cfg.Sync.DryRun,
 		LCUEnabled:  cfg.LCU.Enabled,
 	}
@@ -145,6 +146,7 @@ func applySettings(cfg *config.Config, settings Settings) {
 		ApplyItems:  settings.ApplyItems,
 		ApplyRunes:  settings.ApplyRunes,
 		ApplySpells: settings.ApplySpells,
+		KeepFlash:   settings.KeepFlash,
 		DryRun:      settings.DryRun,
 	}
 	cfg.LCU.Enabled = settings.LCUEnabled
@@ -184,6 +186,7 @@ func (a *App) runWatcher(ctx context.Context, watcherID int, svc lolautobuild.Se
 		ApplyItems:  cfg.Sync.ApplyItems,
 		ApplyRunes:  cfg.Sync.ApplyRunes,
 		ApplySpells: cfg.Sync.ApplySpells,
+		KeepFlash:   cfg.Sync.KeepFlash,
 		DryRun:      cfg.Sync.DryRun,
 		Debounce:    time.Duration(cfg.Watch.DebounceMillis) * time.Millisecond,
 		OnCycle:     func(c lolautobuild.WatchCycle) { a.observeWatchCycle(watcherID, c) },
@@ -308,6 +311,7 @@ func (a *App) RunSync(ctx context.Context) (State, string) {
 		ApplyItems:  cfg.Sync.ApplyItems,
 		ApplyRunes:  cfg.Sync.ApplyRunes,
 		ApplySpells: cfg.Sync.ApplySpells,
+		KeepFlash:   cfg.Sync.KeepFlash,
 		DryRun:      cfg.Sync.DryRun,
 	})
 	a.finishSync(&result, err)

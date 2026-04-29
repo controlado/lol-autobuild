@@ -35,6 +35,7 @@ sync:
   apply_items: true
   apply_runes: false
   apply_spells: true
+  keep_flash: false
   dry_run: false
 env_file:
   path: .env.local
@@ -71,7 +72,7 @@ env_file:
 		t.Fatalf("unexpected sync patch: %s", cfg.Sync.Patch)
 	}
 
-	if !cfg.Sync.ApplyItems || cfg.Sync.ApplyRunes || !cfg.Sync.ApplySpells || cfg.Sync.DryRun {
+	if !cfg.Sync.ApplyItems || cfg.Sync.ApplyRunes || !cfg.Sync.ApplySpells || cfg.Sync.KeepFlash || cfg.Sync.DryRun {
 		t.Fatalf("unexpected sync config: %#v", cfg.Sync)
 	}
 }
@@ -119,7 +120,7 @@ lcu:
 	if cfg.Sync.Patch != "" {
 		t.Fatalf("expected empty default patch, got %q", cfg.Sync.Patch)
 	}
-	if !cfg.Sync.ApplyItems || !cfg.Sync.ApplyRunes || !cfg.Sync.ApplySpells || !cfg.Sync.DryRun {
+	if !cfg.Sync.ApplyItems || !cfg.Sync.ApplyRunes || !cfg.Sync.ApplySpells || !cfg.Sync.KeepFlash || !cfg.Sync.DryRun {
 		t.Fatalf("unexpected sync defaults: %#v", cfg.Sync)
 	}
 }
@@ -132,6 +133,7 @@ func TestSaveWritesConfig(t *testing.T) {
 	cfg.LCU.Enabled = true
 	cfg.Sync.Patch = "16.8"
 	cfg.Sync.ApplyRunes = false
+	cfg.Sync.KeepFlash = false
 	cfg.Sync.DryRun = false
 
 	configStore, err := NewConfigStore(path)
@@ -151,7 +153,7 @@ func TestSaveWritesConfig(t *testing.T) {
 	if !reloaded.LCU.Enabled {
 		t.Fatalf("expected lcu.enabled to persist")
 	}
-	if reloaded.Sync.Patch != "16.8" || reloaded.Sync.ApplyRunes || reloaded.Sync.DryRun {
+	if reloaded.Sync.Patch != "16.8" || reloaded.Sync.ApplyRunes || reloaded.Sync.KeepFlash || reloaded.Sync.DryRun {
 		t.Fatalf("unexpected saved sync config: %#v", reloaded.Sync)
 	}
 }

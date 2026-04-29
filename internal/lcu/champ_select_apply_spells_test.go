@@ -196,6 +196,77 @@ func TestApplySummonerSpellsPreservesFlashSlot(t *testing.T) {
 	}
 }
 
+func TestSpellIDsForApplyKeepFlash(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		spellIDs        []int
+		currentSpell1ID int
+		currentSpell2ID int
+		keepFlash       bool
+		wantSpell1ID    int
+		wantSpell2ID    int
+	}{
+		{
+			name:            "keeps flash in slot 1 and applies top non-flash",
+			spellIDs:        []int{14, 7},
+			currentSpell1ID: 4,
+			currentSpell2ID: 12,
+			keepFlash:       true,
+			wantSpell1ID:    4,
+			wantSpell2ID:    14,
+		},
+		{
+			name:            "keeps flash in slot 2 and applies top non-flash",
+			spellIDs:        []int{14, 7},
+			currentSpell1ID: 6,
+			currentSpell2ID: 4,
+			keepFlash:       true,
+			wantSpell1ID:    14,
+			wantSpell2ID:    4,
+		},
+		{
+			name:            "uses non-flash from recommendation that includes flash",
+			spellIDs:        []int{4, 14},
+			currentSpell1ID: 6,
+			currentSpell2ID: 4,
+			keepFlash:       true,
+			wantSpell1ID:    14,
+			wantSpell2ID:    4,
+		},
+		{
+			name:            "uses current behavior when keep flash is off",
+			spellIDs:        []int{14, 7},
+			currentSpell1ID: 4,
+			currentSpell2ID: 12,
+			keepFlash:       false,
+			wantSpell1ID:    14,
+			wantSpell2ID:    7,
+		},
+		{
+			name:            "uses current behavior when player has no flash",
+			spellIDs:        []int{14, 7},
+			currentSpell1ID: 6,
+			currentSpell2ID: 12,
+			keepFlash:       true,
+			wantSpell1ID:    14,
+			wantSpell2ID:    7,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			gotSpell1ID, gotSpell2ID := spellIDsForApply(tt.spellIDs, tt.currentSpell1ID, tt.currentSpell2ID, tt.keepFlash)
+			if gotSpell1ID != tt.wantSpell1ID || gotSpell2ID != tt.wantSpell2ID {
+				t.Fatalf("spellIDsForApply() = (%d, %d), want (%d, %d)", gotSpell1ID, gotSpell2ID, tt.wantSpell1ID, tt.wantSpell2ID)
+			}
+		})
+	}
+}
+
 func TestApplySummonerSpellsFailsWhenChampionChanges(t *testing.T) {
 	t.Parallel()
 

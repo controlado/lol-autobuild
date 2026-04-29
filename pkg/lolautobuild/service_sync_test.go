@@ -105,6 +105,7 @@ func TestSyncUsesDetectedChampionIDInApplyRequests(t *testing.T) {
 		ApplyItems:  true,
 		ApplyRunes:  true,
 		ApplySpells: true,
+		KeepFlash:   true,
 		DryRun:      false,
 	})
 	if err != nil {
@@ -133,6 +134,9 @@ func TestSyncUsesDetectedChampionIDInApplyRequests(t *testing.T) {
 	}
 	if lcu.itemSetCalls[0].Position != wantPosition || lcu.runePageCalls[0].Position != wantPosition || lcu.spellCalls[0].Position != wantPosition {
 		t.Fatalf("apply calls must use detected role")
+	}
+	if !lcu.spellCalls[0].KeepFlash {
+		t.Fatalf("summoner spell apply should keep flash")
 	}
 	if len(coachless.keystoneCalls) != 1 {
 		t.Fatalf("expected one keystone call, got %d", len(coachless.keystoneCalls))

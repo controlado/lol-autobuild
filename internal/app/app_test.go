@@ -354,6 +354,7 @@ func TestSaveSettingsPersistsTrimmedSettings(t *testing.T) {
 		ApplyItems:  false,
 		ApplyRunes:  true,
 		ApplySpells: false,
+		KeepFlash:   false,
 		DryRun:      false,
 		LCUEnabled:  true,
 	}
@@ -410,6 +411,7 @@ func TestSaveSettingsReturnsErrorWithoutMutatingConfig(t *testing.T) {
 		ApplyItems:  false,
 		ApplyRunes:  false,
 		ApplySpells: false,
+		KeepFlash:   false,
 		DryRun:      false,
 		LCUEnabled:  true,
 	})
@@ -502,6 +504,7 @@ func TestSaveSettingsRestartsRunningWatcherWithNewConfig(t *testing.T) {
 		ApplyItems:  false,
 		ApplyRunes:  true,
 		ApplySpells: false,
+		KeepFlash:   false,
 		DryRun:      false,
 		LCUEnabled:  true,
 	}
@@ -558,6 +561,7 @@ func TestStartWatcherLifecycle(t *testing.T) {
 	cfg.Sync.ApplyItems = true
 	cfg.Sync.ApplyRunes = false
 	cfg.Sync.ApplySpells = true
+	cfg.Sync.KeepFlash = true
 	cfg.Sync.DryRun = false
 	cfg.Watch.DebounceMillis = 321
 
@@ -1094,6 +1098,7 @@ func testConfig() config.Config {
 	cfg.Sync.ApplyItems = true
 	cfg.Sync.ApplyRunes = true
 	cfg.Sync.ApplySpells = true
+	cfg.Sync.KeepFlash = true
 	cfg.Sync.DryRun = true
 	cfg.Watch.DebounceMillis = 250
 	return cfg
@@ -1148,6 +1153,9 @@ func assertSyncRequestMatchesConfig(t *testing.T, got lolautobuild.SyncRequest, 
 	if got.ApplySpells != cfg.Sync.ApplySpells {
 		t.Fatalf("sync ApplySpells = %t, want %t", got.ApplySpells, cfg.Sync.ApplySpells)
 	}
+	if got.KeepFlash != cfg.Sync.KeepFlash {
+		t.Fatalf("sync KeepFlash = %t, want %t", got.KeepFlash, cfg.Sync.KeepFlash)
+	}
 	if got.DryRun != cfg.Sync.DryRun {
 		t.Fatalf("sync DryRun = %t, want %t", got.DryRun, cfg.Sync.DryRun)
 	}
@@ -1167,6 +1175,9 @@ func assertWatchRequestMatchesConfig(t *testing.T, got lolautobuild.WatchRequest
 	}
 	if got.ApplySpells != cfg.Sync.ApplySpells {
 		t.Fatalf("watch ApplySpells = %t, want %t", got.ApplySpells, cfg.Sync.ApplySpells)
+	}
+	if got.KeepFlash != cfg.Sync.KeepFlash {
+		t.Fatalf("watch KeepFlash = %t, want %t", got.KeepFlash, cfg.Sync.KeepFlash)
 	}
 	if got.DryRun != cfg.Sync.DryRun {
 		t.Fatalf("watch DryRun = %t, want %t", got.DryRun, cfg.Sync.DryRun)

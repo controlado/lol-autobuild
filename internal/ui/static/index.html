@@ -194,8 +194,19 @@
 
     .checks {
       display: grid;
+      gap: 9px;
+    }
+
+    .checks-row {
+      display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 9px;
+      align-items: start;
+    }
+
+    .checks-empty {
+      min-width: 0;
+      min-height: 44px;
     }
 
     .check {
@@ -420,6 +431,14 @@
         grid-template-columns: 1fr;
       }
 
+      .checks-row {
+        grid-template-columns: 1fr;
+      }
+
+      .checks-empty {
+        display: none;
+      }
+
       .topbar {
         display: grid;
         gap: 10px;
@@ -507,23 +526,38 @@
           <fieldset>
             <legend class="label">Sync updates</legend>
             <div class="checks">
-              <label class="check">
-                <input type="checkbox" id="applyItems">
-                Items
-              </label>
-              <label class="check is-disabled" aria-disabled="true">
-                <input type="checkbox" id="applyRunes" disabled>
-                Runes
-                <span class="tag">Pending</span>
-              </label>
-              <label class="check">
-                <input type="checkbox" id="applySpells">
-                Summoner spells
-              </label>
-              <label class="check">
-                <input type="checkbox" id="dryRun">
-                Preview only
-              </label>
+              <div class="checks-row">
+                <label class="check is-disabled" aria-disabled="true">
+                  <input type="checkbox" id="applyRunes" disabled>
+                  Runes
+                  <span class="tag">Pending</span>
+                </label>
+                <div class="checks-empty" aria-hidden="true"></div>
+              </div>
+              <div class="checks-row">
+                <label class="check">
+                  <input type="checkbox" id="applyItems">
+                  Items
+                </label>
+                <div class="checks-empty" aria-hidden="true"></div>
+              </div>
+              <div class="checks-row">
+                <label class="check">
+                  <input type="checkbox" id="applySpells">
+                  Summoner spells
+                </label>
+                <label class="check">
+                  <input type="checkbox" id="keepFlash">
+                  Keep Flash
+                </label>
+              </div>
+              <div class="checks-row">
+                <label class="check">
+                  <input type="checkbox" id="dryRun">
+                  Preview only
+                </label>
+                <div class="checks-empty" aria-hidden="true"></div>
+              </div>
             </div>
             <p class="help checks-help">Rune apply stays off until the LCU adapter supports it.</p>
           </fieldset>
@@ -592,6 +626,7 @@
       applyItems: document.getElementById("applyItems"),
       applyRunes: document.getElementById("applyRunes"),
       applySpells: document.getElementById("applySpells"),
+      keepFlash: document.getElementById("keepFlash"),
       dryRun: document.getElementById("dryRun"),
       saveButton: document.getElementById("saveButton"),
       syncButton: document.getElementById("syncButton"),
@@ -633,6 +668,7 @@
         apply_items: ids.applyItems.checked,
         apply_runes: false,
         apply_spells: ids.applySpells.checked,
+        keep_flash: ids.keepFlash.checked,
         dry_run: ids.dryRun.checked
       };
     }
@@ -793,6 +829,7 @@
       ids.applyItems.checked = settings.apply_items;
       ids.applyRunes.checked = false;
       ids.applySpells.checked = settings.apply_spells;
+      ids.keepFlash.checked = settings.keep_flash;
       ids.dryRun.checked = settings.dry_run;
       setValue(ids.modeStatus, settings.dry_run ? "Preview: no writes" : "Live: writes enabled", settings.dry_run ? "info" : "warn");
     }

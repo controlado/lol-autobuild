@@ -230,6 +230,7 @@ func watchTestRequest(onCycle func(WatchCycle)) WatchRequest {
 		ApplyItems:  true,
 		ApplyRunes:  true,
 		ApplySpells: true,
+		KeepFlash:   true,
 		DryRun:      true,
 		Debounce:    20 * time.Millisecond,
 		OnCycle:     onCycle,
