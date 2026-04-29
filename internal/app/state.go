@@ -32,13 +32,14 @@ type (
 		Running bool `json:"running"`
 	}
 	State struct {
-		Settings    Settings                 `json:"settings"`
-		LCU         lcu.ConnectionStatus     `json:"lcu"`
-		Watcher     WatcherState             `json:"watcher"`
-		Update      UpdateState              `json:"update"`
-		SyncRunning bool                     `json:"sync_running"`
-		LastSync    *lolautobuild.SyncResult `json:"last_sync,omitempty"`
-		LastSyncAt  *time.Time               `json:"last_sync_at,omitempty"`
-		LastError   string                   `json:"last_error,omitempty"`
+		Settings      Settings                 `json:"settings"`
+		LCU           lcu.ConnectionStatus     `json:"lcu"`
+		Watcher       WatcherState             `json:"watcher"`
+		Update        UpdateState              `json:"update"`
+		SyncRunning   bool                     `json:"sync_running"`
+		LastSync      *lolautobuild.SyncResult `json:"last_sync,omitempty"`
+		LastSyncAt    *time.Time               `json:"last_sync_at,omitempty"`
+		LastError     string                   `json:"last_error,omitempty"`
+		LastErrorCode string                   `json:"last_error_code,omitempty"`
 	}
 )

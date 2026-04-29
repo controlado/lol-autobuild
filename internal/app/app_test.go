@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"sync"
 	"testing"
@@ -263,6 +264,7 @@ func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 	app.syncRunning = true
 	app.watcherRunning = true
 	app.lastErrorMessage = "previous error"
+	app.lastErrorCode = "test.error"
 	app.lastSync = cloneSyncResult(wantLastSync)
 	app.lastSyncAt = lastSyncAt
 	app.updateState = UpdateState{
@@ -302,6 +304,9 @@ func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 	}
 	if state.LastError != "previous error" {
 		t.Fatalf("state.LastError = %q, want %q", state.LastError, "previous error")
+	}
+	if state.LastErrorCode != "test.error" {
+		t.Fatalf("state.LastErrorCode = %q, want %q", state.LastErrorCode, "test.error")
 	}
 	assertSyncResultEqual(t, state.LastSync, wantLastSync)
 	if state.LastSync == app.lastSync {
@@ -360,8 +365,8 @@ func TestSaveSettingsPersistsTrimmedSettings(t *testing.T) {
 	}
 
 	state, message := app.SaveSettings(context.Background(), settings)
-	if message != "" {
-		t.Fatalf("SaveSettings() message = %q, want empty", message)
+	if !message.Empty() {
+		t.Fatalf("SaveSettings() message = %q, want empty", message.Text)
 	}
 	if factoryCalls != 0 {
 		t.Fatalf("serviceFactory calls = %d, want 0", factoryCalls)
@@ -416,8 +421,8 @@ func TestSaveSettingsReturnsErrorWithoutMutatingConfig(t *testing.T) {
 		LCUEnabled:  true,
 	})
 
-	if message != "save failed" {
-		t.Fatalf("SaveSettings() message = %q, want %q", message, "save failed")
+	if message.Text != "save failed" {
+		t.Fatalf("SaveSettings() message = %q, want %q", message.Text, "save failed")
 	}
 	if state != (State{}) {
 		t.Fatalf("SaveSettings() state = %+v, want zero value", state)
@@ -489,8 +494,8 @@ func TestSaveSettingsRestartsRunningWatcherWithNewConfig(t *testing.T) {
 	})
 
 	startState, message := app.StartWatcher(context.Background())
-	if message != "" {
-		t.Fatalf("StartWatcher() message = %q, want empty", message)
+	if !message.Empty() {
+		t.Fatalf("StartWatcher() message = %q, want empty", message.Text)
 	}
 	if !startState.Watcher.Running {
 		t.Fatal("expected watcher to be running after first start")
@@ -513,8 +518,8 @@ func TestSaveSettingsRestartsRunningWatcherWithNewConfig(t *testing.T) {
 	applySettings(&wantCfg, newSettings)
 
 	state, message := app.SaveSettings(context.Background(), newSettings)
-	if message != "" {
-		t.Fatalf("SaveSettings() message = %q, want empty", message)
+	if !message.Empty() {
+		t.Fatalf("SaveSettings() message = %q, want empty", message.Text)
 	}
 
 	waitForSignal(t, firstStopped, "first watcher stop")
@@ -591,8 +596,8 @@ func TestStartWatcherLifecycle(t *testing.T) {
 	})
 
 	state, message := app.StartWatcher(context.Background())
-	if message != "" {
-		t.Fatalf("StartWatcher() message = %q, want empty", message)
+	if !message.Empty() {
+		t.Fatalf("StartWatcher() message = %q, want empty", message.Text)
 	}
 	if !state.Watcher.Running {
 		t.Fatal("expected watcher to be running")
@@ -661,14 +666,17 @@ func TestStartWatcherRejectsSecondStart(t *testing.T) {
 		},
 	})
 
-	if _, message := app.StartWatcher(context.Background()); message != "" {
-		t.Fatalf("StartWatcher() message = %q, want empty", message)
+	if _, message := app.StartWatcher(context.Background()); !message.Empty() {
+		t.Fatalf("StartWatcher() message = %q, want empty", message.Text)
 	}
 	_ = waitForWatchCall(t, svc)
 
 	state, message := app.StartWatcher(context.Background())
-	if message != "Watcher pre-start failed." {
-		t.Fatalf("second StartWatcher() message = %q, want %q", message, "Watcher start failed.")
+	if message.Text != "Watcher pre-start failed." {
+		t.Fatalf("second StartWatcher() message = %q, want %q", message.Text, "Watcher start failed.")
+	}
+	if message.Code != MessageCodeWatcherPreStartFailed {
+		t.Fatalf("second StartWatcher() code = %q, want %q", message.Code, MessageCodeWatcherPreStartFailed)
 	}
 	if !state.Watcher.Running {
 		t.Fatal("expected original watcher to keep running")
@@ -709,8 +717,8 @@ func TestStartWatcherReleasesReservationOnFactoryError(t *testing.T) {
 	})
 
 	state, message := app.StartWatcher(context.Background())
-	if message != "factory failed" {
-		t.Fatalf("StartWatcher() message = %q, want %q", message, "factory failed")
+	if message.Text != "factory failed" {
+		t.Fatalf("StartWatcher() message = %q, want %q", message.Text, "factory failed")
 	}
 	if state != (State{}) {
 		t.Fatalf("StartWatcher() state = %+v, want zero value", state)
@@ -725,8 +733,8 @@ func TestStartWatcherReleasesReservationOnFactoryError(t *testing.T) {
 	}
 
 	started, message := app.StartWatcher(context.Background())
-	if message != "" {
-		t.Fatalf("second StartWatcher() message = %q, want empty", message)
+	if !message.Empty() {
+		t.Fatalf("second StartWatcher() message = %q, want empty", message.Text)
 	}
 	if !started.Watcher.Running {
 		t.Fatal("expected watcher to start after factory error")
@@ -774,8 +782,8 @@ func TestRunSyncSuccess(t *testing.T) {
 	state, message := app.RunSync(context.Background())
 	after := time.Now().UTC()
 
-	if message != "" {
-		t.Fatalf("RunSync() message = %q, want empty", message)
+	if !message.Empty() {
+		t.Fatalf("RunSync() message = %q, want empty", message.Text)
 	}
 	if factoryCfg != cfg {
 		t.Fatalf("factory config = %+v, want %+v", factoryCfg, cfg)
@@ -841,8 +849,8 @@ func TestRunSyncFailureCases(t *testing.T) {
 			app.lastSyncAt = oldSyncAt
 
 			state, message := app.RunSync(context.Background())
-			if message != tt.wantMessage {
-				t.Fatalf("RunSync() message = %q, want %q", message, tt.wantMessage)
+			if message.Text != tt.wantMessage {
+				t.Fatalf("RunSync() message = %q, want %q", message.Text, tt.wantMessage)
 			}
 			if state != (State{}) {
 				t.Fatalf("RunSync() state = %+v, want zero value", state)
@@ -888,7 +896,7 @@ func TestRunSyncRejectsConcurrentCalls(t *testing.T) {
 
 	type runSyncResult struct {
 		state   State
-		message string
+		message UserMessage
 	}
 
 	firstDone := make(chan runSyncResult, 1)
@@ -900,8 +908,11 @@ func TestRunSyncRejectsConcurrentCalls(t *testing.T) {
 	waitForSignal(t, startedSync, "first sync start")
 
 	state, message := app.RunSync(context.Background())
-	if message != "Another sync is already running" {
-		t.Fatalf("second RunSync() message = %q, want %q", message, "Another sync is already running")
+	if message.Text != "Another sync is already running" {
+		t.Fatalf("second RunSync() message = %q, want %q", message.Text, "Another sync is already running")
+	}
+	if message.Code != MessageCodeSyncAlreadyRunning {
+		t.Fatalf("second RunSync() code = %q, want %q", message.Code, MessageCodeSyncAlreadyRunning)
 	}
 	if state != (State{}) {
 		t.Fatalf("second RunSync() state = %+v, want zero value", state)
@@ -916,11 +927,46 @@ func TestRunSyncRejectsConcurrentCalls(t *testing.T) {
 		t.Fatal("timed out waiting for first sync to finish")
 	}
 
-	if first.message != "" {
-		t.Fatalf("first RunSync() message = %q, want empty", first.message)
+	if !first.message.Empty() {
+		t.Fatalf("first RunSync() message = %q, want empty", first.message.Text)
 	}
 	if svc.syncCallCount() != 1 {
 		t.Fatalf("sync calls = %d, want 1", svc.syncCallCount())
+	}
+}
+
+func TestRunSyncFailureSetsLastErrorCode(t *testing.T) {
+	cfg := testConfig()
+
+	svc := newStubService()
+	svc.syncFn = func(context.Context, lolautobuild.SyncRequest) (lolautobuild.SyncResult, error) {
+		return lolautobuild.SyncResult{}, fmt.Errorf("sync: %w", lcu.ErrChampionNotSelected)
+	}
+
+	app := newTestApp(t, testAppOptions{
+		cfg: cfg,
+		serviceFactory: func(config.Config) (lolautobuild.Service, error) {
+			return svc, nil
+		},
+	})
+
+	state, message := app.RunSync(context.Background())
+	if message.Text != "Select a champion first." {
+		t.Fatalf("RunSync() message = %q, want %q", message.Text, "Select a champion first.")
+	}
+	if message.Code != MessageCodeLCUChampionNotSelected {
+		t.Fatalf("RunSync() code = %q, want %q", message.Code, MessageCodeLCUChampionNotSelected)
+	}
+	if state != (State{}) {
+		t.Fatalf("RunSync() state = %+v, want zero value", state)
+	}
+
+	current := app.State(context.Background())
+	if current.LastError != "Select a champion first." {
+		t.Fatalf("LastError = %q, want %q", current.LastError, "Select a champion first.")
+	}
+	if current.LastErrorCode != MessageCodeLCUChampionNotSelected {
+		t.Fatalf("LastErrorCode = %q, want %q", current.LastErrorCode, MessageCodeLCUChampionNotSelected)
 	}
 }
 
@@ -940,8 +986,8 @@ func TestCheckUpdatesAvailable(t *testing.T) {
 	app.lastErrorMessage = "sync failed"
 
 	state, message := app.CheckUpdates(context.Background())
-	if message != "" {
-		t.Fatalf("CheckUpdates() message = %q, want empty", message)
+	if !message.Empty() {
+		t.Fatalf("CheckUpdates() message = %q, want empty", message.Text)
 	}
 	if checker.callCount() != 1 {
 		t.Fatalf("update checker calls = %d, want 1", checker.callCount())
@@ -978,8 +1024,8 @@ func TestCheckUpdatesCurrent(t *testing.T) {
 	app := newTestApp(t, testAppOptions{updateChecker: checker})
 
 	state, message := app.CheckUpdates(context.Background())
-	if message != "" {
-		t.Fatalf("CheckUpdates() message = %q, want empty", message)
+	if !message.Empty() {
+		t.Fatalf("CheckUpdates() message = %q, want empty", message.Text)
 	}
 	if state.Update.Status != UpdateStatusCurrent {
 		t.Fatalf("Update.Status = %q, want %q", state.Update.Status, UpdateStatusCurrent)
@@ -1000,8 +1046,8 @@ func TestCheckUpdatesUnavailableDoesNotSetLastError(t *testing.T) {
 	app.lastErrorMessage = "watch failed"
 
 	state, message := app.CheckUpdates(context.Background())
-	if message != "" {
-		t.Fatalf("CheckUpdates() message = %q, want empty", message)
+	if !message.Empty() {
+		t.Fatalf("CheckUpdates() message = %q, want empty", message.Text)
 	}
 	if state.Update.Status != UpdateStatusUnavailable {
 		t.Fatalf("Update.Status = %q, want %q", state.Update.Status, UpdateStatusUnavailable)
@@ -1022,8 +1068,8 @@ func TestCheckUpdatesErrorDoesNotSetLastError(t *testing.T) {
 	app.lastErrorMessage = "sync failed"
 
 	state, message := app.CheckUpdates(context.Background())
-	if message != "" {
-		t.Fatalf("CheckUpdates() message = %q, want empty", message)
+	if !message.Empty() {
+		t.Fatalf("CheckUpdates() message = %q, want empty", message.Text)
 	}
 	if state.Update.Status != UpdateStatusError {
 		t.Fatalf("Update.Status = %q, want %q", state.Update.Status, UpdateStatusError)
@@ -1051,7 +1097,7 @@ func TestCheckUpdatesRejectsConcurrentChecks(t *testing.T) {
 
 	type updateResult struct {
 		state   State
-		message string
+		message UserMessage
 	}
 
 	firstDone := make(chan updateResult, 1)
@@ -1063,8 +1109,8 @@ func TestCheckUpdatesRejectsConcurrentChecks(t *testing.T) {
 	waitForSignal(t, startedCheck, "first update check start")
 
 	state, message := app.CheckUpdates(context.Background())
-	if message != "" {
-		t.Fatalf("second CheckUpdates() message = %q, want empty", message)
+	if !message.Empty() {
+		t.Fatalf("second CheckUpdates() message = %q, want empty", message.Text)
 	}
 	if state.Update.Status != UpdateStatusChecking {
 		t.Fatalf("second Update.Status = %q, want %q", state.Update.Status, UpdateStatusChecking)
@@ -1081,8 +1127,8 @@ func TestCheckUpdatesRejectsConcurrentChecks(t *testing.T) {
 	case <-time.After(testTimeout):
 		t.Fatal("timed out waiting for first update check to finish")
 	}
-	if first.message != "" {
-		t.Fatalf("first CheckUpdates() message = %q, want empty", first.message)
+	if !first.message.Empty() {
+		t.Fatalf("first CheckUpdates() message = %q, want empty", first.message.Text)
 	}
 	if first.state.Update.Status != UpdateStatusCurrent {
 		t.Fatalf("first Update.Status = %q, want %q", first.state.Update.Status, UpdateStatusCurrent)

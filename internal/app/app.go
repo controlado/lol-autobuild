@@ -41,6 +41,7 @@ type App struct {
 	updateState     UpdateState
 
 	lastErrorMessage string
+	lastErrorCode    string
 	lastSync         *lolautobuild.SyncResult
 	lastSyncAt       time.Time
 }
@@ -74,18 +75,19 @@ func (a *App) State(ctx context.Context) State {
 	defer a.mu.Unlock()
 
 	return State{
-		Settings:    settingsFromConfig(cfg),
-		LCU:         status,
-		Watcher:     WatcherState{Running: a.watcherRunning},
-		Update:      cloneUpdateState(a.updateState),
-		SyncRunning: a.syncRunning,
-		LastSync:    cloneSyncResult(a.lastSync),
-		LastSyncAt:  lastSyncAt,
-		LastError:   a.lastErrorMessage,
+		Settings:      settingsFromConfig(cfg),
+		LCU:           status,
+		Watcher:       WatcherState{Running: a.watcherRunning},
+		Update:        cloneUpdateState(a.updateState),
+		SyncRunning:   a.syncRunning,
+		LastSync:      cloneSyncResult(a.lastSync),
+		LastSyncAt:    lastSyncAt,
+		LastError:     a.lastErrorMessage,
+		LastErrorCode: a.lastErrorCode,
 	}
 }
 
-func (a *App) SaveSettings(ctx context.Context, settings Settings) (State, string) {
+func (a *App) SaveSettings(ctx context.Context, settings Settings) (State, UserMessage) {
 	a.saveMu.Lock()
 	defer a.saveMu.Unlock()
 
@@ -93,12 +95,12 @@ func (a *App) SaveSettings(ctx context.Context, settings Settings) (State, strin
 	applySettings(&cfg, settings)
 
 	if err := a.configStore.Save(cfg); err != nil {
-		return State{}, messageFromErr(err)
+		return State{}, userMessageFromErr(err)
 	}
 
 	a.mu.Lock()
 	a.cfg = cfg
-	a.lastErrorMessage = messageFromErr(nil)
+	a.setLastErrorMessage(UserMessage{})
 	watcherRunning := a.watcherRunning
 	a.mu.Unlock()
 
@@ -107,7 +109,7 @@ func (a *App) SaveSettings(ctx context.Context, settings Settings) (State, strin
 		return a.StartWatcher(ctx)
 	}
 
-	return a.State(ctx), messageFromErr(nil)
+	return a.State(ctx), UserMessage{}
 }
 
 func (a *App) lastSyncAtSnapshot() *time.Time {
@@ -126,6 +128,11 @@ func (a *App) configSnapshot() config.Config {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.cfg
+}
+
+func (a *App) setLastErrorMessage(msg UserMessage) {
+	a.lastErrorMessage = msg.Text
+	a.lastErrorCode = msg.Code
 }
 
 func settingsFromConfig(cfg config.Config) Settings {
@@ -152,32 +159,32 @@ func applySettings(cfg *config.Config, settings Settings) {
 	cfg.LCU.Enabled = settings.LCUEnabled
 }
 
-func (a *App) StartWatcher(ctx context.Context) (State, string) {
+func (a *App) StartWatcher(ctx context.Context) (State, UserMessage) {
 	cfg, watcherID, ok := a.reserveWatcherStart()
 	if !ok {
-		return a.State(ctx), "Watcher pre-start failed."
+		return a.State(ctx), watcherPreStartFailedMessage()
 	}
 
 	svc, err := a.serviceFactory(cfg)
 	if err != nil {
 		a.releaseWatcher(watcherID, err)
-		return State{}, messageFromErr(err)
+		return State{}, userMessageFromErr(err)
 	}
 
 	if err := svc.EnsureCoachlessAuth(ctx); err != nil {
 		a.releaseWatcher(watcherID, err)
-		return State{}, "Coachless login is missing."
+		return State{}, coachlessLoginMissingMessage()
 	}
 
 	watcherCtx, ok := a.startReservedWatcher(watcherID)
 	if !ok {
 		a.releaseWatcher(watcherID, nil)
-		return a.State(ctx), "Watcher start failed."
+		return a.State(ctx), watcherStartFailedMessage()
 	}
 
 	go a.runWatcher(watcherCtx, watcherID, svc, cfg)
 
-	return a.State(ctx), ""
+	return a.State(ctx), UserMessage{}
 }
 
 func (a *App) runWatcher(ctx context.Context, watcherID int, svc lolautobuild.Service, cfg config.Config) {
@@ -203,7 +210,7 @@ func (a *App) runWatcher(ctx context.Context, watcherID int, svc lolautobuild.Se
 	a.watcherRunning = false
 
 	if err != nil && ctx.Err() == nil {
-		a.lastErrorMessage = messageFromErr(err)
+		a.setLastErrorMessage(userMessageFromErr(err))
 	}
 }
 
@@ -217,7 +224,7 @@ func (a *App) reserveWatcherStart() (cfg config.Config, watcherID int, ok bool) 
 
 	a.watcherID++
 	a.watcherStarting = true
-	a.lastErrorMessage = messageFromErr(nil)
+	a.setLastErrorMessage(UserMessage{})
 
 	return a.cfg, a.watcherID, true
 }
@@ -246,7 +253,7 @@ func (a *App) observeWatchCycle(watchID int, c lolautobuild.WatchCycle) {
 	}
 
 	if c.Err != nil {
-		a.lastErrorMessage = messageFromErr(c.Err)
+		a.setLastErrorMessage(userMessageFromErr(c.Err))
 		return
 	}
 
@@ -255,7 +262,7 @@ func (a *App) observeWatchCycle(watchID int, c lolautobuild.WatchCycle) {
 		a.lastSyncAt = time.Now().UTC()
 	}
 
-	a.lastErrorMessage = messageFromErr(nil)
+	a.setLastErrorMessage(UserMessage{})
 }
 
 func (a *App) StopWatcher(ctx context.Context) State {
@@ -290,20 +297,20 @@ func (a *App) releaseWatcher(watcherID int, err error) {
 	a.watcherRunning = false
 
 	if err != nil {
-		a.lastErrorMessage = messageFromErr(err)
+		a.setLastErrorMessage(userMessageFromErr(err))
 	}
 }
 
-func (a *App) RunSync(ctx context.Context) (State, string) {
+func (a *App) RunSync(ctx context.Context) (State, UserMessage) {
 	cfg, alreadySyncing := a.beginSync()
 	if alreadySyncing {
-		return State{}, "Another sync is already running"
+		return State{}, syncAlreadyRunningMessage()
 	}
 
 	svc, err := a.serviceFactory(cfg)
 	if err != nil {
 		a.finishSync(nil, err)
-		return State{}, messageFromErr(err)
+		return State{}, userMessageFromErr(err)
 	}
 
 	result, err := svc.Sync(ctx, lolautobuild.SyncRequest{
@@ -316,10 +323,10 @@ func (a *App) RunSync(ctx context.Context) (State, string) {
 	})
 	a.finishSync(&result, err)
 	if err != nil {
-		return State{}, messageFromErr(err)
+		return State{}, userMessageFromErr(err)
 	}
 
-	return a.State(ctx), messageFromErr(nil)
+	return a.State(ctx), UserMessage{}
 }
 
 func (a *App) beginSync() (configSnapshot config.Config, alreadySyncing bool) {
@@ -331,7 +338,7 @@ func (a *App) beginSync() (configSnapshot config.Config, alreadySyncing bool) {
 	}
 
 	a.syncRunning = true
-	a.lastErrorMessage = messageFromErr(nil)
+	a.setLastErrorMessage(UserMessage{})
 	return a.cfg, false
 }
 
@@ -342,13 +349,13 @@ func (a *App) finishSync(res *lolautobuild.SyncResult, err error) {
 	a.syncRunning = false
 
 	if err != nil {
-		a.lastErrorMessage = messageFromErr(err)
+		a.setLastErrorMessage(userMessageFromErr(err))
 		return
 	}
 
 	a.lastSync = cloneSyncResult(res)
 	a.lastSyncAt = time.Now().UTC()
-	a.lastErrorMessage = messageFromErr(nil)
+	a.setLastErrorMessage(UserMessage{})
 }
 
 func cloneSyncResult(res *lolautobuild.SyncResult) *lolautobuild.SyncResult {
@@ -361,15 +368,15 @@ func cloneSyncResult(res *lolautobuild.SyncResult) *lolautobuild.SyncResult {
 	return &out
 }
 
-func (a *App) CheckUpdates(ctx context.Context) (State, string) {
+func (a *App) CheckUpdates(ctx context.Context) (State, UserMessage) {
 	if !a.beginUpdateCheck() {
-		return a.State(ctx), ""
+		return a.State(ctx), UserMessage{}
 	}
 
 	result, err := a.updateChecker.Check(ctx)
 	a.finishUpdateCheck(result, err)
 
-	return a.State(ctx), ""
+	return a.State(ctx), UserMessage{}
 }
 
 func (a *App) beginUpdateCheck() bool {

@@ -15,47 +15,47 @@ func TestMessageFromErr(t *testing.T) {
 	tests := []struct {
 		name string
 		err  error
-		want string
+		want UserMessage
 	}{
 		{
 			name: "nil error",
 			err:  nil,
-			want: "",
+			want: UserMessage{},
 		},
 		{
 			name: "lcu off",
 			err:  fmt.Errorf("sync: %w", lcu.ErrNotConfigured),
-			want: "LCU is off.",
+			want: UserMessage{Code: MessageCodeLCUOff, Text: "LCU is off."},
 		},
 		{
 			name: "lockfile missing",
 			err:  fmt.Errorf("sync: %w", lcu.ErrLockfileNotFound),
-			want: "League Client is not open.",
+			want: UserMessage{Code: MessageCodeLCULockfileNotFound, Text: "League Client is not open."},
 		},
 		{
 			name: "champ select unavailable",
 			err:  fmt.Errorf("sync: %w", lcu.ErrChampSelectUnavailable),
-			want: "Champ select is not ready.",
+			want: UserMessage{Code: MessageCodeLCUChampSelectUnavailable, Text: "Champ select is not ready."},
 		},
 		{
 			name: "champion not selected",
 			err:  fmt.Errorf("sync: %w", lcu.ErrChampionNotSelected),
-			want: "Select a champion first.",
+			want: UserMessage{Code: MessageCodeLCUChampionNotSelected, Text: "Select a champion first."},
 		},
 		{
 			name: "coachless auth not implemented",
 			err:  fmt.Errorf("auth: %w", auth.ErrNotImplemented),
-			want: "Coachless login is missing.",
+			want: UserMessage{Code: MessageCodeCoachlessLoginMissing, Text: "Coachless login is missing."},
 		},
 		{
 			name: "coachless access token error message",
 			err:  errors.New("provider: unable to acquire valid access token after refresh"),
-			want: "Coachless login is missing.",
+			want: UserMessage{Code: MessageCodeCoachlessLoginMissing, Text: "Coachless login is missing."},
 		},
 		{
 			name: "fallback to raw error",
 			err:  errors.New("unexpected failure"),
-			want: "unexpected failure",
+			want: UserMessage{Text: "unexpected failure"},
 		},
 	}
 
@@ -63,8 +63,12 @@ func TestMessageFromErr(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := messageFromErr(tt.err); got != tt.want {
-				t.Fatalf("messageFromErr(%v) = %q, want %q", tt.err, got, tt.want)
+			if got := userMessageFromErr(tt.err); got != tt.want {
+				t.Fatalf("userMessageFromErr(%v) = %+v, want %+v", tt.err, got, tt.want)
+			}
+
+			if got := userMessageFromErr(tt.err); got.Text != tt.want.Text {
+				t.Fatalf("messageFromErr(%v) = %q, want %q", tt.err, got, tt.want.Text)
 			}
 		})
 	}

@@ -23,12 +23,19 @@ var staticFiles embed.FS
 
 type App interface {
 	State(ctx context.Context) app.State
-	SaveSettings(ctx context.Context, settings app.Settings) (app.State, string)
-	RunSync(ctx context.Context) (app.State, string)
-	StartWatcher(ctx context.Context) (app.State, string)
+	SaveSettings(ctx context.Context, settings app.Settings) (app.State, app.UserMessage)
+	RunSync(ctx context.Context) (app.State, app.UserMessage)
+	StartWatcher(ctx context.Context) (app.State, app.UserMessage)
 	StopWatcher(ctx context.Context) app.State
-	CheckUpdates(ctx context.Context) (app.State, string)
+	CheckUpdates(ctx context.Context) (app.State, app.UserMessage)
 }
+
+var (
+	invalidUITokenMessage   = app.UserMessage{Code: "ui.invalid_token", Text: "Invalid UI token."}
+	uiFileMissingMessage    = app.UserMessage{Code: "ui.file_missing", Text: "UI file is missing."}
+	invalidSettingsMessage  = app.UserMessage{Code: "ui.invalid_settings", Text: "Settings are invalid."}
+	methodNotAllowedMessage = app.UserMessage{Code: "ui.method_not_allowed", Text: "Method is not allowed."}
+)
 
 type Server struct {
 	app         App
@@ -117,7 +124,7 @@ func (s *Server) Handler() http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Query().Get("token") != s.token {
-			writeError(w, http.StatusUnauthorized, "Invalid UI token.")
+			writeError(w, http.StatusUnauthorized, invalidUITokenMessage)
 			return
 		}
 
@@ -136,7 +143,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 	raw, err := staticFiles.ReadFile("static/index.html")
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "UI file is missing.")
+		writeError(w, http.StatusInternalServerError, uiFileMissingMessage)
 		return
 	}
 
@@ -160,12 +167,12 @@ func (s *Server) handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 
 	var settings app.Settings
 	if err := decodeJSON(r, &settings); err != nil {
-		writeError(w, http.StatusBadRequest, "Settings are invalid.")
+		writeError(w, http.StatusBadRequest, invalidSettingsMessage)
 		return
 	}
 
 	state, errMessage := s.app.SaveSettings(r.Context(), settings)
-	if errMessage != "" {
+	if !errMessage.Empty() {
 		writeError(w, http.StatusBadRequest, errMessage)
 		return
 	}
@@ -179,7 +186,7 @@ func (s *Server) handleRunSync(w http.ResponseWriter, r *http.Request) {
 	}
 
 	state, errMessage := s.app.RunSync(r.Context())
-	if errMessage != "" {
+	if !errMessage.Empty() {
 		writeError(w, http.StatusInternalServerError, errMessage)
 		return
 	}
@@ -193,7 +200,7 @@ func (s *Server) handleStartWatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	state, errMessage := s.app.StartWatcher(r.Context())
-	if errMessage != "" {
+	if !errMessage.Empty() {
 		writeError(w, http.StatusInternalServerError, errMessage)
 		return
 	}
@@ -216,7 +223,7 @@ func (s *Server) handleCheckUpdates(w http.ResponseWriter, r *http.Request) {
 	}
 
 	state, errMessage := s.app.CheckUpdates(r.Context())
-	if errMessage != "" {
+	if !errMessage.Empty() {
 		writeError(w, http.StatusInternalServerError, errMessage)
 		return
 	}
@@ -238,7 +245,7 @@ func requireMethod(w http.ResponseWriter, r *http.Request, method string) bool {
 	}
 
 	w.Header().Set("Allow", method)
-	writeError(w, http.StatusMethodNotAllowed, "Method is not allowed.")
+	writeError(w, http.StatusMethodNotAllowed, methodNotAllowedMessage)
 	return false
 }
 
@@ -248,8 +255,12 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 
-func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
+func writeError(w http.ResponseWriter, status int, message app.UserMessage) {
+	payload := map[string]string{"error": message.Text}
+	if message.Code != "" {
+		payload["error_code"] = message.Code
+	}
+	writeJSON(w, status, payload)
 }
 
 func randomToken() (string, error) {
