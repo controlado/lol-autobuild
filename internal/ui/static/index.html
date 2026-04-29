@@ -188,25 +188,53 @@
       line-height: 1.4;
     }
 
-    .checks-help {
+    .sync-options-help {
       margin-top: 10px;
     }
 
-    .checks {
+    .sync-options {
       display: grid;
       gap: 9px;
     }
 
-    .checks-row {
+    .sync-option {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 9px;
+      gap: 8px;
+    }
+
+    .sync-option-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
       align-items: start;
     }
 
-    .checks-empty {
+    .sync-option-header,
+    .sync-dropdown-header {
+      width: 100%;
+    }
+
+    .sync-option-header > .check {
       min-width: 0;
-      min-height: 44px;
+    }
+
+    .sync-dropdown-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 44px;
+      align-items: stretch;
+    }
+
+    .sync-dropdown-header .check {
+      min-width: 0;
+      border-right: 0;
+      border-radius: 8px 0 0 8px;
+    }
+
+    .sync-suboptions {
+      display: grid;
+      gap: 8px;
+      margin-left: 20px;
+      padding-left: 12px;
+      border-left: 1px solid var(--line-strong);
     }
 
     .check {
@@ -237,6 +265,44 @@
 
     .check.is-disabled input {
       cursor: not-allowed;
+    }
+
+    button.sync-dropdown-toggle {
+      display: grid;
+      place-items: center;
+      min-height: 44px;
+      padding: 0;
+      border-color: var(--line);
+      border-left: 0;
+      border-radius: 0 8px 8px 0;
+      color: var(--muted);
+      background: var(--surface-soft);
+    }
+
+    button.sync-dropdown-toggle::before {
+      width: 8px;
+      height: 8px;
+      border-right: 2px solid currentColor;
+      border-bottom: 2px solid currentColor;
+      content: "";
+      transform: rotate(45deg) translate(-1px, -1px);
+      transition: transform 140ms ease;
+    }
+
+    button.sync-dropdown-toggle[aria-expanded="true"]::before {
+      transform: rotate(-135deg) translate(-1px, -1px);
+    }
+
+    button.sync-dropdown-toggle:disabled {
+      color: var(--muted);
+      background: var(--surface-disabled);
+      cursor: not-allowed;
+      opacity: 1;
+    }
+
+    button.sync-dropdown-toggle:not(:disabled):hover {
+      color: var(--ink);
+      background: #121a16;
     }
 
     .tag {
@@ -426,17 +492,16 @@
 
       .topbar,
       .workspace,
-      .status-strip,
-      .checks {
+      .status-strip {
         grid-template-columns: 1fr;
       }
 
-      .checks-row {
+      .sync-option-header {
         grid-template-columns: 1fr;
       }
 
-      .checks-empty {
-        display: none;
+      .sync-suboptions {
+        margin-left: 12px;
       }
 
       .topbar {
@@ -525,41 +590,51 @@
 
           <fieldset>
             <legend class="label">Sync updates</legend>
-            <div class="checks">
-              <div class="checks-row">
-                <label class="check is-disabled" aria-disabled="true">
-                  <input type="checkbox" id="applyRunes" disabled>
-                  Runes
-                  <span class="tag">Pending</span>
-                </label>
-                <div class="checks-empty" aria-hidden="true"></div>
+            <div class="sync-options">
+              <div class="sync-option">
+                <div class="sync-option-header">
+                  <label class="check is-disabled" aria-disabled="true">
+                    <input type="checkbox" id="applyRunes" disabled>
+                    Runes
+                    <span class="tag">Pending</span>
+                  </label>
+                </div>
               </div>
-              <div class="checks-row">
-                <label class="check">
-                  <input type="checkbox" id="applyItems">
-                  Items
-                </label>
-                <div class="checks-empty" aria-hidden="true"></div>
+              <div class="sync-option">
+                <div class="sync-option-header">
+                  <label class="check">
+                    <input type="checkbox" id="applyItems">
+                    Items
+                  </label>
+                </div>
               </div>
-              <div class="checks-row">
-                <label class="check">
-                  <input type="checkbox" id="applySpells">
-                  Summoner spells
-                </label>
-                <label class="check">
-                  <input type="checkbox" id="keepFlash">
-                  Keep Flash
-                </label>
+              <div class="sync-option">
+                <div class="sync-dropdown-header">
+                  <label class="check">
+                    <input type="checkbox" id="applySpells">
+                    Summoner spells
+                  </label>
+                  <button type="button" id="spellsOptionsButton" class="sync-dropdown-toggle"
+                    aria-label="Toggle summoner spell options" aria-expanded="false" aria-controls="spellsSuboptions"
+                    aria-disabled="true" disabled></button>
+                </div>
+                <div class="sync-suboptions" id="spellsSuboptions" aria-label="Summoner spell advanced options" hidden>
+                  <label class="check is-disabled">
+                    <input type="checkbox" id="keepFlash" disabled>
+                    Keep Flash
+                  </label>
+                </div>
               </div>
-              <div class="checks-row">
-                <label class="check">
-                  <input type="checkbox" id="dryRun">
-                  Preview only
-                </label>
-                <div class="checks-empty" aria-hidden="true"></div>
+              <div class="sync-option">
+                <div class="sync-option-header">
+                  <label class="check">
+                    <input type="checkbox" id="dryRun">
+                    Preview only
+                  </label>
+                </div>
               </div>
             </div>
-            <p class="help checks-help">Rune apply stays off until the LCU adapter supports it.</p>
+            <p class="help sync-options-help">Rune apply stays off until the LCU adapter supports it.</p>
           </fieldset>
 
           <div class="actions">
@@ -626,6 +701,8 @@
       applyItems: document.getElementById("applyItems"),
       applyRunes: document.getElementById("applyRunes"),
       applySpells: document.getElementById("applySpells"),
+      spellsOptionsButton: document.getElementById("spellsOptionsButton"),
+      spellsSuboptions: document.getElementById("spellsSuboptions"),
       keepFlash: document.getElementById("keepFlash"),
       dryRun: document.getElementById("dryRun"),
       saveButton: document.getElementById("saveButton"),
@@ -671,6 +748,23 @@
         keep_flash: ids.keepFlash.checked,
         dry_run: ids.dryRun.checked
       };
+    }
+
+    function setSpellsSuboptionsOpen(isOpen) {
+      ids.spellsOptionsButton.setAttribute("aria-expanded", String(isOpen));
+      ids.spellsSuboptions.hidden = !isOpen;
+    }
+
+    function syncSpellsSuboptions() {
+      const spellsEnabled = ids.applySpells.checked;
+      ids.spellsOptionsButton.disabled = !spellsEnabled;
+      ids.spellsOptionsButton.setAttribute("aria-disabled", String(!spellsEnabled));
+      ids.keepFlash.disabled = !spellsEnabled;
+      ids.keepFlash.closest(".check").classList.toggle("is-disabled", !spellsEnabled);
+
+      if (!spellsEnabled) {
+        setSpellsSuboptionsOpen(false);
+      }
     }
 
     function setBusy(isBusy) {
@@ -831,6 +925,7 @@
       ids.applySpells.checked = settings.apply_spells;
       ids.keepFlash.checked = settings.keep_flash;
       ids.dryRun.checked = settings.dry_run;
+      syncSpellsSuboptions();
       setValue(ids.modeStatus, settings.dry_run ? "Preview: no writes" : "Live: writes enabled", settings.dry_run ? "info" : "warn");
     }
 
@@ -943,6 +1038,11 @@
       post("/api/config", readSettings(), "Saving settings...");
     });
 
+    ids.applySpells.addEventListener("change", syncSpellsSuboptions);
+    ids.spellsOptionsButton.addEventListener("click", () => {
+      const isOpen = ids.spellsOptionsButton.getAttribute("aria-expanded") === "true";
+      setSpellsSuboptionsOpen(!isOpen);
+    });
     ids.syncButton.addEventListener("click", () => post("/api/sync", null, "Running sync..."));
     ids.updateButton.addEventListener("click", () => checkUpdates(true));
     ids.watcherButton.addEventListener("click", () => {
