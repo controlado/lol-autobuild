@@ -15,12 +15,14 @@ import (
 
 	"github.com/controlado/lol-autobuild/internal/app"
 	"github.com/controlado/lol-autobuild/internal/auth"
+	"github.com/controlado/lol-autobuild/internal/buildinfo"
 	"github.com/controlado/lol-autobuild/internal/coachless"
 	"github.com/controlado/lol-autobuild/internal/config"
 	"github.com/controlado/lol-autobuild/internal/lcu"
 	"github.com/controlado/lol-autobuild/internal/recommend"
 	"github.com/controlado/lol-autobuild/internal/secrets"
 	"github.com/controlado/lol-autobuild/internal/ui"
+	"github.com/controlado/lol-autobuild/internal/update"
 	"github.com/controlado/lol-autobuild/pkg/lolautobuild"
 )
 
@@ -179,7 +181,10 @@ func runUI(ctx context.Context, configPath string) error {
 		return err
 	}
 
-	application, err := app.New(buildService, checkLCUStatus, configStore, cfg)
+	updateChecker := update.NewGitHubChecker(update.Options{
+		CurrentVersion: buildinfo.Version,
+	})
+	application, err := app.New(buildService, checkLCUStatus, updateChecker, configStore, cfg)
 	if err != nil {
 		return err
 	}

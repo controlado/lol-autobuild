@@ -71,6 +71,14 @@
       line-height: 1.45;
     }
 
+    .topbar-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: flex-end;
+      justify-content: flex-end;
+    }
+
     .label {
       margin: 0 0 7px;
       color: var(--muted);
@@ -275,6 +283,57 @@
       background: #121a16;
     }
 
+    button.compact {
+      min-height: 36px;
+      padding-inline: 12px;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    .update-banner {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      padding: 14px 16px;
+      border: 1px solid rgba(229, 189, 99, 0.52);
+      border-radius: 8px;
+      background: #151106;
+    }
+
+    .update-copy {
+      margin: 0;
+      color: var(--ink);
+      line-height: 1.4;
+    }
+
+    .download-link {
+      flex: 0 0 auto;
+      min-height: 36px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 12px;
+      border: 1px solid var(--amber);
+      border-radius: 8px;
+      color: #120d00;
+      background: var(--amber);
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .download-link:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    .download-link:hover {
+      background: #f4cf7a;
+    }
+
     .result {
       display: grid;
       border-top: 1px solid var(--line);
@@ -365,6 +424,15 @@
         display: grid;
         gap: 10px;
       }
+
+      .topbar-meta {
+        justify-content: flex-start;
+      }
+
+      .update-banner {
+        align-items: flex-start;
+        flex-direction: column;
+      }
     }
 
     @media (max-width: 520px) {
@@ -391,8 +459,20 @@
         <p class="label">Local UI</p>
         <h1>lol-autobuild</h1>
       </div>
-      <p class="lede">Sync League Client item sets and summoner spells from Coachless while champ select is open.</p>
+      <div class="topbar-meta">
+        <p class="lede">Sync League Client item sets and summoner spells from Coachless while champ select is open.</p>
+        <button type="button" id="updateButton" class="secondary compact">Check updates</button>
+      </div>
     </div>
+
+    <section class="update-banner" id="updateBanner" aria-live="polite" hidden>
+      <div>
+        <p class="label">New version</p>
+        <p class="update-copy" id="updateText"></p>
+      </div>
+      <a class="download-link" id="updateLink" href="https://github.com/controlado/lol-autobuild/releases/latest"
+        target="_blank" rel="noreferrer">Download update</a>
+    </section>
 
     <section class="status-strip" aria-label="Current state">
       <div class="stat">
@@ -516,6 +596,10 @@
       saveButton: document.getElementById("saveButton"),
       syncButton: document.getElementById("syncButton"),
       watcherButton: document.getElementById("watcherButton"),
+      updateButton: document.getElementById("updateButton"),
+      updateBanner: document.getElementById("updateBanner"),
+      updateText: document.getElementById("updateText"),
+      updateLink: document.getElementById("updateLink"),
       updatedValue: document.getElementById("updatedValue"),
       championValue: document.getElementById("championValue"),
       positionValue: document.getElementById("positionValue"),
@@ -525,6 +609,7 @@
     };
     let watcherRunning = false;
     let lastLogKey = "empty";
+    let updateFeedbackTimer = 0;
     const logHistory = [{ text: "No events yet." }];
 
     function api(path, options = {}) {
@@ -557,6 +642,53 @@
       ids.saveButton.disabled = isBusy;
       ids.syncButton.disabled = isBusy;
       ids.watcherButton.disabled = isBusy;
+    }
+
+    function resetUpdateButton() {
+      ids.updateButton.disabled = false;
+      ids.updateButton.textContent = "Check updates";
+    }
+
+    function setUpdateFeedback(text) {
+      if (updateFeedbackTimer) {
+        clearTimeout(updateFeedbackTimer);
+      }
+
+      ids.updateButton.disabled = false;
+      ids.updateButton.textContent = text;
+      updateFeedbackTimer = setTimeout(() => {
+        updateFeedbackTimer = 0;
+        resetUpdateButton();
+      }, 2400);
+    }
+
+    function renderUpdate(state) {
+      const update = state.update || { status: "idle" };
+      const hasUpdate = update.status === "available";
+      ids.updateBanner.hidden = !hasUpdate;
+
+      if (hasUpdate) {
+        const version = update.latest_version || "the new version";
+        const current = update.current_version ? ` You have ${update.current_version}.` : "";
+        ids.updateText.textContent = `Download ${version}.${current}`;
+        ids.updateLink.href = update.download_url || "https://github.com/controlado/lol-autobuild/releases/latest";
+      }
+
+      if (update.status === "checking") {
+        if (updateFeedbackTimer) {
+          clearTimeout(updateFeedbackTimer);
+          updateFeedbackTimer = 0;
+        }
+        ids.updateButton.disabled = true;
+        ids.updateButton.textContent = "Checking...";
+        return;
+      }
+
+      if (!updateFeedbackTimer) {
+        resetUpdateButton();
+      } else {
+        ids.updateButton.disabled = false;
+      }
     }
 
     function setMessage(text, isError = false) {
@@ -666,6 +798,8 @@
     }
 
     function renderState(state) {
+      renderUpdate(state);
+
       watcherRunning = state.watcher.running;
       ids.watcherButton.textContent = watcherRunning ? "Stop watcher" : "Start watcher";
       ids.watcherButton.setAttribute("aria-pressed", String(watcherRunning));
@@ -712,6 +846,40 @@
       renderState(state);
     }
 
+    async function checkUpdates(isManual) {
+      ids.updateButton.disabled = true;
+      ids.updateButton.textContent = "Checking...";
+
+      try {
+        const state = await api("/api/update/check", {
+          method: "POST",
+          body: "{}"
+        });
+        renderState(state);
+
+        if (isManual) {
+          const status = state.update && state.update.status;
+          if (status === "current") {
+            setUpdateFeedback("Up to date");
+          } else if (status === "unavailable") {
+            setUpdateFeedback("Cannot check");
+          } else if (status === "error") {
+            setUpdateFeedback("Check failed");
+          }
+        }
+      } catch (error) {
+        if (isManual) {
+          setUpdateFeedback("Check failed");
+        } else {
+          resetUpdateButton();
+        }
+      } finally {
+        if (!updateFeedbackTimer) {
+          resetUpdateButton();
+        }
+      }
+    }
+
     async function post(path, body, progressText) {
       setBusy(true);
       setMessage(progressText);
@@ -739,6 +907,7 @@
     });
 
     ids.syncButton.addEventListener("click", () => post("/api/sync", null, "Running sync..."));
+    ids.updateButton.addEventListener("click", () => checkUpdates(true));
     ids.watcherButton.addEventListener("click", () => {
       const path = watcherRunning ? "/api/watch/stop" : "/api/watch/start";
       const message = watcherRunning ? "Stopping watcher..." : "Starting watcher...";
@@ -747,6 +916,7 @@
 
     loadForms().catch(error => setMessage(error.message, true));
     loadState().catch(error => setMessage(error.message, true));
+    checkUpdates(false).catch(() => { });
     setInterval(() => loadState().catch(() => { }), 3000);
   </script>
 </body>

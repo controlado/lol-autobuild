@@ -27,6 +27,7 @@ type App interface {
 	RunSync(ctx context.Context) (app.State, string)
 	StartWatcher(ctx context.Context) (app.State, string)
 	StopWatcher(ctx context.Context) app.State
+	CheckUpdates(ctx context.Context) (app.State, string)
 }
 
 type Server struct {
@@ -79,9 +80,9 @@ func (s *Server) Run(ctx context.Context) error {
 	}()
 
 	url := fmt.Sprintf("http://%s/", listener.Addr().String())
-	fmt.Fprintf(s.out, "Open %s\n", url)
+	_, _ = fmt.Fprintf(s.out, "Open %s\n", url)
 	if err := s.openBrowser(url); err != nil {
-		fmt.Fprintf(s.out, "Browser did not open. Use %s\n", url)
+		_, _ = fmt.Fprintf(s.out, "Browser did not open. Use %s\n", url)
 	}
 
 	select {
@@ -112,6 +113,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/sync", s.handleRunSync)
 	mux.HandleFunc("/api/watch/start", s.handleStartWatch)
 	mux.HandleFunc("/api/watch/stop", s.handleStopWatch)
+	mux.HandleFunc("/api/update/check", s.handleCheckUpdates)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Query().Get("token") != s.token {
@@ -205,6 +207,20 @@ func (s *Server) handleStopWatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	state := s.app.StopWatcher(r.Context())
+	writeJSON(w, http.StatusOK, state)
+}
+
+func (s *Server) handleCheckUpdates(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodPost) {
+		return
+	}
+
+	state, errMessage := s.app.CheckUpdates(r.Context())
+	if errMessage != "" {
+		writeError(w, http.StatusInternalServerError, errMessage)
+		return
+	}
+
 	writeJSON(w, http.StatusOK, state)
 }
 

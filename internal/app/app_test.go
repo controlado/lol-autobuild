@@ -10,6 +10,7 @@ import (
 
 	"github.com/controlado/lol-autobuild/internal/config"
 	"github.com/controlado/lol-autobuild/internal/lcu"
+	"github.com/controlado/lol-autobuild/internal/update"
 	"github.com/controlado/lol-autobuild/pkg/lolautobuild"
 )
 
@@ -19,6 +20,7 @@ type testAppOptions struct {
 	cfg            config.Config
 	serviceFactory ServiceFactory
 	statusChecker  StatusChecker
+	updateChecker  UpdateChecker
 	configStore    ConfigStore
 }
 
@@ -38,16 +40,54 @@ func newTestApp(t *testing.T, opts testAppOptions) *App {
 			return lcu.ConnectionStatus{State: lcu.ConnectionStateOff, Message: "LCU is off"}
 		}
 	}
+	if opts.updateChecker == nil {
+		opts.updateChecker = &stubUpdateChecker{currentVersion: "0.1.0"}
+	}
 	if opts.configStore == nil {
 		opts.configStore = &recordingConfigStore{}
 	}
 
-	app, err := New(opts.serviceFactory, opts.statusChecker, opts.configStore, opts.cfg)
+	app, err := New(opts.serviceFactory, opts.statusChecker, opts.updateChecker, opts.configStore, opts.cfg)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 
 	return app
+}
+
+type stubUpdateChecker struct {
+	mu             sync.Mutex
+	currentVersion string
+	checkFn        func(context.Context) (update.Result, error)
+	calls          int
+}
+
+func (s *stubUpdateChecker) CurrentVersion() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.currentVersion
+}
+
+func (s *stubUpdateChecker) Check(ctx context.Context) (update.Result, error) {
+	s.mu.Lock()
+	s.calls++
+	fn := s.checkFn
+	currentVersion := s.currentVersion
+	s.mu.Unlock()
+
+	if fn != nil {
+		return fn(ctx)
+	}
+
+	return update.Result{CurrentVersion: currentVersion, LatestVersion: currentVersion}, nil
+}
+
+func (s *stubUpdateChecker) callCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.calls
 }
 
 type recordingConfigStore struct {
@@ -225,6 +265,14 @@ func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 	app.lastErrorMessage = "previous error"
 	app.lastSync = cloneSyncResult(wantLastSync)
 	app.lastSyncAt = lastSyncAt
+	app.updateState = UpdateState{
+		Status:         UpdateStatusAvailable,
+		CurrentVersion: "0.1.0",
+		LatestVersion:  "v0.2.0",
+		DownloadURL:    "https://example.test/latest",
+		CheckedAt:      &lastSyncAt,
+		Message:        "Download v0.2.0.",
+	}
 
 	state := app.State(context.Background())
 	if statusCalls != 1 {
@@ -239,6 +287,15 @@ func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 	}
 	if !state.Watcher.Running {
 		t.Fatal("expected watcher to be running")
+	}
+	if state.Update.Status != UpdateStatusAvailable {
+		t.Fatalf("state.Update.Status = %q, want %q", state.Update.Status, UpdateStatusAvailable)
+	}
+	if state.Update.CheckedAt == nil || !state.Update.CheckedAt.Equal(lastSyncAt) {
+		t.Fatalf("state.Update.CheckedAt = %v, want %v", state.Update.CheckedAt, lastSyncAt)
+	}
+	if state.Update.CheckedAt == app.updateState.CheckedAt {
+		t.Fatal("state.Update.CheckedAt should be a copy")
 	}
 	if !state.SyncRunning {
 		t.Fatal("expected sync to be running")
@@ -257,11 +314,15 @@ func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 	state.LastSync.Warnings[0] = "mutated"
 	state.LastSync.Warnings = append(state.LastSync.Warnings, "extra")
 	*state.LastSyncAt = state.LastSyncAt.Add(5 * time.Minute)
+	*state.Update.CheckedAt = state.Update.CheckedAt.Add(5 * time.Minute)
 
 	next := app.State(context.Background())
 	assertSyncResultEqual(t, next.LastSync, wantLastSync)
 	if next.LastSyncAt == nil || !next.LastSyncAt.Equal(lastSyncAt) {
 		t.Fatalf("next.LastSyncAt = %v, want %v", next.LastSyncAt, lastSyncAt)
+	}
+	if next.Update.CheckedAt == nil || !next.Update.CheckedAt.Equal(lastSyncAt) {
+		t.Fatalf("next.Update.CheckedAt = %v, want %v", next.Update.CheckedAt, lastSyncAt)
 	}
 }
 
@@ -856,6 +917,174 @@ func TestRunSyncRejectsConcurrentCalls(t *testing.T) {
 	}
 	if svc.syncCallCount() != 1 {
 		t.Fatalf("sync calls = %d, want 1", svc.syncCallCount())
+	}
+}
+
+func TestCheckUpdatesAvailable(t *testing.T) {
+	checker := &stubUpdateChecker{
+		currentVersion: "0.1.0",
+		checkFn: func(context.Context) (update.Result, error) {
+			return update.Result{
+				CurrentVersion: "0.1.0",
+				LatestVersion:  "v0.2.0",
+				DownloadURL:    "https://github.com/controlado/lol-autobuild/releases/tag/v0.2.0",
+				Available:      true,
+			}, nil
+		},
+	}
+	app := newTestApp(t, testAppOptions{updateChecker: checker})
+	app.lastErrorMessage = "sync failed"
+
+	state, message := app.CheckUpdates(context.Background())
+	if message != "" {
+		t.Fatalf("CheckUpdates() message = %q, want empty", message)
+	}
+	if checker.callCount() != 1 {
+		t.Fatalf("update checker calls = %d, want 1", checker.callCount())
+	}
+	if state.Update.Status != UpdateStatusAvailable {
+		t.Fatalf("Update.Status = %q, want %q", state.Update.Status, UpdateStatusAvailable)
+	}
+	if state.Update.CurrentVersion != "0.1.0" || state.Update.LatestVersion != "v0.2.0" {
+		t.Fatalf("Update versions = %+v", state.Update)
+	}
+	if state.Update.DownloadURL == "" {
+		t.Fatal("expected download URL")
+	}
+	if state.Update.CheckedAt == nil {
+		t.Fatal("expected checked_at")
+	}
+	if state.LastError != "sync failed" {
+		t.Fatalf("LastError = %q, want previous sync error", state.LastError)
+	}
+}
+
+func TestCheckUpdatesCurrent(t *testing.T) {
+	checker := &stubUpdateChecker{
+		currentVersion: "0.2.0",
+		checkFn: func(context.Context) (update.Result, error) {
+			return update.Result{
+				CurrentVersion: "0.2.0",
+				LatestVersion:  "v0.2.0",
+				DownloadURL:    "https://example.test/latest",
+				Available:      false,
+			}, nil
+		},
+	}
+	app := newTestApp(t, testAppOptions{updateChecker: checker})
+
+	state, message := app.CheckUpdates(context.Background())
+	if message != "" {
+		t.Fatalf("CheckUpdates() message = %q, want empty", message)
+	}
+	if state.Update.Status != UpdateStatusCurrent {
+		t.Fatalf("Update.Status = %q, want %q", state.Update.Status, UpdateStatusCurrent)
+	}
+	if state.Update.Message == "" {
+		t.Fatal("expected update message")
+	}
+}
+
+func TestCheckUpdatesUnavailableDoesNotSetLastError(t *testing.T) {
+	checker := &stubUpdateChecker{
+		currentVersion: "dev",
+		checkFn: func(context.Context) (update.Result, error) {
+			return update.Result{CurrentVersion: "dev"}, update.ErrUnavailable
+		},
+	}
+	app := newTestApp(t, testAppOptions{updateChecker: checker})
+	app.lastErrorMessage = "watch failed"
+
+	state, message := app.CheckUpdates(context.Background())
+	if message != "" {
+		t.Fatalf("CheckUpdates() message = %q, want empty", message)
+	}
+	if state.Update.Status != UpdateStatusUnavailable {
+		t.Fatalf("Update.Status = %q, want %q", state.Update.Status, UpdateStatusUnavailable)
+	}
+	if state.LastError != "watch failed" {
+		t.Fatalf("LastError = %q, want previous watch error", state.LastError)
+	}
+}
+
+func TestCheckUpdatesErrorDoesNotSetLastError(t *testing.T) {
+	checker := &stubUpdateChecker{
+		currentVersion: "0.1.0",
+		checkFn: func(context.Context) (update.Result, error) {
+			return update.Result{CurrentVersion: "0.1.0"}, errors.New("github failed")
+		},
+	}
+	app := newTestApp(t, testAppOptions{updateChecker: checker})
+	app.lastErrorMessage = "sync failed"
+
+	state, message := app.CheckUpdates(context.Background())
+	if message != "" {
+		t.Fatalf("CheckUpdates() message = %q, want empty", message)
+	}
+	if state.Update.Status != UpdateStatusError {
+		t.Fatalf("Update.Status = %q, want %q", state.Update.Status, UpdateStatusError)
+	}
+	if state.Update.Message != "github failed" {
+		t.Fatalf("Update.Message = %q, want github failed", state.Update.Message)
+	}
+	if state.LastError != "sync failed" {
+		t.Fatalf("LastError = %q, want previous sync error", state.LastError)
+	}
+}
+
+func TestCheckUpdatesRejectsConcurrentChecks(t *testing.T) {
+	blockCheck := make(chan struct{})
+	startedCheck := make(chan struct{})
+	checker := &stubUpdateChecker{
+		currentVersion: "0.1.0",
+		checkFn: func(context.Context) (update.Result, error) {
+			close(startedCheck)
+			<-blockCheck
+			return update.Result{CurrentVersion: "0.1.0", LatestVersion: "0.1.0"}, nil
+		},
+	}
+	app := newTestApp(t, testAppOptions{updateChecker: checker})
+
+	type updateResult struct {
+		state   State
+		message string
+	}
+
+	firstDone := make(chan updateResult, 1)
+	go func() {
+		state, message := app.CheckUpdates(context.Background())
+		firstDone <- updateResult{state: state, message: message}
+	}()
+
+	waitForSignal(t, startedCheck, "first update check start")
+
+	state, message := app.CheckUpdates(context.Background())
+	if message != "" {
+		t.Fatalf("second CheckUpdates() message = %q, want empty", message)
+	}
+	if state.Update.Status != UpdateStatusChecking {
+		t.Fatalf("second Update.Status = %q, want %q", state.Update.Status, UpdateStatusChecking)
+	}
+	if checker.callCount() != 1 {
+		t.Fatalf("update checker calls = %d, want 1", checker.callCount())
+	}
+
+	close(blockCheck)
+
+	var first updateResult
+	select {
+	case first = <-firstDone:
+	case <-time.After(testTimeout):
+		t.Fatal("timed out waiting for first update check to finish")
+	}
+	if first.message != "" {
+		t.Fatalf("first CheckUpdates() message = %q, want empty", first.message)
+	}
+	if first.state.Update.Status != UpdateStatusCurrent {
+		t.Fatalf("first Update.Status = %q, want %q", first.state.Update.Status, UpdateStatusCurrent)
+	}
+	if checker.callCount() != 1 {
+		t.Fatalf("update checker calls = %d, want 1", checker.callCount())
 	}
 }
 

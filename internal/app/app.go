@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -9,12 +10,17 @@ import (
 
 	"github.com/controlado/lol-autobuild/internal/config"
 	"github.com/controlado/lol-autobuild/internal/lcu"
+	"github.com/controlado/lol-autobuild/internal/update"
 	"github.com/controlado/lol-autobuild/pkg/lolautobuild"
 )
 
 type (
 	ServiceFactory func(config.Config) (lolautobuild.Service, error)
 	StatusChecker  func(context.Context, config.Config) lcu.ConnectionStatus
+	UpdateChecker  interface {
+		CurrentVersion() string
+		Check(context.Context) (update.Result, error)
+	}
 )
 
 type App struct {
@@ -23,6 +29,7 @@ type App struct {
 
 	serviceFactory ServiceFactory
 	lcuStatus      StatusChecker
+	updateChecker  UpdateChecker
 	configStore    ConfigStore
 	cfg            config.Config
 
@@ -31,22 +38,28 @@ type App struct {
 	watcherRunning  bool
 	watcherID       int
 	cancelWatcher   context.CancelFunc
+	updateState     UpdateState
 
 	lastErrorMessage string
 	lastSync         *lolautobuild.SyncResult
 	lastSyncAt       time.Time
 }
 
-func New(serviceFactory ServiceFactory, statusChecker StatusChecker, configStore ConfigStore, cfg config.Config) (*App, error) {
-	if serviceFactory == nil || statusChecker == nil || configStore == nil {
-		return nil, fmt.Errorf("serviceFactory, statusChecker, configStore cannot be nil")
+func New(serviceFactory ServiceFactory, statusChecker StatusChecker, updateChecker UpdateChecker, configStore ConfigStore, cfg config.Config) (*App, error) {
+	if serviceFactory == nil || statusChecker == nil || updateChecker == nil || configStore == nil {
+		return nil, fmt.Errorf("serviceFactory, statusChecker, updateChecker, configStore cannot be nil")
 	}
 
 	return &App{
 		serviceFactory: serviceFactory,
 		lcuStatus:      statusChecker,
+		updateChecker:  updateChecker,
 		configStore:    configStore,
 		cfg:            cfg,
+		updateState: UpdateState{
+			Status:         UpdateStatusIdle,
+			CurrentVersion: updateChecker.CurrentVersion(),
+		},
 	}, nil
 }
 
@@ -64,6 +77,7 @@ func (a *App) State(ctx context.Context) State {
 		Settings:    settingsFromConfig(cfg),
 		LCU:         status,
 		Watcher:     WatcherState{Running: a.watcherRunning},
+		Update:      cloneUpdateState(a.updateState),
 		SyncRunning: a.syncRunning,
 		LastSync:    cloneSyncResult(a.lastSync),
 		LastSyncAt:  lastSyncAt,
@@ -341,4 +355,84 @@ func cloneSyncResult(res *lolautobuild.SyncResult) *lolautobuild.SyncResult {
 	out := *res
 	out.Warnings = append([]string{}, res.Warnings...)
 	return &out
+}
+
+func (a *App) CheckUpdates(ctx context.Context) (State, string) {
+	if !a.beginUpdateCheck() {
+		return a.State(ctx), ""
+	}
+
+	result, err := a.updateChecker.Check(ctx)
+	a.finishUpdateCheck(result, err)
+
+	return a.State(ctx), ""
+}
+
+func (a *App) beginUpdateCheck() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.updateState.Status == UpdateStatusChecking {
+		return false
+	}
+
+	currentVersion := strings.TrimSpace(a.updateChecker.CurrentVersion())
+	if currentVersion == "" {
+		currentVersion = a.updateState.CurrentVersion
+	}
+
+	a.updateState = UpdateState{
+		Status:         UpdateStatusChecking,
+		CurrentVersion: currentVersion,
+	}
+
+	return true
+}
+
+func (a *App) finishUpdateCheck(result update.Result, err error) {
+	checkedAt := time.Now().UTC()
+
+	currentVersion := strings.TrimSpace(result.CurrentVersion)
+	if currentVersion == "" {
+		currentVersion = strings.TrimSpace(a.updateChecker.CurrentVersion())
+	}
+
+	newState := UpdateState{
+		CurrentVersion: currentVersion,
+		LatestVersion:  strings.TrimSpace(result.LatestVersion),
+		DownloadURL:    strings.TrimSpace(result.DownloadURL),
+		CheckedAt:      &checkedAt,
+	}
+
+	switch {
+	case err == nil && result.Available:
+		newState.Status = UpdateStatusAvailable
+		if newState.LatestVersion != "" {
+			newState.Message = fmt.Sprintf("Download %s.", newState.LatestVersion)
+		} else {
+			newState.Message = "Download the new version."
+		}
+	case err == nil:
+		newState.Status = UpdateStatusCurrent
+		newState.Message = "You have the latest version."
+	case errors.Is(err, update.ErrUnavailable):
+		newState.Status = UpdateStatusUnavailable
+		newState.Message = "This build cannot check updates."
+	default:
+		newState.Status = UpdateStatusError
+		newState.Message = err.Error()
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.updateState = newState
+}
+
+func cloneUpdateState(state UpdateState) UpdateState {
+	out := state
+	if state.CheckedAt != nil {
+		checkedAt := *state.CheckedAt
+		out.CheckedAt = &checkedAt
+	}
+	return out
 }
