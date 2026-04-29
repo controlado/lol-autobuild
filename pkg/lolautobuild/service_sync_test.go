@@ -305,6 +305,108 @@ func TestSyncBuildsCoachlessStyleItemBlocks(t *testing.T) {
 	}
 }
 
+func TestSyncAllowsUnlimitedItemsPerBlock(t *testing.T) {
+	t.Parallel()
+
+	coachless := &coachlessStub{
+		itemStats: []ports.ItemStat{
+			{ItemID: 1055, WPAOverall: 0.9, Occurrence: 2000},
+			{ItemID: 3006, WPAOverall: 0.8, Occurrence: 2000},
+			{ItemID: 3031, WPAOverall: 0.7, Occurrence: 2000},
+			{ItemID: 2021, WPAOverall: 0.3, Occurrence: 2000},
+			{ItemID: 1051, WPAOverall: 0.5, Occurrence: 2000},
+			{ItemID: 4032, WPAOverall: 0.4, Occurrence: 2000},
+			{ItemID: 5004, WPAOverall: 0.6, Occurrence: 2000},
+		},
+	}
+	lcu := &lcuStub{
+		detectedSelection: ports.DetectedSelection{
+			ChampionID:   235,
+			Position:     position.ADC,
+			QueueID:      420,
+			IsAutofilled: false,
+		},
+	}
+
+	svc, err := NewService(ServiceDeps{
+		Coachless:   coachless,
+		Tokens:      tokenProviderStub{token: "t"},
+		LCU:         lcu,
+		Recommender: recommend.NewEngine(),
+		Policy:      RecommendationPolicy{MinOccurrence: 1000, TopItems: 0, TopSpells: 2},
+	})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	got, err := svc.Sync(context.Background(), SyncRequest{
+		ApplyItems: true,
+		DryRun:     false,
+	})
+	if err != nil {
+		t.Fatalf("Sync() error = %v", err)
+	}
+	if !got.ItemSetApplied {
+		t.Fatalf("expected item set to be applied, got %#v", got)
+	}
+	if len(lcu.itemSetCalls) != 1 {
+		t.Fatalf("expected one item set apply call, got %d", len(lcu.itemSetCalls))
+	}
+
+	for idx, block := range lcu.itemSetCalls[0].Blocks {
+		if len(block.ItemIDs) != 7 {
+			t.Fatalf("expected unlimited block items at index %d, got %#v", idx, block.ItemIDs)
+		}
+	}
+}
+
+func TestSyncFallsBackToRawItemsWhenOccurrenceFilterWouldEmptyBlock(t *testing.T) {
+	t.Parallel()
+
+	coachless := &coachlessStub{
+		itemStats: []ports.ItemStat{
+			{ItemID: 3142, WPAOverall: 1.2, Occurrence: 100},
+			{ItemID: 3087, WPAOverall: 0.9, Occurrence: 200},
+		},
+	}
+	lcu := &lcuStub{
+		detectedSelection: ports.DetectedSelection{
+			ChampionID:   235,
+			Position:     position.ADC,
+			QueueID:      420,
+			IsAutofilled: false,
+		},
+	}
+
+	svc, err := NewService(ServiceDeps{
+		Coachless:   coachless,
+		Tokens:      tokenProviderStub{token: "t"},
+		LCU:         lcu,
+		Recommender: recommend.NewEngine(),
+		Policy:      RecommendationPolicy{MinOccurrence: 1000, TopItems: 0, TopSpells: 2},
+	})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	got, err := svc.Sync(context.Background(), SyncRequest{
+		ApplyItems: true,
+		DryRun:     false,
+	})
+	if err != nil {
+		t.Fatalf("Sync() error = %v", err)
+	}
+	if !got.ItemSetApplied {
+		t.Fatalf("expected item set to be applied, got %#v", got)
+	}
+
+	for idx, block := range lcu.itemSetCalls[0].Blocks {
+		if len(block.ItemIDs) != 2 || block.ItemIDs[0] != 3142 || block.ItemIDs[1] != 3087 {
+			t.Fatalf("expected raw fallback items at index %d, got %#v", idx, block.ItemIDs)
+		}
+	}
+}
+
 func TestResolvePatchHonorsFreePatchLimits(t *testing.T) {
 	t.Parallel()
 

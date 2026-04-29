@@ -41,8 +41,8 @@ func NewService(deps ServiceDeps) (Service, error) {
 	if deps.Policy.MinOccurrence < 0 {
 		return nil, errors.New("policy.min_occurrence must be >= 0")
 	}
-	if deps.Policy.TopItems <= 0 {
-		deps.Policy.TopItems = 6
+	if deps.Policy.TopItems < 0 {
+		return nil, errors.New("policy.top_items must be >= 0")
 	}
 	if deps.Policy.TopSpells <= 0 {
 		deps.Policy.TopSpells = 2

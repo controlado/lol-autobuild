@@ -138,8 +138,8 @@ Flags:
 | `auth.token_skew_seconds` | int | `30` | Token validity skew before expiry. |
 | `env_file.path` | string | `""` | Optional path to `.env` file loaded before bootstrap. |
 | `secrets.service_name` | string | `lol-autobuild` | OS keyring service name. |
-| `recommendation.min_occurrence` | int | `100` | Minimum sample threshold for recommendations. |
-| `recommendation.top_items` | int | `6` | Max recommended item count. |
+| `recommendation.min_occurrence` | int | `1000` | Minimum occurrence count for recommendation candidates. |
+| `recommendation.top_items` | int | `6` | Max recommended item count per block. `0` disables the limit. |
 | `recommendation.top_spells` | int | `2` | Max recommended spell count. |
 | `lcu.enabled` | bool | `false` | Enables LCU detection and apply paths. |
 | `lcu.lockfile_path` | string | `""` | Optional lockfile fallback path. |

@@ -76,7 +76,7 @@ func Defaults() Config {
 			ServiceName: "lol-autobuild",
 		},
 		Recommendation: RecommendationConfig{
-			MinOccurrence: 100,
+			MinOccurrence: 1000,
 			TopItems:      6,
 			TopSpells:     2,
 		},
@@ -123,8 +123,8 @@ func (c Config) Validate() error {
 		errs = append(errs, errors.New("recommendation.min_occurrence must be >= 0"))
 	}
 
-	if c.Recommendation.TopItems <= 0 {
-		errs = append(errs, errors.New("recommendation.top_items must be > 0"))
+	if c.Recommendation.TopItems < 0 {
+		errs = append(errs, errors.New("recommendation.top_items must be >= 0"))
 	}
 
 	if c.Recommendation.TopSpells <= 0 {

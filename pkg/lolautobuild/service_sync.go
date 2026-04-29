@@ -253,12 +253,7 @@ func itemStageSpecsForPosition(p position.Position) []itemStageSpec {
 }
 
 func filterAndLimitItemStats(in []ports.ItemStat, minOccurrence, topItems int) []ports.ItemStat {
-	out := make([]ports.ItemStat, 0, len(in))
-	for _, stat := range in {
-		if stat.Occurrence >= minOccurrence {
-			out = append(out, stat)
-		}
-	}
+	out := itemStatsPassingOccurrenceFilter(in, minOccurrence)
 
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].WPAOverall == out[j].WPAOverall {
@@ -272,6 +267,21 @@ func filterAndLimitItemStats(in []ports.ItemStat, minOccurrence, topItems int) [
 	}
 
 	return out
+}
+
+func itemStatsPassingOccurrenceFilter(in []ports.ItemStat, minOccurrence int) []ports.ItemStat {
+	filtered := make([]ports.ItemStat, 0, len(in))
+	for _, stat := range in {
+		if stat.Occurrence >= minOccurrence {
+			filtered = append(filtered, stat)
+		}
+	}
+
+	if len(filtered) > 0 || len(in) == 0 {
+		return filtered
+	}
+
+	return append([]ports.ItemStat{}, in...)
 }
 
 func resolvePatch(rawPatch string, patches []ports.PatchInfo, subscribed bool) (ports.PatchFilter, string, error) {

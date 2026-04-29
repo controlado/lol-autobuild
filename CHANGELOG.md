@@ -28,6 +28,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - LCU connection discovery now checks League process arguments first, then falls back to `lcu.lockfile_path`.
 - Position detection now supports queue IDs `400`, `420`, `440`, and `3110`.
 - Sync item recommendations now build ordered staged blocks (`Starter`, `1st Item`, `2nd Item`, `Boots`, `3rd Item`, `4th+ Item`) with per-block filtering.
+- Item filtering uses Coachless' default 1000-occurrence threshold. Blocks remain when filtering would remove all items, and `recommendation.top_items: 0` disables per-block truncation.
 - `dev sync` and `dev watch` continue to default to `--dry-run=true`.
 - `dev watch` no longer syncs at startup. It syncs once per champ select when the session timer enters `FINALIZATION`.
 - Free Coachless users now default to the latest non-Premium patch and cannot request the newest Premium patch.

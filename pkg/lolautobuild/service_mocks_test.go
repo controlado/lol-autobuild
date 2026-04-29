@@ -44,6 +44,7 @@ type coachlessStub struct {
 	keystoneCalls   []ports.KeystoneRequest
 	spellCalls      []ports.SummonerSpellStatsRequest
 	itemCalls       []ports.ItemStatsRequest
+	itemStats       []ports.ItemStat
 	keystoneErr     error
 	spellErr        error
 	itemErr         error
@@ -102,6 +103,9 @@ func (c *coachlessStub) GetItemStats(ctx context.Context, accessToken string, re
 	c.mu.Unlock()
 	if err != nil {
 		return nil, err
+	}
+	if c.itemStats != nil {
+		return append([]ports.ItemStat{}, c.itemStats...), nil
 	}
 	return []ports.ItemStat{
 		{ItemID: 1055, WPAOverall: 1.0, Occurrence: 900},

@@ -237,6 +237,7 @@ func TestValidateFailsOnInvalidConfig(t *testing.T) {
 
 	cfg := Defaults()
 	cfg.Coachless.APIBaseURL = ""
+	cfg.Recommendation.TopItems = -1
 	cfg.Recommendation.TopSpells = 0
 
 	err := cfg.Validate()
@@ -251,6 +252,10 @@ func TestValidateFailsOnInvalidConfig(t *testing.T) {
 
 	if !strings.Contains(msg, "recommendation.top_spells") {
 		t.Fatalf("expected top_spells error, got: %s", msg)
+	}
+
+	if !strings.Contains(msg, "recommendation.top_items") {
+		t.Fatalf("expected top_items error, got: %s", msg)
 	}
 }
 
