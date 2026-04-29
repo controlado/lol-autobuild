@@ -11,7 +11,7 @@ For the short user guide, read [README.md](README.md). Portuguese version: [READ
 - Detects your current champion and position from the local LCU champ select session.
 - Pulls Coachless patch, keystone, summoner spell, and item stats.
 - Builds recommendations.
-- Applies supported changes in LCU, or reports the plan when `--dry-run=true`.
+- Applies supported changes in LCU. Set `--dry-run=true` or `sync.dry_run: true` to preview the plan.
 
 ## Capability matrix
 
@@ -65,10 +65,12 @@ lol-autobuild ui --config ./config.example.yaml
 The UI lets you:
 
 - Change what sync updates: items, runes, and summoner spells.
-- Choose preview mode or live apply mode.
+- Switch between live apply mode and preview mode.
 - Run one sync.
 - Start or stop the watcher.
 - Check the current League Client connection state.
+
+The UI uses live apply mode when a config omits `sync.dry_run`. Set `sync.dry_run: true` for preview mode.
 
 The API uses a per-run token in local URLs. The server does not listen on public network interfaces.
 
@@ -122,7 +124,7 @@ Flags:
 
 `watch` waits for champ select finalization before it syncs. It does not run a sync cycle at startup.
 
-`--dry-run` defaults to `true` for `sync` and `watch`. Use `--dry-run=false` only when you want live LCU changes.
+CLI `sync` and `watch` default to `--dry-run=true`. Pass `--dry-run=false` to apply LCU changes from the CLI.
 
 ## Config reference
 
@@ -148,7 +150,7 @@ Flags:
 | `sync.apply_runes` | bool | `true` | Local UI setting for rune page apply. |
 | `sync.apply_spells` | bool | `true` | Local UI setting for summoner spell apply. |
 | `sync.keep_flash` | bool | `true` | Keep your current Flash slot when applying summoner spells. |
-| `sync.dry_run` | bool | `true` | Local UI preview mode. |
+| `sync.dry_run` | bool | `false` | Local UI mode. Use `true` for preview. |
 | `watch.debounce_millis` | int | `500` | Debounce window after finalization events. |
 | `watch.reconnect_delay_millis` | int | `1000` | Delay before websocket reconnect attempts. |
 

@@ -120,7 +120,7 @@ lcu:
 	if cfg.Sync.Patch != "" {
 		t.Fatalf("expected empty default patch, got %q", cfg.Sync.Patch)
 	}
-	if !cfg.Sync.ApplyItems || !cfg.Sync.ApplyRunes || !cfg.Sync.ApplySpells || !cfg.Sync.KeepFlash || !cfg.Sync.DryRun {
+	if !cfg.Sync.ApplyItems || !cfg.Sync.ApplyRunes || !cfg.Sync.ApplySpells || !cfg.Sync.KeepFlash || cfg.Sync.DryRun {
 		t.Fatalf("unexpected sync defaults: %#v", cfg.Sync)
 	}
 }

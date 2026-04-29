@@ -30,7 +30,7 @@ sync:
   apply_runes: false
   apply_spells: true
   keep_flash: true
-  dry_run: true
+  dry_run: false
 
 watch:
   debounce_millis: 500

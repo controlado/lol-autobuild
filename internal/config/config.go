@@ -89,7 +89,7 @@ func Defaults() Config {
 			ApplyRunes:  true,
 			ApplySpells: true,
 			KeepFlash:   true,
-			DryRun:      true,
+			DryRun:      false,
 		},
 		Watch: WatchConfig{
 			DebounceMillis:       500,

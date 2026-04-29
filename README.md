@@ -32,7 +32,7 @@ Pick the ZIP for your system, extract it, and run `lol-autobuild`.
 2. Start `lol-autobuild`.
 3. Use the local browser page that opens.
 4. Log in to Coachless when the app asks.
-5. Keep preview mode on until you trust the result.
+5. The UI opens in live apply mode. Turn on preview mode for a dry run.
 
 The app runs on `127.0.0.1`, on your own computer.
 
@@ -44,19 +44,19 @@ Open the local UI:
 lol-autobuild
 ```
 
-Preview one sync:
+Preview one CLI sync:
 
 ```bash
 lol-autobuild sync --dry-run
 ```
 
-Watch champion select and sync once during finalization:
+Watch champion select in CLI preview mode:
 
 ```bash
 lol-autobuild watch --dry-run
 ```
 
-Use `--dry-run=false` only when you want the app to apply changes to the League Client.
+CLI commands use dry-run by default. Pass `--dry-run=false` to apply changes to the League Client.
 
 Advanced commands, config, and limits live in [USAGE.md](USAGE.md).
 

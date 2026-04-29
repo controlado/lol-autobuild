@@ -32,7 +32,7 @@ Escolha o ZIP do seu sistema, extraia os arquivos e rode `lol-autobuild`.
 2. Inicie o `lol-autobuild`.
 3. Use a página local que abrir no navegador.
 4. Entre no Coachless quando o app pedir.
-5. Mantenha o modo de preview ligado até confiar no resultado.
+5. A UI abre em modo de aplicação. Ligue o preview para fazer uma simulação.
 
 O app roda em `127.0.0.1`, no seu próprio computador.
 
@@ -44,19 +44,19 @@ Abrir a UI:
 lol-autobuild
 ```
 
-Simular uma sincronização:
+Simular uma sincronização pela CLI:
 
 ```bash
 lol-autobuild sync --dry-run
 ```
 
-Observar a seleção de campeões e sincronizar na finalização:
+Observar a seleção de campeões em modo de preview pela CLI:
 
 ```bash
 lol-autobuild watch --dry-run
 ```
 
-Use `--dry-run=false` somente quando quiser aplicar mudanças no client.
+Comandos da CLI usam dry-run por padrão. Passe `--dry-run=false` para aplicar mudanças no client.
 
 Comandos avançados, configuração e limites ficam em [USAGE.md](USAGE.md).
 
