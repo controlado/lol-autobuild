@@ -77,7 +77,7 @@ func TestListenUI(t *testing.T) {
 			if err != nil {
 				t.Fatalf("listenUI() error = %v", err)
 			}
-			defer listener.Close()
+			go func() { _ = listener.Close() }()
 
 			if usedPreferred != tt.wantPreferred {
 				t.Fatalf("usedPreferred = %v, want %v", usedPreferred, tt.wantPreferred)
