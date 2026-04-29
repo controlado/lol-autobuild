@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -35,6 +36,71 @@ func (sa stubApp) StopWatcher(context.Context) (s app.State) {
 }
 func (sa stubApp) CheckUpdates(context.Context) (s app.State, msg app.UserMessage) {
 	return
+}
+
+func TestListenUI(t *testing.T) {
+	tests := []struct {
+		name          string
+		setup         func(t *testing.T) (preferredAddr string, cleanup func())
+		wantPreferred bool
+	}{
+		{
+			name: "uses preferred address",
+			setup: func(t *testing.T) (string, func()) {
+				listener := mustListenTCP(t, "127.0.0.1:0")
+				addr := listener.Addr().String()
+				if err := listener.Close(); err != nil {
+					t.Fatalf("close probe listener: %v", err)
+				}
+				return addr, func() {}
+			},
+			wantPreferred: true,
+		},
+		{
+			name: "falls back when preferred address is busy",
+			setup: func(t *testing.T) (string, func()) {
+				listener := mustListenTCP(t, "127.0.0.1:0")
+				return listener.Addr().String(), func() {
+					_ = listener.Close()
+				}
+			},
+			wantPreferred: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			preferredAddr, cleanup := tt.setup(t)
+			defer cleanup()
+
+			listener, usedPreferred, err := listenUI(preferredAddr, "127.0.0.1:0")
+			if err != nil {
+				t.Fatalf("listenUI() error = %v", err)
+			}
+			defer listener.Close()
+
+			if usedPreferred != tt.wantPreferred {
+				t.Fatalf("usedPreferred = %v, want %v", usedPreferred, tt.wantPreferred)
+			}
+			if usedPreferred && listener.Addr().String() != preferredAddr {
+				t.Fatalf("listener address = %q, want %q", listener.Addr().String(), preferredAddr)
+			}
+			if !usedPreferred && listener.Addr().String() == preferredAddr {
+				t.Fatalf("listener address = %q, want fallback address", listener.Addr().String())
+			}
+		})
+	}
+}
+
+func mustListenTCP(t *testing.T, addr string) net.Listener {
+	t.Helper()
+
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		t.Fatalf("listen %s: %v", addr, err)
+	}
+
+	return listener
 }
 
 func TestIndexRendersSyncSuboptionsStructure(t *testing.T) {

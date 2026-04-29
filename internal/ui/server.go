@@ -42,6 +42,11 @@ var i18nAssetPaths = map[string]string{
 	"/i18n/pt-BR.json": "static/i18n/pt-BR.json",
 }
 
+const (
+	uiListenAddr         = "127.0.0.1:38473"
+	uiFallbackListenAddr = "127.0.0.1:0"
+)
+
 type Server struct {
 	app         App
 	openBrowser BrowserOpener
@@ -76,9 +81,12 @@ func NewServer(opts Options) (*Server, error) {
 }
 
 func (s *Server) Run(ctx context.Context) error {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, usedPreferredAddr, err := listenUI(uiListenAddr, uiFallbackListenAddr)
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
+	}
+	if !usedPreferredAddr {
+		_, _ = fmt.Fprintf(s.out, "Port %s is unavailable. Using %s\n", uiListenAddr, listener.Addr().String())
 	}
 
 	httpServer := &http.Server{
@@ -115,6 +123,20 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func listenUI(preferredAddr, fallbackAddr string) (net.Listener, bool, error) {
+	listener, err := net.Listen("tcp", preferredAddr)
+	if err == nil {
+		return listener, true, nil
+	}
+
+	fallbackListener, fallbackErr := net.Listen("tcp", fallbackAddr)
+	if fallbackErr != nil {
+		return nil, false, fmt.Errorf("%s: %w; fallback %s: %v", preferredAddr, err, fallbackAddr, fallbackErr)
+	}
+
+	return fallbackListener, false, nil
 }
 
 func (s *Server) Handler() http.Handler {
