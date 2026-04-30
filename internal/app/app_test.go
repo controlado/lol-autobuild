@@ -355,13 +355,16 @@ func TestSaveSettingsPersistsTrimmedSettings(t *testing.T) {
 	app.lastErrorMessage = "stale error"
 
 	settings := Settings{
-		Patch:       " 14.9 ",
-		ApplyItems:  false,
-		ApplyRunes:  true,
-		ApplySpells: false,
-		KeepFlash:   false,
-		DryRun:      false,
-		LCUEnabled:  true,
+		Patch:              " 14.9 ",
+		PatchAdditionsMode: " " + lolautobuild.PatchAdditionsModeManual + " ",
+		PatchAdditions:     lolautobuild.PatchAdditionsMax,
+		LeagueTierPreset:   " " + lolautobuild.LeagueTierPresetMasterPlus + " ",
+		ApplyItems:         false,
+		ApplyRunes:         true,
+		ApplySpells:        false,
+		KeepFlash:          false,
+		DryRun:             false,
+		LCUEnabled:         true,
 	}
 
 	state, message := app.SaveSettings(context.Background(), settings)
@@ -505,13 +508,16 @@ func TestSaveSettingsRestartsRunningWatcherWithNewConfig(t *testing.T) {
 	assertWatchRequestMatchesConfig(t, firstCall.req, cfg)
 
 	newSettings := Settings{
-		Patch:       " 15.2 ",
-		ApplyItems:  false,
-		ApplyRunes:  true,
-		ApplySpells: false,
-		KeepFlash:   false,
-		DryRun:      false,
-		LCUEnabled:  true,
+		Patch:              " 15.2 ",
+		PatchAdditionsMode: lolautobuild.PatchAdditionsModeManual,
+		PatchAdditions:     1,
+		LeagueTierPreset:   lolautobuild.LeagueTierPresetPlatinumPlus,
+		ApplyItems:         false,
+		ApplyRunes:         true,
+		ApplySpells:        false,
+		KeepFlash:          false,
+		DryRun:             false,
+		LCUEnabled:         true,
 	}
 
 	wantCfg := cfg
@@ -1190,6 +1196,15 @@ func assertSyncRequestMatchesConfig(t *testing.T, got lolautobuild.SyncRequest, 
 	if got.Patch != cfg.Sync.Patch {
 		t.Fatalf("sync patch = %q, want %q", got.Patch, cfg.Sync.Patch)
 	}
+	if got.PatchAdditionsMode != cfg.Sync.PatchAdditionsMode {
+		t.Fatalf("sync PatchAdditionsMode = %q, want %q", got.PatchAdditionsMode, cfg.Sync.PatchAdditionsMode)
+	}
+	if got.PatchAdditions != cfg.Sync.PatchAdditions {
+		t.Fatalf("sync PatchAdditions = %d, want %d", got.PatchAdditions, cfg.Sync.PatchAdditions)
+	}
+	if got.LeagueTierPreset != cfg.Sync.LeagueTierPreset {
+		t.Fatalf("sync LeagueTierPreset = %q, want %q", got.LeagueTierPreset, cfg.Sync.LeagueTierPreset)
+	}
 	if got.ApplyItems != cfg.Sync.ApplyItems {
 		t.Fatalf("sync ApplyItems = %t, want %t", got.ApplyItems, cfg.Sync.ApplyItems)
 	}
@@ -1212,6 +1227,15 @@ func assertWatchRequestMatchesConfig(t *testing.T, got lolautobuild.WatchRequest
 
 	if got.Patch != cfg.Sync.Patch {
 		t.Fatalf("watch patch = %q, want %q", got.Patch, cfg.Sync.Patch)
+	}
+	if got.PatchAdditionsMode != cfg.Sync.PatchAdditionsMode {
+		t.Fatalf("watch PatchAdditionsMode = %q, want %q", got.PatchAdditionsMode, cfg.Sync.PatchAdditionsMode)
+	}
+	if got.PatchAdditions != cfg.Sync.PatchAdditions {
+		t.Fatalf("watch PatchAdditions = %d, want %d", got.PatchAdditions, cfg.Sync.PatchAdditions)
+	}
+	if got.LeagueTierPreset != cfg.Sync.LeagueTierPreset {
+		t.Fatalf("watch LeagueTierPreset = %q, want %q", got.LeagueTierPreset, cfg.Sync.LeagueTierPreset)
 	}
 	if got.ApplyItems != cfg.Sync.ApplyItems {
 		t.Fatalf("watch ApplyItems = %t, want %t", got.ApplyItems, cfg.Sync.ApplyItems)

@@ -26,6 +26,9 @@ lcu:
 
 sync:
   patch: ""
+  patch_additions_mode: auto
+  patch_additions: 2
+  league_tier_preset: emerald_plus
   apply_items: true
   apply_runes: false
   apply_spells: true

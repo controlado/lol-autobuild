@@ -2,7 +2,10 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"strings"
+
+	"github.com/controlado/lol-autobuild/pkg/lolautobuild"
 )
 
 type Config struct {
@@ -48,12 +51,15 @@ type LCUConfig struct {
 }
 
 type SyncConfig struct {
-	Patch       string `yaml:"patch"`
-	ApplyItems  bool   `yaml:"apply_items"`
-	ApplyRunes  bool   `yaml:"apply_runes"`
-	ApplySpells bool   `yaml:"apply_spells"`
-	KeepFlash   bool   `yaml:"keep_flash"`
-	DryRun      bool   `yaml:"dry_run"`
+	Patch              string `yaml:"patch"`
+	PatchAdditionsMode string `yaml:"patch_additions_mode"`
+	PatchAdditions     int    `yaml:"patch_additions"`
+	LeagueTierPreset   string `yaml:"league_tier_preset"`
+	ApplyItems         bool   `yaml:"apply_items"`
+	ApplyRunes         bool   `yaml:"apply_runes"`
+	ApplySpells        bool   `yaml:"apply_spells"`
+	KeepFlash          bool   `yaml:"keep_flash"`
+	DryRun             bool   `yaml:"dry_run"`
 }
 
 type WatchConfig struct {
@@ -85,11 +91,14 @@ func Defaults() Config {
 			Enabled: false,
 		},
 		Sync: SyncConfig{
-			ApplyItems:  true,
-			ApplyRunes:  true,
-			ApplySpells: true,
-			KeepFlash:   true,
-			DryRun:      false,
+			PatchAdditionsMode: lolautobuild.PatchAdditionsModeAuto,
+			PatchAdditions:     lolautobuild.PatchAdditionsDefault,
+			LeagueTierPreset:   lolautobuild.LeagueTierPresetDefault,
+			ApplyItems:         true,
+			ApplyRunes:         true,
+			ApplySpells:        true,
+			KeepFlash:          true,
+			DryRun:             false,
 		},
 		Watch: WatchConfig{
 			DebounceMillis:       500,
@@ -131,6 +140,26 @@ func (c Config) Validate() error {
 
 	if c.Recommendation.TopSpells <= 0 {
 		errs = append(errs, errors.New("recommendation.top_spells must be > 0"))
+	}
+
+	switch c.Sync.PatchAdditionsMode {
+	case lolautobuild.PatchAdditionsModeAuto, lolautobuild.PatchAdditionsModeManual:
+	default:
+		errs = append(errs, fmt.Errorf("sync.patch_additions_mode must be %s or %s", lolautobuild.PatchAdditionsModeAuto, lolautobuild.PatchAdditionsModeManual))
+	}
+
+	if c.Sync.PatchAdditions < 0 || c.Sync.PatchAdditions > lolautobuild.PatchAdditionsMax {
+		errs = append(errs, fmt.Errorf("sync.patch_additions must be between 0 and %d", lolautobuild.PatchAdditionsMax))
+	}
+
+	switch c.Sync.LeagueTierPreset {
+	case lolautobuild.LeagueTierPresetGoldPlus,
+		lolautobuild.LeagueTierPresetPlatinumPlus,
+		lolautobuild.LeagueTierPresetEmeraldPlus,
+		lolautobuild.LeagueTierPresetDiamondPlus,
+		lolautobuild.LeagueTierPresetMasterPlus:
+	default:
+		errs = append(errs, errors.New("sync.league_tier_preset is invalid"))
 	}
 
 	if c.Watch.DebounceMillis <= 0 {

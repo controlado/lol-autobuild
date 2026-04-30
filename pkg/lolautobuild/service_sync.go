@@ -33,7 +33,18 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 		return SyncResult{}, fmt.Errorf("get patches: %w", err)
 	}
 
-	patchFilter, patchLabel, err := resolvePatch(req.Patch, patches, tokenClaims.IsSubscribed())
+	patchFilter, patchLabel, patchWarnings, err := resolvePatch(
+		req.Patch,
+		req.PatchAdditionsMode,
+		req.PatchAdditions,
+		patches,
+		tokenClaims.IsSubscribed(),
+	)
+	if err != nil {
+		return SyncResult{}, err
+	}
+
+	leagueTiers, err := resolveLeagueTierPreset(req.LeagueTierPreset)
 	if err != nil {
 		return SyncResult{}, err
 	}
@@ -41,7 +52,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 	filters := ports.CommonFilters{
 		Patch:       patchFilter,
 		ChampionIDs: []int{selection.ChampionID},
-		LeagueTiers: []int{5, 6, 7},
+		LeagueTiers: leagueTiers,
 		Role:        selection.Position.Code(),
 	}
 
@@ -117,7 +128,8 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 		DetectedQueueID:    selection.QueueID,
 		Warnings:           append([]string{}, rec.Warnings...),
 	}
-	result.Warnings = append(result.Warnings, fmt.Sprintf("selected patch: %s", patchLabel))
+	result.Warnings = append(result.Warnings, selectedPatchWarning(patchLabel, patchFilter.PatchAdditions))
+	result.Warnings = append(result.Warnings, patchWarnings...)
 	if selection.IsAutofilled {
 		result.Warnings = append(result.Warnings, "autofill detected in current champ select")
 	}
@@ -285,9 +297,20 @@ func itemStatsPassingOccurrenceFilter(in []ports.ItemStat, minOccurrence int) []
 	return append([]ports.ItemStat{}, in...)
 }
 
-func resolvePatch(rawPatch string, patches []ports.PatchInfo, subscribed bool) (ports.PatchFilter, string, error) {
+func resolvePatch(rawPatch string, rawPatchAdditionsMode string, requestedPatchAdditions int, patches []ports.PatchInfo, subscribed bool) (ports.PatchFilter, string, []string, error) {
 	if len(patches) == 0 {
-		return ports.PatchFilter{}, "", errors.New("no patch data available")
+		return ports.PatchFilter{}, "", nil, errors.New("no patch data available")
+	}
+
+	patchAdditionsMode := strings.TrimSpace(rawPatchAdditionsMode)
+	if patchAdditionsMode == "" {
+		patchAdditionsMode = PatchAdditionsModeAuto
+	}
+	if patchAdditionsMode != PatchAdditionsModeAuto && patchAdditionsMode != PatchAdditionsModeManual {
+		return ports.PatchFilter{}, "", nil, fmt.Errorf("patch additions mode %q is invalid", rawPatchAdditionsMode)
+	}
+	if requestedPatchAdditions < 0 || requestedPatchAdditions > PatchAdditionsMax {
+		return ports.PatchFilter{}, "", nil, fmt.Errorf("patch additions %d must be between 0 and %d", requestedPatchAdditions, PatchAdditionsMax)
 	}
 
 	selectedIndex := len(patches) - 1
@@ -302,25 +325,81 @@ func resolvePatch(rawPatch string, patches []ports.PatchInfo, subscribed bool) (
 			}
 		}
 		if !found {
-			return ports.PatchFilter{}, "", fmt.Errorf("requested patch %q not found", rawPatch)
+			return ports.PatchFilter{}, "", nil, fmt.Errorf("requested patch %q not found", rawPatch)
 		}
 	} else if !subscribed && len(patches) > 1 {
 		selectedIndex = len(patches) - 2
 	}
 
 	if !subscribed && selectedIndex == len(patches)-1 && len(patches) > 1 {
-		return ports.PatchFilter{}, "", fmt.Errorf("requested patch %q requires Coachless Premium", patches[selectedIndex].Label)
+		return ports.PatchFilter{}, "", nil, fmt.Errorf("requested patch %q requires Coachless Premium", patches[selectedIndex].Label)
 	}
 
 	selected := patches[selectedIndex]
-	patchAdditions := 0
-	if subscribed {
-		patchAdditions = min(2, selectedIndex)
+	patchAdditions, warnings, err := resolvePatchAdditions(patchAdditionsMode, requestedPatchAdditions, selectedIndex, subscribed)
+	if err != nil {
+		return ports.PatchFilter{}, "", nil, err
 	}
 
 	return ports.PatchFilter{
 		Major:          selected.Major,
 		Patch:          selected.Patch,
 		PatchAdditions: patchAdditions,
-	}, selected.Label, nil
+	}, selected.Label, warnings, nil
+}
+
+func resolvePatchAdditions(mode string, requestedPatchAdditions int, selectedPatchIndex int, subscribed bool) (int, []string, error) {
+	if mode == PatchAdditionsModeAuto {
+		if !subscribed {
+			return 0, nil, nil
+		}
+		return min(PatchAdditionsDefault, selectedPatchIndex), nil, nil
+	}
+
+	if requestedPatchAdditions > 0 && !subscribed {
+		return 0, nil, errors.New("requested patch additions require Coachless Premium")
+	}
+
+	maxAvailable := min(PatchAdditionsMax, selectedPatchIndex)
+	if requestedPatchAdditions <= maxAvailable {
+		return requestedPatchAdditions, nil, nil
+	}
+
+	warnings := []string{
+		fmt.Sprintf("patch additions reduced from %d to %d because only %d previous patches are available", requestedPatchAdditions, maxAvailable, maxAvailable),
+	}
+	return maxAvailable, warnings, nil
+}
+
+func selectedPatchWarning(patchLabel string, patchAdditions int) string {
+	switch {
+	case patchAdditions <= 0:
+		return fmt.Sprintf("selected patch: %s", patchLabel)
+	case patchAdditions == 1:
+		return fmt.Sprintf("selected patch: %s (+1 previous patch)", patchLabel)
+	default:
+		return fmt.Sprintf("selected patch: %s (+%d previous patches)", patchLabel, patchAdditions)
+	}
+}
+
+func resolveLeagueTierPreset(rawPreset string) ([]int, error) {
+	preset := strings.TrimSpace(rawPreset)
+	if preset == "" {
+		preset = LeagueTierPresetDefault
+	}
+
+	switch preset {
+	case LeagueTierPresetGoldPlus:
+		return []int{3, 4, 5, 6, 7}, nil
+	case LeagueTierPresetPlatinumPlus:
+		return []int{4, 5, 6, 7}, nil
+	case LeagueTierPresetEmeraldPlus:
+		return []int{5, 6, 7}, nil
+	case LeagueTierPresetDiamondPlus:
+		return []int{6, 7}, nil
+	case LeagueTierPresetMasterPlus:
+		return []int{7}, nil
+	default:
+		return nil, fmt.Errorf("league tier preset %q is invalid", rawPreset)
+	}
 }

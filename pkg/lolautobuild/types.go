@@ -11,8 +11,27 @@ type Service interface {
 	Watch(ctx context.Context, req WatchRequest) error
 }
 
+const (
+	PatchAdditionsModeAuto   = "auto"
+	PatchAdditionsModeManual = "manual"
+	PatchAdditionsDefault    = 2
+	PatchAdditionsMax        = 4
+)
+
+const (
+	LeagueTierPresetGoldPlus     = "gold_plus"
+	LeagueTierPresetPlatinumPlus = "platinum_plus"
+	LeagueTierPresetEmeraldPlus  = "emerald_plus"
+	LeagueTierPresetDiamondPlus  = "diamond_plus"
+	LeagueTierPresetMasterPlus   = "master_plus"
+	LeagueTierPresetDefault      = LeagueTierPresetEmeraldPlus
+)
+
 type SyncRequest struct {
-	Patch string
+	Patch              string
+	PatchAdditionsMode string
+	PatchAdditions     int
+	LeagueTierPreset   string
 
 	ApplyItems  bool
 	ApplyRunes  bool
@@ -33,7 +52,10 @@ type SyncResult struct {
 }
 
 type WatchRequest struct {
-	Patch string
+	Patch              string
+	PatchAdditionsMode string
+	PatchAdditions     int
+	LeagueTierPreset   string
 
 	ApplyItems  bool
 	ApplyRunes  bool

@@ -108,12 +108,15 @@ func (s *syncService) runWatchCycle(ctx context.Context, req WatchRequest, trigg
 
 func (r WatchRequest) syncRequest() SyncRequest {
 	return SyncRequest{
-		Patch:       r.Patch,
-		ApplyItems:  r.ApplyItems,
-		ApplyRunes:  r.ApplyRunes,
-		ApplySpells: r.ApplySpells,
-		KeepFlash:   r.KeepFlash,
-		DryRun:      r.DryRun,
+		Patch:              r.Patch,
+		PatchAdditionsMode: r.PatchAdditionsMode,
+		PatchAdditions:     r.PatchAdditions,
+		LeagueTierPreset:   r.LeagueTierPreset,
+		ApplyItems:         r.ApplyItems,
+		ApplyRunes:         r.ApplyRunes,
+		ApplySpells:        r.ApplySpells,
+		KeepFlash:          r.KeepFlash,
+		DryRun:             r.DryRun,
 	}
 }
 

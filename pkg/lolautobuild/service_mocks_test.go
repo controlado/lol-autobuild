@@ -41,6 +41,7 @@ func (t tokenProviderStub) Claims(ctx context.Context) (ports.TokenClaims, error
 type coachlessStub struct {
 	mu              sync.Mutex
 	getPatchesCalls int
+	patches         []ports.PatchInfo
 	keystoneCalls   []ports.KeystoneRequest
 	spellCalls      []ports.SummonerSpellStatsRequest
 	itemCalls       []ports.ItemStatsRequest
@@ -59,35 +60,47 @@ func (c *coachlessStub) Refresh(ctx context.Context, refreshToken string) (ports
 func (c *coachlessStub) GetPatches(ctx context.Context, accessToken string) ([]ports.PatchInfo, error) {
 	_ = ctx
 	_ = accessToken
+
 	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.getPatchesCalls++
-	c.mu.Unlock()
+	if c.patches != nil {
+		return append([]ports.PatchInfo{}, c.patches...), nil
+	}
+
 	return []ports.PatchInfo{{Label: "16.7", Major: 16, Patch: 7, MatchCount: 1}}, nil
 }
 
 func (c *coachlessStub) GetKeystoneData(ctx context.Context, accessToken string, req ports.KeystoneRequest) ([]ports.KeystoneStat, error) {
 	_ = ctx
 	_ = accessToken
+
 	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.keystoneCalls = append(c.keystoneCalls, req)
 	err := c.keystoneErr
-	c.mu.Unlock()
 	if err != nil {
 		return nil, err
 	}
+
 	return []ports.KeystoneStat{{Rune: 8437, WPAOverall: 1.4, Occurrence: 1000}}, nil
 }
 
 func (c *coachlessStub) GetSummonerSpellStats(ctx context.Context, accessToken string, req ports.SummonerSpellStatsRequest) ([]ports.SummonerSpellStat, error) {
 	_ = ctx
 	_ = accessToken
+
 	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.spellCalls = append(c.spellCalls, req)
 	err := c.spellErr
-	c.mu.Unlock()
 	if err != nil {
 		return nil, err
 	}
+
 	return []ports.SummonerSpellStat{
 		{SummonerSpell: 4, WPAOverall: 0.8, Occurrence: 500},
 		{SummonerSpell: 14, WPAOverall: 0.7, Occurrence: 450},
@@ -97,16 +110,19 @@ func (c *coachlessStub) GetSummonerSpellStats(ctx context.Context, accessToken s
 func (c *coachlessStub) GetItemStats(ctx context.Context, accessToken string, req ports.ItemStatsRequest) ([]ports.ItemStat, error) {
 	_ = ctx
 	_ = accessToken
+
 	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.itemCalls = append(c.itemCalls, req)
 	err := c.itemErr
-	c.mu.Unlock()
 	if err != nil {
 		return nil, err
 	}
 	if c.itemStats != nil {
 		return append([]ports.ItemStat{}, c.itemStats...), nil
 	}
+
 	return []ports.ItemStat{
 		{ItemID: 1055, WPAOverall: 1.0, Occurrence: 900},
 		{ItemID: 1036, WPAOverall: 0.5, Occurrence: 600},

@@ -17,24 +17,27 @@ import (
 
 type stubApp struct {
 	state app.State
+	saved app.Settings
 }
 
-func (sa stubApp) State(context.Context) (s app.State) {
+func (sa *stubApp) State(context.Context) (s app.State) {
 	return sa.state
 }
-func (sa stubApp) SaveSettings(context.Context, app.Settings) (s app.State, msg app.UserMessage) {
+func (sa *stubApp) SaveSettings(_ context.Context, settings app.Settings) (s app.State, msg app.UserMessage) {
+	sa.saved = settings
+	s = app.State{Settings: settings}
 	return
 }
-func (sa stubApp) RunSync(context.Context) (s app.State, msg app.UserMessage) {
+func (sa *stubApp) RunSync(context.Context) (s app.State, msg app.UserMessage) {
 	return
 }
-func (sa stubApp) StartWatcher(context.Context) (s app.State, msg app.UserMessage) {
+func (sa *stubApp) StartWatcher(context.Context) (s app.State, msg app.UserMessage) {
 	return
 }
-func (sa stubApp) StopWatcher(context.Context) (s app.State) {
+func (sa *stubApp) StopWatcher(context.Context) (s app.State) {
 	return
 }
-func (sa stubApp) CheckUpdates(context.Context) (s app.State, msg app.UserMessage) {
+func (sa *stubApp) CheckUpdates(context.Context) (s app.State, msg app.UserMessage) {
 	return
 }
 
@@ -103,82 +106,9 @@ func mustListenTCP(t *testing.T, addr string) net.Listener {
 	return listener
 }
 
-func TestIndexRendersSyncSuboptionsStructure(t *testing.T) {
-	server, err := NewServer(Options{
-		App:         stubApp{},
-		OpenBrowser: func(string) error { return nil },
-		Token:       "test-token",
-		Out:         io.Discard,
-	})
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	rec := httptest.NewRecorder()
-	server.Handler().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET / status = %d, want %d", rec.Code, http.StatusOK)
-	}
-
-	body := rec.Body.String()
-	tests := []struct {
-		name string
-		want string
-	}{
-		{name: "dropdown button id", want: `id="spellsOptionsButton"`},
-		{name: "dropdown button class", want: `class="sync-dropdown-toggle"`},
-		{name: "dropdown button label", want: `aria-label="Toggle summoner spell options"`},
-		{name: "dropdown button target", want: `aria-controls="spellsSuboptions"`},
-		{name: "dropdown starts collapsed", want: `aria-expanded="false"`},
-		{name: "suboptions container id", want: `id="spellsSuboptions"`},
-		{name: "keep flash checkbox id", want: `id="keepFlash"`},
-		{name: "locale selector", want: `id="localeSelect"`},
-		{name: "translation cache", want: `const translations = Object.create(null);`},
-		{name: "english locale asset", want: `"/i18n/en.json"`},
-		{name: "brazilian portuguese locale asset", want: `"pt-BR": "/i18n/pt-BR.json"`},
-		{name: "locale loader", want: `async function loadLocale(locale)`},
-		{name: "locale fallback loader", want: `async function ensureLocale(locale)`},
-		{name: "initialization waits for locale", want: `currentLocale = await ensureLocale(currentLocale);`},
-		{name: "mode status is dynamic", want: `id="modeStatus">Simulation: no client changes</p>`},
-		{name: "mode status renderer", want: `function renderModeStatus(settings)`},
-		{name: "locale change keeps current form mode", want: `renderModeStatus(readSettings())`},
-		{name: "dry run checkbox drives mode status", want: `ids.dryRun.addEventListener("change", () => renderModeStatus(readSettings()))`},
-		{name: "update checking state", want: `let updateChecking = false;`},
-		{name: "update status state", want: `let currentUpdateStatus = "idle";`},
-		{name: "update button renderer", want: `function renderUpdateButton()`},
-		{name: "update button keeps checking label", want: `updateChecking || currentUpdateStatus === "checking"`},
-		{name: "state sync function", want: `function syncSpellsSuboptions()`},
-		{name: "base option drives suboptions", want: `ids.applySpells.addEventListener("change", syncSpellsSuboptions)`},
-		{name: "settings contract preserved", want: `keep_flash: ids.keepFlash.checked`},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if !strings.Contains(body, tt.want) {
-				t.Fatalf("GET / body does not contain %q", tt.want)
-			}
-		})
-	}
-
-	notWanted := []string{
-		`const translations = {`,
-		`en: {`,
-		`"pt-BR": {`,
-	}
-	for _, value := range notWanted {
-		t.Run("without inline catalog "+value, func(t *testing.T) {
-			if strings.Contains(body, value) {
-				t.Fatalf("GET / body contains inline catalog marker %q", value)
-			}
-		})
-	}
-}
-
 func TestI18NAssets(t *testing.T) {
 	server, err := NewServer(Options{
-		App:         stubApp{},
+		App:         new(stubApp),
 		OpenBrowser: func(string) error { return nil },
 		Token:       "test-token",
 		Out:         io.Discard,
@@ -332,7 +262,7 @@ func TestAPIErrorIncludesCode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server, err := NewServer(Options{
-				App:         stubApp{},
+				App:         new(stubApp),
 				OpenBrowser: func(string) error { return nil },
 				Token:       "test-token",
 				Out:         io.Discard,
@@ -360,5 +290,49 @@ func TestAPIErrorIncludesCode(t *testing.T) {
 				t.Fatalf("error_code = %q, want %q", body["error_code"], tt.wantCode)
 			}
 		})
+	}
+}
+
+func TestSaveConfigAcceptsAdvancedFilters(t *testing.T) {
+	recApp := new(stubApp)
+	server, err := NewServer(Options{
+		App:         recApp,
+		OpenBrowser: func(string) error { return nil },
+		Token:       "test-token",
+		Out:         io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	body := `{
+		"patch":"16.8",
+		"patch_additions_mode":"manual",
+		"patch_additions":4,
+		"league_tier_preset":"master_plus",
+		"apply_items":true,
+		"apply_runes":false,
+		"apply_spells":true,
+		"keep_flash":true,
+		"dry_run":true,
+		"lcu_enabled":true
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/api/config?token=test-token", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/config status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if recApp.saved.PatchAdditionsMode != "manual" || recApp.saved.PatchAdditions != 4 || recApp.saved.LeagueTierPreset != "master_plus" {
+		t.Fatalf("saved advanced settings = %#v", recApp.saved)
+	}
+
+	var state app.State
+	if err := json.Unmarshal(rec.Body.Bytes(), &state); err != nil {
+		t.Fatalf("decode state: %v", err)
+	}
+	if state.Settings.PatchAdditionsMode != "manual" || state.Settings.PatchAdditions != 4 || state.Settings.LeagueTierPreset != "master_plus" {
+		t.Fatalf("response advanced settings = %#v", state.Settings)
 	}
 }

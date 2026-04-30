@@ -146,6 +146,9 @@ CLI `sync` and `watch` default to `--dry-run=true`. Pass `--dry-run=false` to ap
 | `lcu.enabled` | bool | `false` | Enables LCU detection and apply paths. |
 | `lcu.lockfile_path` | string | `""` | Optional lockfile fallback path. |
 | `sync.patch` | string | `""` | Patch label used by the local UI. Empty means latest. |
+| `sync.patch_additions_mode` | string | `auto` | Patch range mode. `auto` keeps the Coachless access rule; `manual` uses `sync.patch_additions`. |
+| `sync.patch_additions` | int | `2` | Previous patch count used when `sync.patch_additions_mode` is `manual`. Valid range: `0` to `4`. |
+| `sync.league_tier_preset` | string | `emerald_plus` | Rank sample sent to Coachless. Valid values: `gold_plus`, `platinum_plus`, `emerald_plus`, `diamond_plus`, `master_plus`. |
 | `sync.apply_items` | bool | `true` | Local UI setting for item set apply. |
 | `sync.apply_runes` | bool | `true` | Local UI setting for rune page apply. |
 | `sync.apply_spells` | bool | `true` | Local UI setting for summoner spell apply. |
@@ -168,7 +171,7 @@ LCU connection discovery tries League process args first (`--app-port`, `--remot
 - Watch mode attempts one sync per champ select. A session `Delete` or a new non-finalized `Create` event resets that lock.
 - If the finalization sync fails, watch mode waits for the next champ select before it tries again.
 - The local UI uses the `sync` config section. CLI flags still control `sync` and `watch`.
-- Free Coachless tokens use the latest non-Premium patch when the patch setting is blank. Requesting the newest Premium patch returns an error.
+- Free Coachless tokens use the latest non-Premium patch when the patch setting is blank. Requesting the newest Premium patch or manual patch additions returns an error.
 - Rune page apply is not implemented yet.
 - Browser-assisted auth capture watches the Coachless login response and stores the token pair.
 

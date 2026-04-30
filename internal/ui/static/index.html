@@ -41,10 +41,10 @@
     }
 
     .topbar {
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(170px, 0.75fr) minmax(280px, 430px) minmax(380px, 1.15fr);
       gap: 18px;
       align-items: flex-end;
-      justify-content: space-between;
       margin-bottom: 18px;
       padding-bottom: 16px;
       border-bottom: 1px solid var(--line);
@@ -52,6 +52,7 @@
 
     h1,
     h2,
+    h3,
     p {
       margin-top: 0;
     }
@@ -64,16 +65,19 @@
     }
 
     .lede {
+      width: 100%;
       max-width: 430px;
       margin-bottom: 0;
       color: var(--muted);
       font-size: 0.95rem;
       line-height: 1.45;
+      text-align: left;
+      justify-self: center;
     }
 
     .topbar-meta {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       gap: 10px;
       align-items: flex-end;
       justify-content: flex-end;
@@ -158,9 +162,15 @@
 
     .workspace {
       display: grid;
-      grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 18px;
       align-items: start;
+    }
+
+    .workspace-lane {
+      display: grid;
+      min-width: 0;
+      gap: 18px;
     }
 
     .panel {
@@ -175,8 +185,21 @@
     }
 
     form {
+      margin: 0;
+    }
+
+    .panel-stack {
       display: grid;
       gap: 16px;
+    }
+
+    .panel-stack>.section-title {
+      margin-bottom: 2px;
+    }
+
+    .panel-cycle {
+      display: grid;
+      gap: 10px;
     }
 
     fieldset {
@@ -213,10 +236,6 @@
       color: var(--muted);
       font-size: 0.9rem;
       line-height: 1.4;
-    }
-
-    .sync-options-help {
-      margin-top: 10px;
     }
 
     .sync-options {
@@ -262,6 +281,239 @@
       margin-left: 20px;
       padding-left: 12px;
       border-left: 1px solid var(--line-strong);
+    }
+
+    .coachless-filter-group {
+      position: relative;
+      display: grid;
+      gap: 8px;
+    }
+
+    .label-with-help {
+      display: inline-flex;
+      position: relative;
+      gap: 6px;
+      align-items: center;
+      max-width: 100%;
+    }
+
+    .tooltip-trigger {
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 19px;
+      min-width: 19px;
+      height: 19px;
+      min-height: 19px;
+      padding: 0;
+      border-color: var(--line-strong);
+      border-radius: 50%;
+      color: var(--blue);
+      background: var(--surface-soft);
+      font-size: 0.72rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .tooltip-trigger:not(:disabled):hover {
+      border-color: var(--blue);
+      color: var(--ink);
+      background: #0d1a20;
+    }
+
+    .tooltip-panel {
+      display: grid;
+      position: absolute;
+      top: 50%;
+      left: calc(100% + 8px);
+      z-index: 20;
+      width: max-content;
+      max-width: min(520px, calc(100vw - 48px));
+      gap: 5px;
+      padding: 10px 11px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      color: var(--ink);
+      background: #0d1210;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.38);
+      font-size: 0.82rem;
+      font-weight: 500;
+      letter-spacing: 0;
+      line-height: 1.35;
+      opacity: 0;
+      pointer-events: none;
+      text-transform: none;
+      transform: translate(-4px, -50%);
+      transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+      visibility: hidden;
+    }
+
+    .tooltip-panel::before {
+      position: absolute;
+      top: 50%;
+      left: -5px;
+      width: 8px;
+      height: 8px;
+      border-left: 1px solid var(--line-strong);
+      border-bottom: 1px solid var(--line-strong);
+      background: #0d1210;
+      content: "";
+      transform: translateY(-50%) rotate(45deg);
+    }
+
+    .label-with-help:hover .tooltip-panel,
+    .label-with-help:focus-within .tooltip-panel {
+      opacity: 1;
+      transform: translate(0, -50%);
+      visibility: visible;
+    }
+
+    .slider-control {
+      --slider-endpoint-gutter: 16px;
+      --slider-native-endpoint-inset: 11px;
+      --slider-input-edge-offset: calc(var(--slider-endpoint-gutter) - var(--slider-native-endpoint-inset));
+      display: grid;
+      gap: 10px;
+      padding: 10px 11px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-soft);
+    }
+
+    .slider-value {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      color: var(--ink);
+      font-weight: 700;
+      line-height: 1.3;
+    }
+
+    .slider-track-shell {
+      position: relative;
+      height: 24px;
+      margin: 0;
+    }
+
+    .slider-track-shell::before {
+      position: absolute;
+      top: 50%;
+      right: 0;
+      left: 0;
+      height: 6px;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      background: linear-gradient(90deg, #0d1a20, var(--surface));
+      content: "";
+      transform: translateY(-50%);
+    }
+
+    .range-slider {
+      display: block;
+      width: calc(100% - var(--slider-input-edge-offset) - var(--slider-input-edge-offset));
+      height: 24px;
+      margin: 0 var(--slider-input-edge-offset);
+      accent-color: var(--blue);
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+      position: relative;
+      z-index: 1;
+    }
+
+    .range-slider:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+      border-radius: 999px;
+    }
+
+    .range-slider::-webkit-slider-runnable-track {
+      height: 6px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      background: transparent;
+    }
+
+    .range-slider::-webkit-slider-thumb {
+      width: 20px;
+      height: 20px;
+      margin-top: -8px;
+      border: 2px solid var(--blue);
+      border-radius: 50%;
+      background: var(--ink);
+      appearance: none;
+      box-shadow: 0 0 0 4px var(--focus);
+    }
+
+    .range-slider::-moz-range-track {
+      height: 6px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      background: transparent;
+    }
+
+    .range-slider::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--blue);
+      border-radius: 50%;
+      background: var(--ink);
+      box-shadow: 0 0 0 4px var(--focus);
+    }
+
+    .slider-ticks {
+      position: relative;
+      height: 16px;
+      margin: -2px 0 0;
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .slider-ticks span {
+      position: absolute;
+      top: 0;
+      left: var(--slider-tick-position, 0%);
+      min-width: max-content;
+      text-align: center;
+      transform: translateX(-50%);
+      white-space: nowrap;
+    }
+
+    .rank-badge {
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 22px;
+      height: 22px;
+      border: 1px solid color-mix(in srgb, var(--rank-color) 70%, white);
+      border-radius: 6px 6px 8px 8px;
+      color: #050705;
+      background: linear-gradient(145deg, color-mix(in srgb, var(--rank-color) 88%, white), var(--rank-color));
+      font-size: 0.72rem;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .rank-gold {
+      --rank-color: #d8a34a;
+    }
+
+    .rank-platinum {
+      --rank-color: #55b7ca;
+    }
+
+    .rank-emerald {
+      --rank-color: #47c97b;
+    }
+
+    .rank-diamond {
+      --rank-color: #78a7ff;
+    }
+
+    .rank-master {
+      --rank-color: #b47cff;
     }
 
     .check {
@@ -481,8 +733,24 @@
       background: #180706;
     }
 
-    .cycle-log {
-      margin-top: 16px;
+    .log-section {
+      display: grid;
+      min-width: 0;
+      gap: 7px;
+    }
+
+    .log-section>.label,
+    .log-section>.message {
+      margin: 0;
+    }
+
+    .log-box {
+      height: 180px;
+      overflow-y: auto;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-soft);
     }
 
     .log-list {
@@ -511,16 +779,35 @@
       border-left-color: var(--amber);
     }
 
+    @media (max-width: 900px) {
+      .topbar {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+
+      .topbar-meta {
+        justify-content: flex-start;
+      }
+    }
+
     @media (max-width: 860px) {
       main {
         width: min(100% - 22px, 680px);
         padding: 20px 0;
       }
 
-      .topbar,
-      .workspace,
-      .status-strip {
+      .status-strip,
+      .workspace {
         grid-template-columns: 1fr;
+      }
+
+      .workspace {
+        gap: 16px;
+      }
+
+      .workspace-lane {
+        gap: 16px;
       }
 
       .sync-option-header {
@@ -529,15 +816,6 @@
 
       .sync-suboptions {
         margin-left: 12px;
-      }
-
-      .topbar {
-        display: grid;
-        gap: 10px;
-      }
-
-      .topbar-meta {
-        justify-content: flex-start;
       }
 
       .update-banner {
@@ -556,6 +834,23 @@
         text-align: left;
       }
 
+      .tooltip-panel {
+        top: calc(100% + 8px);
+        left: 0;
+        width: max-content;
+        max-width: calc(100vw - 48px);
+        transform: translateY(-4px);
+      }
+
+      .tooltip-panel::before {
+        display: none;
+      }
+
+      .label-with-help:hover .tooltip-panel,
+      .label-with-help:focus-within .tooltip-panel {
+        transform: translateY(0);
+      }
+
       button {
         flex: 1 1 100%;
       }
@@ -570,9 +865,11 @@
         <p class="label" data-i18n="header.local_ui">Local UI</p>
         <h1 data-i18n="app.title">lol-autobuild</h1>
       </div>
+      <p class="lede" data-i18n="header.lede">Sync League Client item sets and summoner spells from Coachless while
+        champ select is open.</p>
       <div class="topbar-meta">
-        <p class="lede" data-i18n="header.lede">Sync League Client item sets and summoner spells from Coachless while
-          champ select is open.</p>
+        <button type="button" id="updateButton" class="secondary compact" data-i18n="action.check_updates">Check
+          updates</button>
         <div class="locale-control">
           <label class="label" for="localeSelect" data-i18n="locale.label">Language</label>
           <select id="localeSelect" aria-label="Language" data-i18n-aria-label="locale.aria_label">
@@ -580,8 +877,6 @@
             <option value="pt-BR">Português (BR)</option>
           </select>
         </div>
-        <button type="button" id="updateButton" class="secondary compact" data-i18n="action.check_updates">Check
-          updates</button>
       </div>
     </div>
 
@@ -609,20 +904,15 @@
       </div>
     </section>
 
-    <div class="workspace">
-      <section class="panel">
-        <h2 class="section-title" data-i18n="settings.title">Settings</h2>
-        <form id="settingsForm">
+    <form id="settingsForm" class="workspace">
+      <div class="workspace-lane">
+        <section class="panel panel-client panel-stack" id="leagueClientPanel" aria-labelledby="leagueClientTitle">
+          <h2 class="section-title" id="leagueClientTitle" data-i18n="state.league_client">League Client</h2>
+
           <label class="check">
             <input type="checkbox" id="lcuEnabled">
             <span data-i18n="settings.use_league_client">Connect to League Client</span>
           </label>
-
-          <div class="field">
-            <label class="label" for="patch" data-i18n="settings.patch">Patch</label>
-            <input id="patch" type="text" autocomplete="off" placeholder="16.7">
-            <p class="help" data-i18n="settings.patch_help">Leave this blank to use the latest Coachless patch.</p>
-          </div>
 
           <fieldset>
             <legend class="label" data-i18n="settings.sync_updates">Sync updates</legend>
@@ -671,8 +961,6 @@
                 </div>
               </div>
             </div>
-            <p class="help sync-options-help" data-i18n="settings.runes_help">Rune apply stays off until the LCU adapter
-              supports it.</p>
           </fieldset>
 
           <div class="actions">
@@ -681,48 +969,118 @@
             <button type="button" id="watcherButton" class="secondary" data-i18n="action.start_watcher">Start
               watcher</button>
           </div>
-        </form>
-      </section>
+        </section>
 
-      <section class="panel">
-        <h2 class="section-title" data-i18n="result.title">Last cycle</h2>
-        <div class="result" aria-label="Last sync result" data-i18n-aria-label="result.last_sync_result">
-          <div class="result-row">
-            <span data-i18n="result.updated">Sync time</span>
-            <span class="cell-value" id="updatedValue" data-i18n="state.no_sync_yet">No sync yet</span>
-          </div>
-          <div class="result-row">
-            <span data-i18n="result.champion_id">Champion ID</span>
-            <span class="cell-value" id="championValue" data-i18n="state.no_sync_yet">No sync yet</span>
-          </div>
-          <div class="result-row">
-            <span data-i18n="result.position">Position</span>
-            <span class="cell-value" id="positionValue" data-i18n="state.no_sync_yet">No sync yet</span>
-          </div>
-          <div class="result-row">
-            <span data-i18n="result.queue_id">Queue ID</span>
-            <span class="cell-value" id="queueValue" data-i18n="state.no_sync_yet">No sync yet</span>
-          </div>
-          <div class="result-row">
-            <span data-i18n="result.items">Items</span>
-            <span class="cell-value" id="itemsValue" data-i18n="state.not_applied">Not applied</span>
-          </div>
-          <div class="result-row">
-            <span data-i18n="result.spells">Spells</span>
-            <span class="cell-value" id="spellsValue" data-i18n="state.not_applied">Not applied</span>
-          </div>
-        </div>
-        <div class="message" id="messageBox" role="status" aria-live="polite" data-i18n="message.no_sync_session">No
-          sync has run in this session.</div>
-      </section>
-    </div>
+        <section class="panel panel-coachless panel-stack" id="coachlessPanel" aria-labelledby="coachlessDataTitle">
+          <h2 class="section-title" id="coachlessDataTitle" data-i18n="settings.coachless_data">Coachless</h2>
 
-    <section class="panel cycle-log">
-      <h2 class="section-title" data-i18n="logs.title">Logs</h2>
-      <ul class="log-list" id="logList" aria-live="polite">
-        <li data-i18n="log.no_events">No events yet.</li>
-      </ul>
-    </section>
+          <div class="field">
+            <label class="label" for="patch" data-i18n="settings.patch">Patch</label>
+            <input id="patch" type="text" autocomplete="off" placeholder="16.7">
+            <p class="help" data-i18n="settings.patch_help">Leave this blank to use the latest Coachless patch.</p>
+          </div>
+
+          <fieldset class="coachless-filter-group">
+            <legend class="label label-with-help" id="patchRangeLegend">
+              <span id="patchRangeLabel" data-i18n="settings.patch_range">Patch range</span>
+              <button type="button" class="tooltip-trigger" aria-describedby="patchRangeTooltip"
+                aria-label="Patch range help" data-i18n-aria-label="settings.patch_range_help_aria">?</button>
+              <span class="tooltip-panel" id="patchRangeTooltip" role="tooltip">
+                <span data-i18n="settings.patch_range_help_free">Free accounts use only the selected patch.</span>
+                <span data-i18n="settings.patch_range_help_premium">Premium Auto includes up to 2 previous patches.</span>
+                <span data-i18n="settings.patch_range_help_manual">Manual values include older patches.</span>
+              </span>
+            </legend>
+            <div class="slider-control">
+              <output class="slider-value" id="patchRangeValue" for="patchRangeSlider"
+                data-i18n="settings.patch_range_auto">Automatic</output>
+              <div class="slider-track-shell">
+                <input class="range-slider" id="patchRangeSlider" type="range" min="0" max="5" step="1" value="0"
+                  aria-labelledby="patchRangeLabel">
+              </div>
+              <div class="slider-ticks patch-ticks" id="patchRangeTicks" aria-hidden="true">
+                <span data-i18n="settings.patch_range_auto_short">Auto</span>
+                <span data-i18n="settings.patch_current_short">Current</span>
+                <span>+1</span>
+                <span>+2</span>
+                <span>+3</span>
+                <span>+4</span>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="coachless-filter-group">
+            <legend class="label label-with-help" id="leagueTierPresetLegend">
+              <span id="leagueTierPresetLabel" data-i18n="settings.rank_sample">Minimum rank</span>
+              <button type="button" class="tooltip-trigger" aria-describedby="leagueTierPresetTooltip"
+                aria-label="Minimum rank help" data-i18n-aria-label="settings.rank_sample_help_aria">?</button>
+              <span class="tooltip-panel" id="leagueTierPresetTooltip" role="tooltip">
+                <span data-i18n="settings.rank_sample_help_min">Choose the minimum rank Coachless uses for data.</span>
+              </span>
+            </legend>
+            <div class="slider-control">
+              <output class="slider-value" id="leagueTierPresetValue" for="leagueTierPresetSlider">
+                <span class="rank-badge rank-emerald" aria-hidden="true">E</span>
+                <span data-i18n="settings.rank_emerald_plus">Emerald+</span>
+              </output>
+              <div class="slider-track-shell">
+                <input class="range-slider" id="leagueTierPresetSlider" type="range" min="0" max="4" step="1" value="2"
+                  aria-labelledby="leagueTierPresetLabel">
+              </div>
+              <div class="slider-ticks rank-ticks" id="leagueTierPresetTicks" aria-hidden="true">
+                <span>G+</span>
+                <span>P+</span>
+                <span>E+</span>
+                <span>D+</span>
+                <span>M+</span>
+              </div>
+            </div>
+          </fieldset>
+        </section>
+      </div>
+
+      <div class="workspace-lane">
+        <section class="panel panel-cycle" id="lastCyclePanel" aria-labelledby="lastCycleTitle">
+          <h2 class="section-title" id="lastCycleTitle" data-i18n="result.title">Last cycle</h2>
+          <div class="result" aria-label="Last sync result" data-i18n-aria-label="result.last_sync_result">
+            <div class="result-row">
+              <span data-i18n="result.updated">Sync time</span>
+              <span class="cell-value" id="updatedValue" data-i18n="state.no_sync_yet">No sync yet</span>
+            </div>
+            <div class="result-row">
+              <span data-i18n="result.champion_id">Champion ID</span>
+              <span class="cell-value" id="championValue" data-i18n="state.no_sync_yet">No sync yet</span>
+            </div>
+            <div class="result-row">
+              <span data-i18n="result.position">Position</span>
+              <span class="cell-value" id="positionValue" data-i18n="state.no_sync_yet">No sync yet</span>
+            </div>
+            <div class="result-row">
+              <span data-i18n="result.queue_id">Queue ID</span>
+              <span class="cell-value" id="queueValue" data-i18n="state.no_sync_yet">No sync yet</span>
+            </div>
+            <div class="result-row">
+              <span data-i18n="result.items">Items</span>
+              <span class="cell-value" id="itemsValue" data-i18n="state.not_applied">Not applied</span>
+            </div>
+            <div class="result-row">
+              <span data-i18n="result.spells">Spells</span>
+              <span class="cell-value" id="spellsValue" data-i18n="state.not_applied">Not applied</span>
+            </div>
+          </div>
+          <div class="log-section" aria-labelledby="logsTitle">
+            <h3 class="label" id="logsTitle" data-i18n="logs.title">Logs</h3>
+            <div class="message" id="messageBox" role="status" aria-live="polite" data-i18n="message.no_sync_session">No
+              sync has run in this session.</div>
+            <div class="log-box" role="log" aria-labelledby="logsTitle">
+              <ul class="log-list" id="logList" aria-live="polite">
+                <li data-i18n="log.no_events">No events yet.</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      </div>
+    </form>
   </main>
 
   <script>
@@ -762,6 +1120,12 @@
       form: document.getElementById("settingsForm"),
       lcuEnabled: document.getElementById("lcuEnabled"),
       patch: document.getElementById("patch"),
+      patchRangeSlider: document.getElementById("patchRangeSlider"),
+      patchRangeValue: document.getElementById("patchRangeValue"),
+      patchRangeTicks: document.getElementById("patchRangeTicks"),
+      leagueTierPresetSlider: document.getElementById("leagueTierPresetSlider"),
+      leagueTierPresetValue: document.getElementById("leagueTierPresetValue"),
+      leagueTierPresetTicks: document.getElementById("leagueTierPresetTicks"),
       applyItems: document.getElementById("applyItems"),
       applyRunes: document.getElementById("applyRunes"),
       applySpells: document.getElementById("applySpells"),
@@ -957,9 +1321,11 @@
       }
 
       applyStaticTranslations();
+      positionAdvancedSliderTicks();
       renderUpdateButton();
       if (formsLoaded) {
         renderModeStatus(readSettings());
+        renderAdvancedSliderValues();
       } else if (currentState && currentState.settings) {
         renderModeStatus(currentState.settings);
       }
@@ -991,11 +1357,185 @@
       return data;
     }
 
+    const patchRangeValues = ["auto", "0", "1", "2", "3", "4"];
+    const leagueTierPresets = [
+      { value: "gold_plus", key: "settings.rank_gold_plus", letter: "G", className: "rank-gold" },
+      { value: "platinum_plus", key: "settings.rank_platinum_plus", letter: "P", className: "rank-platinum" },
+      { value: "emerald_plus", key: "settings.rank_emerald_plus", letter: "E", className: "rank-emerald" },
+      { value: "diamond_plus", key: "settings.rank_diamond_plus", letter: "D", className: "rank-diamond" },
+      { value: "master_plus", key: "settings.rank_master_plus", letter: "M", className: "rank-master" }
+    ];
+
+    function clampSliderIndex(rawValue, maxIndex, fallback = 0) {
+      const value = Number(rawValue);
+      if (!Number.isInteger(value)) {
+        return fallback;
+      }
+      return Math.max(0, Math.min(maxIndex, value));
+    }
+
+    function patchRangeIndexFromValue(value) {
+      const index = patchRangeValues.indexOf(value);
+      return index >= 0 ? index : 0;
+    }
+
+    function leagueTierIndexFromPreset(value) {
+      const index = leagueTierPresets.findIndex(preset => preset.value === value);
+      return index >= 0 ? index : 2;
+    }
+
+    function patchRangeValueFromSettings(settings) {
+      if (settings.patch_additions_mode === "manual") {
+        return String(settings.patch_additions ?? 0);
+      }
+      return "auto";
+    }
+
+    function patchRangeSettingsFromValue(value) {
+      if (value === "auto") {
+        return {
+          patch_additions_mode: "auto",
+          patch_additions: 2
+        };
+      }
+
+      return {
+        patch_additions_mode: "manual",
+        patch_additions: Number(value)
+      };
+    }
+
+    function patchLabelFromInput() {
+      return ids.patch.value.trim();
+    }
+
+    function numericPatchParts(label) {
+      const match = label.match(/^(\d+)\.(\d+)$/);
+      if (!match) {
+        return null;
+      }
+
+      const major = Number(match[1]);
+      const minor = Number(match[2]);
+      if (!Number.isInteger(major) || !Number.isInteger(minor) || minor < 0) {
+        return null;
+      }
+
+      return { major, minor };
+    }
+
+    function explicitPatchRangeLabel(patchLabel, additions) {
+      const parts = numericPatchParts(patchLabel);
+      if (!parts || !Number.isInteger(additions) || additions < 0 || additions > parts.minor) {
+        return "";
+      }
+
+      if (additions === 0) {
+        return patchLabel;
+      }
+
+      return `${patchLabel} - ${parts.major}.${parts.minor - additions}`;
+    }
+
+    function patchRangeLabel(value, patchLabel = "") {
+      if (value === "auto") {
+        return t("settings.patch_range_auto");
+      }
+
+      const additions = Number(value);
+      const explicitLabel = patchLabel.trim();
+      if (explicitLabel) {
+        const rangeLabel = explicitPatchRangeLabel(explicitLabel, additions);
+        if (rangeLabel) {
+          return rangeLabel;
+        }
+      }
+
+      if (value === "0") {
+        return t("settings.patch_current");
+      }
+      return t(`settings.patch_previous_${value}`);
+    }
+
+    function selectedPatchRangeValue() {
+      return patchRangeValues[clampSliderIndex(ids.patchRangeSlider.value, patchRangeValues.length - 1)];
+    }
+
+    function selectedLeagueTierPreset() {
+      return leagueTierPresets[clampSliderIndex(ids.leagueTierPresetSlider.value, leagueTierPresets.length - 1, 2)].value;
+    }
+
+    function renderLeagueTierPresetValue(value) {
+      const preset = leagueTierPresets.find(item => item.value === value) || leagueTierPresets[2];
+      const badge = document.createElement("span");
+      badge.className = `rank-badge ${preset.className}`;
+      badge.setAttribute("aria-hidden", "true");
+      badge.textContent = preset.letter;
+
+      const label = document.createElement("span");
+      label.textContent = t(preset.key);
+
+      ids.leagueTierPresetValue.replaceChildren(badge, label);
+    }
+
+    function cssPixelValue(rawValue, fallback) {
+      const parsed = Number.parseFloat(rawValue);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
+    function sliderEndpointGutter(slider) {
+      const control = slider.closest(".slider-control");
+      if (!control) {
+        return 16;
+      }
+
+      return cssPixelValue(getComputedStyle(control).getPropertyValue("--slider-endpoint-gutter"), 16);
+    }
+
+    function formatPixelOffset(value) {
+      const rounded = Math.round(value * 100) / 100;
+      return `${Object.is(rounded, -0) ? 0 : rounded}px`;
+    }
+
+    function positionSliderTicks(slider, ticks) {
+      const min = Number(slider.min);
+      const max = Number(slider.max);
+      const step = Number(slider.step || 1);
+      const labels = Array.from(ticks.querySelectorAll("span"));
+      if (!Number.isFinite(min) || !Number.isFinite(max) || !Number.isFinite(step) || max <= min || step <= 0) {
+        return;
+      }
+
+      labels.forEach((label, index) => {
+        const value = min + (index * step);
+        const ratio = Math.max(0, Math.min(1, (value - min) / (max - min)));
+        const position = ratio * 100;
+        const offset = (1 - (2 * ratio)) * sliderEndpointGutter(slider);
+
+        label.style.setProperty("--slider-tick-position", `calc(${position}% + ${formatPixelOffset(offset)})`);
+      });
+    }
+
+    function positionAdvancedSliderTicks() {
+      positionSliderTicks(ids.patchRangeSlider, ids.patchRangeTicks);
+      positionSliderTicks(ids.leagueTierPresetSlider, ids.leagueTierPresetTicks);
+    }
+
+    function renderAdvancedSliderValues() {
+      const patchRange = selectedPatchRangeValue();
+      const rankPreset = selectedLeagueTierPreset();
+      ids.patchRangeValue.textContent = patchRangeLabel(patchRange, patchLabelFromInput());
+      renderLeagueTierPresetValue(rankPreset);
+    }
+
 
     function readSettings() {
+      const patchRangeSettings = patchRangeSettingsFromValue(selectedPatchRangeValue());
       return {
         lcu_enabled: ids.lcuEnabled.checked,
         patch: ids.patch.value.trim(),
+        ...patchRangeSettings,
+        league_tier_preset: selectedLeagueTierPreset(),
         apply_items: ids.applyItems.checked,
         apply_runes: false,
         apply_spells: ids.applySpells.checked,
@@ -1199,12 +1739,15 @@
       formsLoaded = true;
       ids.lcuEnabled.checked = settings.lcu_enabled;
       ids.patch.value = settings.patch || "";
+      ids.patchRangeSlider.value = String(patchRangeIndexFromValue(patchRangeValueFromSettings(settings)));
+      ids.leagueTierPresetSlider.value = String(leagueTierIndexFromPreset(settings.league_tier_preset || "emerald_plus"));
       ids.applyItems.checked = settings.apply_items;
       ids.applyRunes.checked = false;
       ids.applySpells.checked = settings.apply_spells;
       ids.keepFlash.checked = settings.keep_flash;
       ids.dryRun.checked = settings.dry_run;
       syncSpellsSuboptions();
+      renderAdvancedSliderValues();
       renderModeStatus(settings);
     }
 
@@ -1320,6 +1863,7 @@
     async function initialize() {
       currentLocale = await ensureLocale(currentLocale);
       applyStaticTranslations();
+      positionAdvancedSliderTicks();
       loadForms().catch(error => setMessage({ key: error.code, fallback: error.fallback || error.message }, true));
       loadState().catch(error => setMessage({ key: error.code, fallback: error.fallback || error.message }, true));
       checkUpdates(false).catch(() => { });
@@ -1339,6 +1883,9 @@
 
     ids.applySpells.addEventListener("change", syncSpellsSuboptions);
     ids.dryRun.addEventListener("change", () => renderModeStatus(readSettings()));
+    ids.patch.addEventListener("input", renderAdvancedSliderValues);
+    ids.patchRangeSlider.addEventListener("input", renderAdvancedSliderValues);
+    ids.leagueTierPresetSlider.addEventListener("input", renderAdvancedSliderValues);
     ids.spellsOptionsButton.addEventListener("click", () => {
       const isOpen = ids.spellsOptionsButton.getAttribute("aria-expanded") === "true";
       setSpellsSuboptionsOpen(!isOpen);

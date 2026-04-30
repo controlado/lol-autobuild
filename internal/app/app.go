@@ -137,24 +137,43 @@ func (a *App) setLastErrorMessage(msg UserMessage) {
 
 func settingsFromConfig(cfg config.Config) Settings {
 	return Settings{
-		Patch:       cfg.Sync.Patch,
-		ApplyItems:  cfg.Sync.ApplyItems,
-		ApplyRunes:  cfg.Sync.ApplyRunes,
-		ApplySpells: cfg.Sync.ApplySpells,
-		KeepFlash:   cfg.Sync.KeepFlash,
-		DryRun:      cfg.Sync.DryRun,
-		LCUEnabled:  cfg.LCU.Enabled,
+		Patch:              cfg.Sync.Patch,
+		PatchAdditionsMode: cfg.Sync.PatchAdditionsMode,
+		PatchAdditions:     cfg.Sync.PatchAdditions,
+		LeagueTierPreset:   cfg.Sync.LeagueTierPreset,
+		ApplyItems:         cfg.Sync.ApplyItems,
+		ApplyRunes:         cfg.Sync.ApplyRunes,
+		ApplySpells:        cfg.Sync.ApplySpells,
+		KeepFlash:          cfg.Sync.KeepFlash,
+		DryRun:             cfg.Sync.DryRun,
+		LCUEnabled:         cfg.LCU.Enabled,
 	}
 }
 
 func applySettings(cfg *config.Config, settings Settings) {
+	patchAdditionsMode := strings.TrimSpace(settings.PatchAdditionsMode)
+	if patchAdditionsMode == "" {
+		patchAdditionsMode = lolautobuild.PatchAdditionsModeAuto
+	}
+	patchAdditions := settings.PatchAdditions
+	if patchAdditionsMode == lolautobuild.PatchAdditionsModeAuto && patchAdditions == 0 {
+		patchAdditions = lolautobuild.PatchAdditionsDefault
+	}
+	leagueTierPreset := strings.TrimSpace(settings.LeagueTierPreset)
+	if leagueTierPreset == "" {
+		leagueTierPreset = lolautobuild.LeagueTierPresetDefault
+	}
+
 	cfg.Sync = config.SyncConfig{
-		Patch:       strings.TrimSpace(settings.Patch),
-		ApplyItems:  settings.ApplyItems,
-		ApplyRunes:  settings.ApplyRunes,
-		ApplySpells: settings.ApplySpells,
-		KeepFlash:   settings.KeepFlash,
-		DryRun:      settings.DryRun,
+		Patch:              strings.TrimSpace(settings.Patch),
+		PatchAdditionsMode: patchAdditionsMode,
+		PatchAdditions:     patchAdditions,
+		LeagueTierPreset:   leagueTierPreset,
+		ApplyItems:         settings.ApplyItems,
+		ApplyRunes:         settings.ApplyRunes,
+		ApplySpells:        settings.ApplySpells,
+		KeepFlash:          settings.KeepFlash,
+		DryRun:             settings.DryRun,
 	}
 	cfg.LCU.Enabled = settings.LCUEnabled
 }
@@ -189,14 +208,17 @@ func (a *App) StartWatcher(ctx context.Context) (State, UserMessage) {
 
 func (a *App) runWatcher(ctx context.Context, watcherID int, svc lolautobuild.Service, cfg config.Config) {
 	err := svc.Watch(ctx, lolautobuild.WatchRequest{
-		Patch:       cfg.Sync.Patch,
-		ApplyItems:  cfg.Sync.ApplyItems,
-		ApplyRunes:  cfg.Sync.ApplyRunes,
-		ApplySpells: cfg.Sync.ApplySpells,
-		KeepFlash:   cfg.Sync.KeepFlash,
-		DryRun:      cfg.Sync.DryRun,
-		Debounce:    time.Duration(cfg.Watch.DebounceMillis) * time.Millisecond,
-		OnCycle:     func(c lolautobuild.WatchCycle) { a.observeWatchCycle(watcherID, c) },
+		Patch:              cfg.Sync.Patch,
+		PatchAdditionsMode: cfg.Sync.PatchAdditionsMode,
+		PatchAdditions:     cfg.Sync.PatchAdditions,
+		LeagueTierPreset:   cfg.Sync.LeagueTierPreset,
+		ApplyItems:         cfg.Sync.ApplyItems,
+		ApplyRunes:         cfg.Sync.ApplyRunes,
+		ApplySpells:        cfg.Sync.ApplySpells,
+		KeepFlash:          cfg.Sync.KeepFlash,
+		DryRun:             cfg.Sync.DryRun,
+		Debounce:           time.Duration(cfg.Watch.DebounceMillis) * time.Millisecond,
+		OnCycle:            func(c lolautobuild.WatchCycle) { a.observeWatchCycle(watcherID, c) },
 	})
 
 	a.mu.Lock()
@@ -314,12 +336,15 @@ func (a *App) RunSync(ctx context.Context) (State, UserMessage) {
 	}
 
 	result, err := svc.Sync(ctx, lolautobuild.SyncRequest{
-		Patch:       cfg.Sync.Patch,
-		ApplyItems:  cfg.Sync.ApplyItems,
-		ApplyRunes:  cfg.Sync.ApplyRunes,
-		ApplySpells: cfg.Sync.ApplySpells,
-		KeepFlash:   cfg.Sync.KeepFlash,
-		DryRun:      cfg.Sync.DryRun,
+		Patch:              cfg.Sync.Patch,
+		PatchAdditionsMode: cfg.Sync.PatchAdditionsMode,
+		PatchAdditions:     cfg.Sync.PatchAdditions,
+		LeagueTierPreset:   cfg.Sync.LeagueTierPreset,
+		ApplyItems:         cfg.Sync.ApplyItems,
+		ApplyRunes:         cfg.Sync.ApplyRunes,
+		ApplySpells:        cfg.Sync.ApplySpells,
+		KeepFlash:          cfg.Sync.KeepFlash,
+		DryRun:             cfg.Sync.DryRun,
 	})
 	a.finishSync(&result, err)
 	if err != nil {

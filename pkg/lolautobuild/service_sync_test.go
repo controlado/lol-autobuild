@@ -149,6 +149,60 @@ func TestSyncUsesDetectedChampionIDInApplyRequests(t *testing.T) {
 	}
 }
 
+func TestSyncUsesAdvancedCoachlessFilters(t *testing.T) {
+	t.Parallel()
+
+	coachless := &coachlessStub{
+		patches: []ports.PatchInfo{
+			{Label: "16.6", Major: 16, Patch: 6},
+			{Label: "16.7", Major: 16, Patch: 7},
+			{Label: "16.8", Major: 16, Patch: 8},
+		},
+	}
+	lcu := &lcuStub{
+		detectedSelection: ports.DetectedSelection{
+			ChampionID: 240,
+			Position:   position.Top,
+			QueueID:    420,
+		},
+	}
+	svc, err := NewService(ServiceDeps{
+		Coachless:   coachless,
+		Tokens:      tokenProviderStub{token: "t", claims: ports.TokenClaims{IsSubscribedRaw: "1"}},
+		LCU:         lcu,
+		Recommender: recommend.NewEngine(),
+		Policy:      RecommendationPolicy{MinOccurrence: 100, TopItems: 6, TopSpells: 2},
+	})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	_, err = svc.Sync(context.Background(), SyncRequest{
+		PatchAdditionsMode: PatchAdditionsModeManual,
+		PatchAdditions:     PatchAdditionsDefault,
+		LeagueTierPreset:   LeagueTierPresetDiamondPlus,
+		ApplyItems:         true,
+		ApplyRunes:         true,
+		ApplySpells:        true,
+		DryRun:             true,
+	})
+	if err != nil {
+		t.Fatalf("Sync() error = %v", err)
+	}
+
+	if len(coachless.keystoneCalls) != 1 {
+		t.Fatalf("expected one keystone call, got %d", len(coachless.keystoneCalls))
+	}
+
+	gotFilters := coachless.keystoneCalls[0].CommonFilters
+	if gotFilters.Patch.Major != 16 || gotFilters.Patch.Patch != 8 || gotFilters.Patch.PatchAdditions != PatchAdditionsDefault {
+		t.Fatalf("unexpected patch filter: %#v", gotFilters.Patch)
+	}
+	if !reflect.DeepEqual(gotFilters.LeagueTiers, []int{6, 7}) {
+		t.Fatalf("league tiers = %#v, want %#v", gotFilters.LeagueTiers, []int{6, 7})
+	}
+}
+
 func TestSyncFailsFastWhenChampionDetectionFails(t *testing.T) {
 	t.Parallel()
 
@@ -411,58 +465,105 @@ func TestSyncFallsBackToRawItemsWhenOccurrenceFilterWouldEmptyBlock(t *testing.T
 	}
 }
 
-func TestResolvePatchHonorsFreePatchLimits(t *testing.T) {
+func TestResolvePatch(t *testing.T) {
 	t.Parallel()
 
-	patches := []ports.PatchInfo{
+	defaultPatches := []ports.PatchInfo{
+		{Label: "16.4", Major: 16, Patch: 4},
+		{Label: "16.5", Major: 16, Patch: 5},
 		{Label: "16.6", Major: 16, Patch: 6},
 		{Label: "16.7", Major: 16, Patch: 7},
 		{Label: "16.8", Major: 16, Patch: 8},
 	}
 
-	got, label, err := resolvePatch("", patches, false)
-	if err != nil {
-		t.Fatalf("resolvePatch() error = %v", err)
-	}
-	if label != "16.7" {
-		t.Fatalf("expected latest free patch 16.7, got %q", label)
-	}
-	if got.PatchAdditions != 0 {
-		t.Fatalf("free patch additions = %d, want 0", got.PatchAdditions)
+	tests := []struct {
+		name             string
+		rawPatch         string
+		mode             string
+		additions        int
+		patches          []ports.PatchInfo
+		subscribed       bool
+		wantLabel        string
+		wantPatch        int
+		wantAdditions    int
+		wantWarningCount int
+		wantErr          bool
+	}{
+		{name: "free auto selects latest non-premium patch", mode: PatchAdditionsModeAuto, patches: defaultPatches, wantLabel: "16.7", wantPatch: 7},
+		{name: "premium auto selects latest patch with two additions", mode: PatchAdditionsModeAuto, patches: defaultPatches, subscribed: true, wantLabel: "16.8", wantPatch: 8, wantAdditions: PatchAdditionsDefault},
+		{name: "premium manual current patch", mode: PatchAdditionsModeManual, patches: defaultPatches, additions: 0, subscribed: true, wantLabel: "16.8", wantPatch: 8},
+		{name: "premium manual one addition", mode: PatchAdditionsModeManual, patches: defaultPatches, additions: 1, subscribed: true, wantLabel: "16.8", wantPatch: 8, wantAdditions: 1},
+		{name: "premium manual two additions", mode: PatchAdditionsModeManual, patches: defaultPatches, additions: PatchAdditionsDefault, subscribed: true, wantLabel: "16.8", wantPatch: 8, wantAdditions: PatchAdditionsDefault},
+		{name: "premium manual four additions", mode: PatchAdditionsModeManual, patches: defaultPatches, additions: PatchAdditionsMax, subscribed: true, wantLabel: "16.8", wantPatch: 8, wantAdditions: PatchAdditionsMax},
+		{name: "free manual additions require premium", mode: PatchAdditionsModeManual, patches: defaultPatches, additions: 1, wantErr: true},
+		{name: "explicit older patch is allowed for free", rawPatch: "16.6", mode: PatchAdditionsModeAuto, patches: defaultPatches, wantLabel: "16.6", wantPatch: 6},
+		{name: "explicit latest patch requires premium for free", rawPatch: "16.8", mode: PatchAdditionsModeAuto, patches: defaultPatches, wantErr: true},
+		{name: "manual additions clamp to available history", mode: PatchAdditionsModeManual, patches: defaultPatches[:2], additions: PatchAdditionsMax, subscribed: true, wantLabel: "16.5", wantPatch: 5, wantAdditions: 1, wantWarningCount: 1},
 	}
 
-	got, label, err = resolvePatch("16.6", patches, false)
-	if err != nil {
-		t.Fatalf("resolvePatch(explicit free patch) error = %v", err)
-	}
-	if label != "16.6" || got.Patch != 6 || got.PatchAdditions != 0 {
-		t.Fatalf("unexpected explicit free patch: filter=%#v label=%q", got, label)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	_, _, err = resolvePatch("16.8", patches, false)
-	if err == nil {
-		t.Fatal("expected premium error for newest free patch")
+			got, label, warnings, err := resolvePatch(tt.rawPatch, tt.mode, tt.additions, tt.patches, tt.subscribed)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("resolvePatch() error = nil, want error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("resolvePatch() error = %v", err)
+			}
+			if label != tt.wantLabel {
+				t.Fatalf("label = %q, want %q", label, tt.wantLabel)
+			}
+			if got.Patch != tt.wantPatch || got.PatchAdditions != tt.wantAdditions {
+				t.Fatalf("filter = %#v, want patch=%d additions=%d", got, tt.wantPatch, tt.wantAdditions)
+			}
+			if len(warnings) != tt.wantWarningCount {
+				t.Fatalf("warnings = %#v, want count %d", warnings, tt.wantWarningCount)
+			}
+		})
 	}
 }
 
-func TestResolvePatchAllowsPremiumPatchAdditions(t *testing.T) {
+func TestResolveLeagueTierPreset(t *testing.T) {
 	t.Parallel()
 
-	patches := []ports.PatchInfo{
-		{Label: "16.6", Major: 16, Patch: 6},
-		{Label: "16.7", Major: 16, Patch: 7},
-		{Label: "16.8", Major: 16, Patch: 8},
+	tests := []struct {
+		name    string
+		preset  string
+		want    []int
+		wantErr bool
+	}{
+		{name: "empty defaults to emerald plus", want: []int{5, 6, 7}},
+		{name: "gold plus", preset: LeagueTierPresetGoldPlus, want: []int{3, 4, 5, 6, 7}},
+		{name: "platinum plus", preset: LeagueTierPresetPlatinumPlus, want: []int{4, 5, 6, 7}},
+		{name: "emerald plus", preset: LeagueTierPresetEmeraldPlus, want: []int{5, 6, 7}},
+		{name: "diamond plus", preset: LeagueTierPresetDiamondPlus, want: []int{6, 7}},
+		{name: "master plus", preset: LeagueTierPresetMasterPlus, want: []int{7}},
+		{name: "invalid", preset: "silver_plus", wantErr: true},
 	}
 
-	got, label, err := resolvePatch("", patches, true)
-	if err != nil {
-		t.Fatalf("resolvePatch() error = %v", err)
-	}
-	if label != "16.8" {
-		t.Fatalf("expected premium latest patch 16.8, got %q", label)
-	}
-	if got.PatchAdditions != 2 {
-		t.Fatalf("premium patch additions = %d, want 2", got.PatchAdditions)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := resolveLeagueTierPreset(tt.preset)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("resolveLeagueTierPreset() error = nil, want error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("resolveLeagueTierPreset() error = %v", err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("tiers = %#v, want %#v", got, tt.want)
+			}
+		})
 	}
 }
 
