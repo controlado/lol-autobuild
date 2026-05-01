@@ -155,6 +155,7 @@ func watchCmd() *cobra.Command {
 				DryRun:      flags.DryRun,
 				Debounce:    time.Duration(cfg.Watch.DebounceMillis) * time.Millisecond,
 				OnCycle:     logWatchCycle,
+				OnNotice:    logWatchNotice,
 			})
 			if err != nil {
 				warnIfLCUNotConfigured(err)
@@ -338,4 +339,31 @@ func logWatchCycle(cycle lolautobuild.WatchCycle) {
 	}
 
 	logger.Msg("watch cycle completed")
+}
+
+func logWatchNotice(notice lolautobuild.WatchNotice) {
+	logger := log.Info()
+	if notice.Err != nil {
+		logger = log.Warn().Err(notice.Err)
+	}
+
+	logger = logger.Str("kind", string(notice.Kind))
+	if notice.Source != "" {
+		logger = logger.Str("source", notice.Source)
+	}
+	if notice.URI != "" {
+		logger = logger.Str("event_uri", notice.URI)
+	}
+	if notice.Phase != "" {
+		logger = logger.Str("phase", notice.Phase)
+	}
+	if notice.ConnectionID > 0 {
+		logger = logger.Int("connection_id", notice.ConnectionID)
+	}
+
+	if notice.Message != "" {
+		logger.Msg(notice.Message)
+		return
+	}
+	logger.Msg("watch notice")
 }

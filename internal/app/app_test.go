@@ -638,6 +638,29 @@ func TestStartWatcherLifecycle(t *testing.T) {
 		t.Fatalf("current.LastError = %q, want empty", current.LastError)
 	}
 
+	beforeNotice := time.Now().UTC()
+	call.req.OnNotice(lolautobuild.WatchNotice{
+		Kind:         lolautobuild.WatchNoticeSnapshotFinalization,
+		Message:      "snapshot finalized",
+		URI:          "/lol-champ-select/v1/session",
+		Phase:        "FINALIZATION",
+		ConnectionID: 2,
+	})
+	afterNotice := time.Now().UTC()
+
+	current = app.State(context.Background())
+	if current.Watcher.LastNotice == nil {
+		t.Fatal("expected watcher notice in state")
+	}
+	if current.Watcher.LastNotice.Kind != string(lolautobuild.WatchNoticeSnapshotFinalization) {
+		t.Fatalf("notice kind = %q, want %q", current.Watcher.LastNotice.Kind, lolautobuild.WatchNoticeSnapshotFinalization)
+	}
+	if current.Watcher.LastNotice.Phase != "FINALIZATION" || current.Watcher.LastNotice.ConnectionID != 2 {
+		t.Fatalf("unexpected watcher notice: %+v", current.Watcher.LastNotice)
+	}
+	assertTimeBetween(t, &current.Watcher.LastNotice.At, beforeNotice, afterNotice)
+	assertSyncResultEqual(t, current.LastSync, wantResult)
+
 	call.req.OnCycle(lolautobuild.WatchCycle{Err: errors.New("watch cycle failed")})
 	current = app.State(context.Background())
 	if current.LastError != "watch cycle failed" {
@@ -1258,6 +1281,9 @@ func assertWatchRequestMatchesConfig(t *testing.T, got lolautobuild.WatchRequest
 	}
 	if got.OnCycle == nil {
 		t.Fatal("watch OnCycle should not be nil")
+	}
+	if got.OnNotice == nil {
+		t.Fatal("watch OnNotice should not be nil")
 	}
 }
 

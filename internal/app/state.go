@@ -28,8 +28,19 @@ type UpdateState struct {
 }
 
 type (
+	WatcherNoticeState struct {
+		Kind         string    `json:"kind"`
+		Message      string    `json:"message,omitempty"`
+		Error        string    `json:"error,omitempty"`
+		Source       string    `json:"source,omitempty"`
+		URI          string    `json:"uri,omitempty"`
+		Phase        string    `json:"phase,omitempty"`
+		ConnectionID int       `json:"connection_id,omitempty"`
+		At           time.Time `json:"at"`
+	}
 	WatcherState struct {
-		Running bool `json:"running"`
+		Running    bool                `json:"running"`
+		LastNotice *WatcherNoticeState `json:"last_notice,omitempty"`
 	}
 	State struct {
 		Settings      Settings                 `json:"settings"`

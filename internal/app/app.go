@@ -42,6 +42,7 @@ type App struct {
 
 	lastErrorMessage string
 	lastErrorCode    string
+	lastWatchNotice  *WatcherNoticeState
 	lastSync         *lolautobuild.SyncResult
 	lastSyncAt       time.Time
 }
@@ -77,7 +78,7 @@ func (a *App) State(ctx context.Context) State {
 	return State{
 		Settings:      settingsFromConfig(cfg),
 		LCU:           status,
-		Watcher:       WatcherState{Running: a.watcherRunning},
+		Watcher:       WatcherState{Running: a.watcherRunning, LastNotice: cloneWatcherNotice(a.lastWatchNotice)},
 		Update:        cloneUpdateState(a.updateState),
 		SyncRunning:   a.syncRunning,
 		LastSync:      cloneSyncResult(a.lastSync),
@@ -219,6 +220,7 @@ func (a *App) runWatcher(ctx context.Context, watcherID int, svc lolautobuild.Se
 		DryRun:             cfg.Sync.DryRun,
 		Debounce:           time.Duration(cfg.Watch.DebounceMillis) * time.Millisecond,
 		OnCycle:            func(c lolautobuild.WatchCycle) { a.observeWatchCycle(watcherID, c) },
+		OnNotice:           func(n lolautobuild.WatchNotice) { a.observeWatchNotice(watcherID, n) },
 	})
 
 	a.mu.Lock()
@@ -285,6 +287,42 @@ func (a *App) observeWatchCycle(watchID int, c lolautobuild.WatchCycle) {
 	}
 
 	a.setLastErrorMessage(UserMessage{})
+}
+
+func (a *App) observeWatchNotice(watchID int, notice lolautobuild.WatchNotice) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if !a.watcherRunning || watchID != a.watcherID {
+		return
+	}
+
+	noticeState := watcherNoticeStateFromNotice(notice, time.Now().UTC())
+	a.lastWatchNotice = &noticeState
+}
+
+func watcherNoticeStateFromNotice(notice lolautobuild.WatchNotice, at time.Time) WatcherNoticeState {
+	state := WatcherNoticeState{
+		Kind:         string(notice.Kind),
+		Message:      notice.Message,
+		Source:       notice.Source,
+		URI:          notice.URI,
+		Phase:        notice.Phase,
+		ConnectionID: notice.ConnectionID,
+		At:           at,
+	}
+	if notice.Err != nil {
+		state.Error = notice.Err.Error()
+	}
+	return state
+}
+
+func cloneWatcherNotice(notice *WatcherNoticeState) *WatcherNoticeState {
+	if notice == nil {
+		return nil
+	}
+	out := *notice
+	return &out
 }
 
 func (a *App) StopWatcher(ctx context.Context) State {

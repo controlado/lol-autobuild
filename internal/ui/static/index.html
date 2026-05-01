@@ -987,7 +987,8 @@
                 aria-label="Patch range help" data-i18n-aria-label="settings.patch_range_help_aria">?</button>
               <span class="tooltip-panel" id="patchRangeTooltip" role="tooltip">
                 <span data-i18n="settings.patch_range_help_free">Free accounts use only the selected patch.</span>
-                <span data-i18n="settings.patch_range_help_premium">Premium Auto includes up to 2 previous patches.</span>
+                <span data-i18n="settings.patch_range_help_premium">Premium Auto includes up to 2 previous
+                  patches.</span>
                 <span data-i18n="settings.patch_range_help_manual">Manual values include older patches.</span>
               </span>
             </legend>
@@ -1149,8 +1150,7 @@
     };
     let watcherRunning = false;
 
-    let lastLogKey = "empty";
-    const logHistory = [{ key: "log.no_events" }];
+    const logHistory = [{ key: "log.no_events", logKey: "empty" }];
 
     let updateFeedbackTimer = 0;
     let updateFeedbackKey = "";
@@ -1690,19 +1690,32 @@
       }));
     }
 
-    function appendLog(items, key) {
-      if (key === lastLogKey) {
-        return;
+    function latestLogKey() {
+      const last = logHistory[logHistory.length - 1];
+      return last ? last.logKey : "";
+    }
+
+    function appendLog(items, logKey) {
+      if (logKey === latestLogKey()) {
+        return false;
       }
 
-      lastLogKey = key;
-      if (logHistory.length === 1 && logHistory[0].key === "log.no_events") {
+      if (logHistory.length === 1 && logHistory[0].logKey === "empty") {
         logHistory.length = 0;
       }
 
       const time = new Date().toISOString();
-      logHistory.push(...items.map(item => ({ ...item, time })));
+      logHistory.push(...items.map(item => ({ ...item, logKey, time })));
       renderLogList();
+      return true;
+    }
+
+    function ensureStateLog(items, logKey) {
+      if (logHistory.some(item => item.logKey === logKey)) {
+        return true;
+      }
+
+      return appendLog(items, logKey);
     }
 
     function renderLog(state, sync) {
@@ -1711,26 +1724,32 @@
         return;
       }
 
+      let wrote = false;
+      const notice = state.watcher && state.watcher.last_notice;
+      if (notice && notice.kind) {
+        const fallback = notice.error || notice.message || notice.kind;
+        const tone = notice.error || notice.kind === "reconnecting" ? "warn" : "";
+        const noticeKey = `watch_notice:${notice.at || ""}:${notice.kind}:${notice.error || notice.message || ""}`;
+        wrote = ensureStateLog([{ key: `watch.notice.${notice.kind}`, fallback, tone }], noticeKey) || wrote;
+      }
+
       if (sync && sync.Warnings && sync.Warnings.length > 0) {
-        appendLog(
+        wrote = ensureStateLog(
           sync.Warnings.map(warning => ({ fallback: warning, tone: "warn" })),
           `warnings:${state.last_sync_at || ""}:${sync.Warnings.join("|")}`
-        );
-        return;
+        ) || wrote;
       }
 
-      if (sync) {
-        appendLog([{ key: "log.sync_without_warnings" }], `sync:${state.last_sync_at || JSON.stringify(sync)}`);
-        return;
+      if (sync && !(sync.Warnings && sync.Warnings.length > 0)) {
+        wrote = ensureStateLog([{ key: "log.sync_without_warnings" }], `sync:${state.last_sync_at || JSON.stringify(sync)}`) || wrote;
       }
 
-      if (state.watcher.running) {
-        appendLog([{ key: "log.watcher_waiting" }], "watcher:running");
-        return;
+      if (!wrote && state.watcher.running) {
+        ensureStateLog([{ key: "log.watcher_waiting" }], "watcher:running");
       }
 
-      if (logHistory.length === 0) {
-        appendLog([{ key: "log.no_events" }], "empty");
+      if (!wrote && logHistory.length === 0) {
+        ensureStateLog([{ key: "log.no_events" }], "empty");
       }
     }
 
