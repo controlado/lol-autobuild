@@ -30,13 +30,6 @@ func NewClient(baseURL string, timeout time.Duration) *Client {
 	}
 }
 
-func NewClientWithHTTP(baseURL string, httpClient *resty.Client) *Client {
-	return &Client{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		http:    httpClient,
-	}
-}
-
 type refreshResponse struct {
 	AccessToken  string `json:"accessToken"`
 	RefreshToken string `json:"refreshToken"`

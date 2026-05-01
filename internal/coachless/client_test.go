@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-resty/resty/v2"
-
 	"github.com/controlado/lol-autobuild/internal/ports"
 )
 
@@ -73,8 +71,7 @@ func TestGetKeystoneDataSendsBody(t *testing.T) {
 	defer srv.Close()
 
 	var (
-		rc     = resty.New().SetTimeout(2 * time.Second)
-		client = NewClientWithHTTP(srv.URL, rc)
+		client = NewClient(srv.URL, 2*time.Second)
 		req    = ports.KeystoneRequest{
 			CommonFilters: ports.CommonFilters{
 				ChampionIDs: []int{240},
