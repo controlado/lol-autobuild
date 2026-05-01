@@ -66,13 +66,14 @@ type WatchRequest struct {
 
 	Debounce time.Duration
 	OnCycle  func(WatchCycle)
+	OnNotice func(WatchNotice)
 }
 
 type WatchTrigger string
 
 const (
-	WatchTriggerStartup WatchTrigger = "startup"
-	WatchTriggerEvent   WatchTrigger = "event"
+	WatchTriggerEvent    WatchTrigger = "event"
+	WatchTriggerSnapshot WatchTrigger = "snapshot"
 )
 
 type WatchCycle struct {
@@ -81,4 +82,23 @@ type WatchCycle struct {
 	EventURI  string
 	Result    *SyncResult
 	Err       error
+}
+
+type WatchNoticeKind string
+
+const (
+	WatchNoticeConnected            WatchNoticeKind = "connected"
+	WatchNoticeReconnecting         WatchNoticeKind = "reconnecting"
+	WatchNoticeSnapshotFinalization WatchNoticeKind = "snapshot_finalization"
+	WatchNoticeSnapshotWaiting      WatchNoticeKind = "snapshot_waiting"
+)
+
+type WatchNotice struct {
+	Kind         WatchNoticeKind
+	Message      string
+	Err          error
+	Source       string
+	URI          string
+	Phase        string
+	ConnectionID int
 }

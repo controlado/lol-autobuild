@@ -22,21 +22,25 @@ func (s *syncService) Watch(ctx context.Context, req WatchRequest) error {
 		debounce = defaultWatchDebounce
 	}
 
-	events := make(chan ports.LCUEvent, 64)
-	watchErrCh := make(chan error, 1)
+	var (
+		watchErrCh = make(chan error, 1)
+		eventsCh   = make(chan ports.LCUEvent, 64)
+		noticesCh  chan ports.LCUWatchNotice
+	)
+
+	if req.OnNotice != nil {
+		noticesCh = make(chan ports.LCUWatchNotice, 64)
+	}
 
 	go func() {
-		watchErrCh <- s.deps.LCU.WatchEvents(ctx, events)
+		watchErrCh <- s.deps.LCU.WatchEventsWithNotices(ctx, eventsCh, noticesCh)
 	}()
 
 	var (
-		timer        *time.Timer
-		timerCh      <-chan time.Time
-		hasPending   bool
-		pendingEvent ports.LCUEvent
-		didFinalize  bool
+		pending = watchPendingCycle{}
+		gate    = newWatchSessionGate()
 	)
-	defer stopWatchTimer(timer)
+	defer pending.stop()
 
 	for {
 		select {
@@ -47,35 +51,36 @@ func (s *syncService) Watch(ctx context.Context, req WatchRequest) error {
 				return nil
 			}
 			return fmt.Errorf("watch lcu events: %w", err)
-		case event := <-events:
+		case notice := <-noticesCh:
+			req.OnNotice(watchNoticeFromLCU(notice))
+		case event := <-eventsCh:
 			eventType, isSessionEvent, isFinalizationEvent := classifyChampSelectSessionEvent(event)
 			if isSessionEvent && (eventType == "delete" || (eventType == "create" && !isFinalizationEvent)) {
-				didFinalize = false
-				hasPending = false
-				pendingEvent = ports.LCUEvent{}
-
-				stopWatchTimer(timer)
-				timer = nil
-				timerCh = nil
+				gate.reset(event)
+				pending.clear()
 				continue
 			}
 
-			if !isFinalizationEvent || didFinalize {
+			if !isFinalizationEvent {
 				continue
 			}
 
-			didFinalize = true
-			hasPending = true
-			pendingEvent = event
-			timer, timerCh = resetWatchTimer(timer, debounce)
-		case <-timerCh:
-			timerCh = nil
-			if !hasPending {
+			sessionKey, promotedFrom := gate.trackFinalizationSession(event, eventType)
+			pending.promoteSessionKey(promotedFrom, sessionKey)
+			if gate.isPendingOrSynced(sessionKey) {
 				continue
 			}
 
-			hasPending = false
-			_ = s.runWatchCycle(ctx, req, WatchTriggerEvent, &pendingEvent)
+			gate.markPending(sessionKey)
+			pending.schedule(event, sessionKey, debounce)
+		case <-pending.timerC():
+			event, sessionKey, ok := pending.consume()
+			if !ok {
+				continue
+			}
+			gate.markSynced(sessionKey)
+
+			_ = s.runWatchCycle(ctx, req, watchTriggerForEvent(event), &event)
 			if ctx.Err() != nil {
 				return nil
 			}
@@ -106,6 +111,181 @@ func (s *syncService) runWatchCycle(ctx context.Context, req WatchRequest, trigg
 	return err
 }
 
+type watchPendingCycle struct {
+	timer      *time.Timer
+	timerCh    <-chan time.Time
+	event      ports.LCUEvent
+	sessionKey string
+	scheduled  bool
+}
+
+func (p *watchPendingCycle) timerC() <-chan time.Time {
+	return p.timerCh
+}
+
+func (p *watchPendingCycle) schedule(event ports.LCUEvent, sessionKey string, debounce time.Duration) {
+	p.event = event
+	p.sessionKey = sessionKey
+	p.scheduled = true
+	p.timer, p.timerCh = resetWatchTimer(p.timer, debounce)
+}
+
+func (p *watchPendingCycle) promoteSessionKey(from string, to string) {
+	if from != "" && p.sessionKey == from {
+		p.sessionKey = to
+	}
+}
+
+func (p *watchPendingCycle) consume() (ports.LCUEvent, string, bool) {
+	p.timerCh = nil
+	if !p.scheduled {
+		return ports.LCUEvent{}, "", false
+	}
+
+	event := p.event
+	sessionKey := p.sessionKey
+	p.event = ports.LCUEvent{}
+	p.sessionKey = ""
+	p.scheduled = false
+	return event, sessionKey, true
+}
+
+func (p *watchPendingCycle) clear() {
+	p.event = ports.LCUEvent{}
+	p.sessionKey = ""
+	p.scheduled = false
+	p.stop()
+}
+
+func (p *watchPendingCycle) stop() {
+	stopWatchTimer(p.timer)
+	p.timer = nil
+	p.timerCh = nil
+}
+
+type watchSessionGate struct {
+	synced             map[string]struct{}
+	pending            map[string]struct{}
+	activeSessionKey   string
+	activeConnectionID int
+	nextAnonymousID    int
+}
+
+func newWatchSessionGate() *watchSessionGate {
+	return &watchSessionGate{
+		synced:  make(map[string]struct{}),
+		pending: make(map[string]struct{}),
+	}
+}
+
+func (g *watchSessionGate) reset(event ports.LCUEvent) {
+	g.pending = make(map[string]struct{})
+
+	if event.ConnectionID > 0 && event.ConnectionID != g.activeConnectionID {
+		g.activeConnectionID = event.ConnectionID
+	}
+
+	g.activeSessionKey = ""
+}
+
+func (g *watchSessionGate) isPendingOrSynced(sessionKey string) bool {
+	if sessionKey == "" {
+		return false
+	}
+
+	if _, ok := g.synced[sessionKey]; ok {
+		return true
+	}
+
+	_, ok := g.pending[sessionKey]
+	return ok
+}
+
+func (g *watchSessionGate) markPending(sessionKey string) {
+	if sessionKey == "" {
+		return
+	}
+
+	g.pending[sessionKey] = struct{}{}
+}
+
+func (g *watchSessionGate) markSynced(sessionKey string) {
+	if sessionKey == "" {
+		return
+	}
+
+	delete(g.pending, sessionKey)
+	g.synced[sessionKey] = struct{}{}
+}
+
+func (g *watchSessionGate) trackFinalizationSession(event ports.LCUEvent, eventType string) (sessionKey string, promotedFrom string) {
+	connectionChanged := event.ConnectionID > 0 && event.ConnectionID != g.activeConnectionID
+	if connectionChanged {
+		g.activeConnectionID = event.ConnectionID
+	}
+
+	if gameID := gameIDFromEvent(event); gameID != "" {
+		gameKey := "game:" + gameID
+		return gameKey, g.promoteActiveSession(gameKey)
+	}
+
+	if connectionChanged {
+		g.activeSessionKey = ""
+	}
+
+	if eventType == "create" || g.activeSessionKey == "" {
+		g.nextAnonymousID++
+		g.activeSessionKey = fmt.Sprintf("anonymous:%d", g.nextAnonymousID)
+	}
+
+	return g.activeSessionKey, ""
+}
+
+func (g *watchSessionGate) promoteActiveSession(gameKey string) string {
+	if g.activeSessionKey == "" || g.activeSessionKey == gameKey {
+		g.activeSessionKey = gameKey
+		return ""
+	}
+
+	if !strings.HasPrefix(g.activeSessionKey, "anonymous:") {
+		g.activeSessionKey = gameKey
+		return ""
+	}
+
+	previousKey := g.activeSessionKey
+	if _, ok := g.pending[g.activeSessionKey]; ok {
+		delete(g.pending, g.activeSessionKey)
+		g.pending[gameKey] = struct{}{}
+	}
+	if _, ok := g.synced[g.activeSessionKey]; ok {
+		delete(g.synced, g.activeSessionKey)
+		g.synced[gameKey] = struct{}{}
+	}
+
+	g.activeSessionKey = gameKey
+	return previousKey
+}
+
+func watchTriggerForEvent(event ports.LCUEvent) WatchTrigger {
+	if event.Source == ports.LCUEventSourceSnapshot {
+		return WatchTriggerSnapshot
+	}
+
+	return WatchTriggerEvent
+}
+
+func watchNoticeFromLCU(notice ports.LCUWatchNotice) WatchNotice {
+	return WatchNotice{
+		Kind:         WatchNoticeKind(notice.Kind),
+		Message:      notice.Message,
+		Err:          notice.Err,
+		Source:       notice.Source,
+		URI:          notice.URI,
+		Phase:        notice.Phase,
+		ConnectionID: notice.ConnectionID,
+	}
+}
+
 func (r WatchRequest) syncRequest() SyncRequest {
 	return SyncRequest{
 		Patch:              r.Patch,
@@ -127,7 +307,7 @@ func classifyChampSelectSessionEvent(event ports.LCUEvent) (eventType string, is
 	}
 
 	switch eventType {
-	case "create", "update":
+	case "create", "update", "snapshot":
 	default:
 		return eventType, true, false
 	}
@@ -145,6 +325,36 @@ func classifyChampSelectSessionEvent(event ports.LCUEvent) (eventType string, is
 	}
 
 	return eventType, true, strings.EqualFold(strings.TrimSpace(payload.Timer.Phase), "FINALIZATION")
+}
+
+func gameIDFromEvent(event ports.LCUEvent) string {
+	var payload struct {
+		GameID json.RawMessage `json:"gameId"`
+	}
+	if len(event.Data) == 0 {
+		return ""
+	}
+	if err := json.Unmarshal(event.Data, &payload); err != nil || len(payload.GameID) == 0 {
+		return ""
+	}
+
+	var numeric json.Number
+	if err := json.Unmarshal(payload.GameID, &numeric); err == nil {
+		value := strings.TrimSpace(numeric.String())
+		if value != "" && value != "0" {
+			return value
+		}
+	}
+
+	var text string
+	if err := json.Unmarshal(payload.GameID, &text); err == nil {
+		value := strings.TrimSpace(text)
+		if value != "" && value != "0" {
+			return value
+		}
+	}
+
+	return ""
 }
 
 func resetWatchTimer(timer *time.Timer, delay time.Duration) (*time.Timer, <-chan time.Time) {

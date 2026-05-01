@@ -130,15 +130,15 @@ func (c *coachlessStub) GetItemStats(ctx context.Context, accessToken string, re
 }
 
 type lcuStub struct {
-	detectedSelection ports.DetectedSelection
-	detectErr         error
-	detectCalls       int
-	itemSetCalls      []ports.ApplyItemSetRequest
-	runePageCalls     []ports.ApplyRunePageRequest
-	spellCalls        []ports.ApplySummonerSpellsRequest
-	watchCalls        int
-	watchEventsFn     func(context.Context, chan<- ports.LCUEvent) error
-	watchEventsErr    error
+	detectedSelection        ports.DetectedSelection
+	detectErr                error
+	detectCalls              int
+	itemSetCalls             []ports.ApplyItemSetRequest
+	runePageCalls            []ports.ApplyRunePageRequest
+	spellCalls               []ports.ApplySummonerSpellsRequest
+	watchCalls               int
+	watchEventsWithNoticesFn func(context.Context, chan<- ports.LCUEvent, chan<- ports.LCUWatchNotice) error
+	watchErr                 error
 }
 
 func (l *lcuStub) DetectSelection(ctx context.Context) (ports.DetectedSelection, error) {
@@ -168,10 +168,10 @@ func (l *lcuStub) ApplySummonerSpells(ctx context.Context, req ports.ApplySummon
 	return nil
 }
 
-func (l *lcuStub) WatchEvents(ctx context.Context, out chan<- ports.LCUEvent) error {
+func (l *lcuStub) WatchEventsWithNotices(ctx context.Context, out chan<- ports.LCUEvent, notices chan<- ports.LCUWatchNotice) error {
 	l.watchCalls++
-	if l.watchEventsFn != nil {
-		return l.watchEventsFn(ctx, out)
+	if l.watchEventsWithNoticesFn != nil {
+		return l.watchEventsWithNoticesFn(ctx, out, notices)
 	}
-	return l.watchEventsErr
+	return l.watchErr
 }

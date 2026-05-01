@@ -14,11 +14,15 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const eventTopic = "OnJsonApiEvent"
+const (
+	eventTopic            = "OnJsonApiEvent"
+	champSelectSessionURI = "/lol-champ-select/v1/session"
+	snapshotEventType     = "Snapshot"
+)
 
 var (
-	ErrWatchEventStreamFailed     = errors.New("watch event stream failed")
-	ErrWatchEventsChannelRequired = errors.New("watch events channel is required")
+	ErrWatchEventStreamFailed   = errors.New("watch event stream failed")
+	ErrLCUEventsChannelRequired = errors.New("watch events channel is required")
 )
 
 type eventEnvelope struct {
@@ -27,30 +31,54 @@ type eventEnvelope struct {
 	Data      json.RawMessage `json:"data"`
 }
 
-func (c *Client) WatchEvents(ctx context.Context, out chan<- ports.LCUEvent) error {
+func (c *Client) WatchEventsWithNotices(ctx context.Context, out chan<- ports.LCUEvent, notices chan<- ports.LCUWatchNotice) error {
 	if !c.Enabled {
 		return ErrNotConfigured
 	}
 	if out == nil {
-		return ErrWatchEventsChannelRequired
+		return ErrLCUEventsChannelRequired
 	}
 
 	reconnectDelay := c.watchReconnectDelay()
+	connectionID := 0
 
 	for {
 		if ctx.Err() != nil {
 			return nil
 		}
 
-		conn, err := c.dialEventStream(ctx)
+		conn, info, source, err := c.dialEventStream(ctx)
 		if err != nil {
+			if !emitWatchNotice(ctx, notices, ports.LCUWatchNotice{
+				Kind:    ports.LCUWatchNoticeReconnecting,
+				Message: "LCU websocket is unavailable; waiting before reconnect.",
+				Err:     err,
+			}) {
+				return nil
+			}
 			if !waitReconnect(ctx, reconnectDelay) {
 				return nil
 			}
 			continue
 		}
+		connectionID++
 
-		err = c.consumeEventStream(ctx, conn, out)
+		if !emitWatchNotice(ctx, notices, ports.LCUWatchNotice{
+			Kind:         ports.LCUWatchNoticeConnected,
+			Message:      "LCU websocket connected.",
+			Source:       source,
+			ConnectionID: connectionID,
+		}) {
+			_ = conn.Close()
+			return nil
+		}
+
+		if ok := c.emitSessionSnapshot(ctx, info, source, connectionID, out, notices); !ok {
+			_ = conn.Close()
+			return nil
+		}
+
+		err = c.consumeEventStream(ctx, conn, out, connectionID)
 		_ = conn.Close()
 
 		if ctx.Err() != nil {
@@ -61,6 +89,15 @@ func (c *Client) WatchEvents(ctx context.Context, out chan<- ports.LCUEvent) err
 			continue
 		}
 
+		if !emitWatchNotice(ctx, notices, ports.LCUWatchNotice{
+			Kind:         ports.LCUWatchNoticeReconnecting,
+			Message:      "LCU websocket disconnected; waiting before reconnect.",
+			Err:          err,
+			Source:       source,
+			ConnectionID: connectionID,
+		}) {
+			return nil
+		}
 		if !waitReconnect(ctx, reconnectDelay) {
 			return nil
 		}
@@ -75,11 +112,12 @@ func (c *Client) watchReconnectDelay() time.Duration {
 	return c.WatchReconnectDelay
 }
 
-func (c *Client) dialEventStream(ctx context.Context) (conn *websocket.Conn, err error) {
+func (c *Client) dialEventStream(ctx context.Context) (conn *websocket.Conn, info connectionInfo, source string, err error) {
 	var (
 		attempt          = newConnectionAttempt()
-		candidateHandler = func(info connectionInfo, candidateLabel string) (shouldTerminate bool) {
-			conn, err = dialWebsocket(ctx, info)
+		selectedInfo     connectionInfo
+		candidateHandler = func(candidateInfo connectionInfo, candidateLabel string) (shouldTerminate bool) {
+			conn, err = dialWebsocket(ctx, candidateInfo)
 			if err != nil {
 				attempt.observe(candidateLabel, nil, err)
 				return false
@@ -93,17 +131,19 @@ func (c *Client) dialEventStream(ctx context.Context) (conn *websocket.Conn, err
 				return false
 			}
 
+			source = candidateLabel
+			selectedInfo = candidateInfo
 			return true
 		}
 	)
 
 	if success, err := c.forEachCandidate(ctx, attempt, candidateHandler); err != nil {
-		return nil, err
+		return nil, connectionInfo{}, "", err
 	} else if success {
-		return conn, nil
+		return conn, selectedInfo, source, nil
 	}
 
-	return nil, attempt.finish(ErrWatchEventStreamFailed)
+	return nil, connectionInfo{}, "", attempt.finish(ErrWatchEventStreamFailed)
 }
 
 func dialWebsocket(ctx context.Context, info connectionInfo) (*websocket.Conn, error) {
@@ -131,7 +171,7 @@ func dialWebsocket(ctx context.Context, info connectionInfo) (*websocket.Conn, e
 	return conn, nil
 }
 
-func (c *Client) consumeEventStream(ctx context.Context, conn *websocket.Conn, out chan<- ports.LCUEvent) error {
+func (c *Client) consumeEventStream(ctx context.Context, conn *websocket.Conn, out chan<- ports.LCUEvent, connectionID int) error {
 	done := make(chan struct{})
 	go func() {
 		select {
@@ -155,12 +195,87 @@ func (c *Client) consumeEventStream(ctx context.Context, conn *websocket.Conn, o
 		if err != nil || !ok {
 			continue
 		}
+		event.Source = ports.LCUEventSourceStream
+		event.ConnectionID = connectionID
 
 		select {
 		case out <- event:
 		case <-ctx.Done():
 			return nil
 		}
+	}
+}
+
+func (c *Client) emitSessionSnapshot(ctx context.Context, info connectionInfo, source string, connectionID int, out chan<- ports.LCUEvent, notices chan<- ports.LCUWatchNotice) bool {
+	raw, err := c.fetchChampSelectSessionEventData(ctx, info)
+	if err != nil {
+		return emitWatchNotice(ctx, notices, ports.LCUWatchNotice{
+			Kind:         ports.LCUWatchNoticeSnapshotWaiting,
+			Message:      "Champ select snapshot is unavailable; waiting for websocket events.",
+			Err:          err,
+			Source:       source,
+			URI:          champSelectSessionURI,
+			ConnectionID: connectionID,
+		})
+	}
+
+	phase := champSelectPhase(raw)
+	notice := ports.LCUWatchNotice{
+		Kind:         ports.LCUWatchNoticeSnapshotWaiting,
+		Message:      "Champ select snapshot is not finalized; waiting for websocket events.",
+		Source:       source,
+		URI:          champSelectSessionURI,
+		Phase:        phase,
+		ConnectionID: connectionID,
+	}
+	if strings.EqualFold(strings.TrimSpace(phase), "FINALIZATION") {
+		notice.Kind = ports.LCUWatchNoticeSnapshotFinalization
+		notice.Message = "Champ select snapshot is finalized."
+	}
+	if !emitWatchNotice(ctx, notices, notice) {
+		return false
+	}
+
+	if notice.Kind != ports.LCUWatchNoticeSnapshotFinalization {
+		return true
+	}
+
+	select {
+	case out <- ports.LCUEvent{
+		EventType:    snapshotEventType,
+		URI:          champSelectSessionURI,
+		Data:         raw,
+		Source:       ports.LCUEventSourceSnapshot,
+		ConnectionID: connectionID,
+	}:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func champSelectPhase(raw json.RawMessage) string {
+	var payload struct {
+		Timer struct {
+			Phase string `json:"phase"`
+		} `json:"timer"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(payload.Timer.Phase)
+}
+
+func emitWatchNotice(ctx context.Context, notices chan<- ports.LCUWatchNotice, notice ports.LCUWatchNotice) bool {
+	if notices == nil {
+		return true
+	}
+
+	select {
+	case notices <- notice:
+		return true
+	case <-ctx.Done():
+		return false
 	}
 }
 

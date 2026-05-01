@@ -159,9 +159,11 @@ type DetectedSelection struct {
 }
 
 type LCUEvent struct {
-	EventType string
-	URI       string
-	Data      json.RawMessage
+	EventType    string
+	URI          string
+	Data         json.RawMessage
+	Source       LCUEventSource
+	ConnectionID int
 }
 
 type LCUClient interface {
@@ -169,7 +171,33 @@ type LCUClient interface {
 	ApplyItemSet(ctx context.Context, req ApplyItemSetRequest) error
 	ApplyRunePage(ctx context.Context, req ApplyRunePageRequest) error
 	ApplySummonerSpells(ctx context.Context, req ApplySummonerSpellsRequest) error
-	WatchEvents(ctx context.Context, out chan<- LCUEvent) error
+	WatchEventsWithNotices(ctx context.Context, out chan<- LCUEvent, notices chan<- LCUWatchNotice) error
+}
+
+type LCUEventSource string
+
+const (
+	LCUEventSourceStream   LCUEventSource = "event"
+	LCUEventSourceSnapshot LCUEventSource = "snapshot"
+)
+
+type LCUWatchNoticeKind string
+
+const (
+	LCUWatchNoticeConnected            LCUWatchNoticeKind = "connected"
+	LCUWatchNoticeReconnecting         LCUWatchNoticeKind = "reconnecting"
+	LCUWatchNoticeSnapshotFinalization LCUWatchNoticeKind = "snapshot_finalization"
+	LCUWatchNoticeSnapshotWaiting      LCUWatchNoticeKind = "snapshot_waiting"
+)
+
+type LCUWatchNotice struct {
+	Kind         LCUWatchNoticeKind
+	Message      string
+	Err          error
+	Source       string
+	URI          string
+	Phase        string
+	ConnectionID int
 }
 
 type RecommendationInput struct {
