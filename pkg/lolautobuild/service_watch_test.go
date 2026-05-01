@@ -15,9 +15,7 @@ func TestWatchDoesNotRunStartupSyncAndStopsGracefully(t *testing.T) {
 	t.Parallel()
 
 	started := make(chan struct{})
-	lcu := watchTestLCU(func(ctx context.Context, out chan<- ports.LCUEvent, notices chan<- ports.LCUWatchNotice) error {
-		_ = out
-		_ = notices
+	lcu := watchTestLCU(func(ctx context.Context, _ chan<- ports.LCUEvent, _ chan<- ports.LCUWatchNotice) error {
 		close(started)
 		<-ctx.Done()
 		return nil
@@ -409,8 +407,7 @@ func TestWatchForwardsSnapshotUnavailableNotice(t *testing.T) {
 
 	started := make(chan struct{})
 	lcu := watchTestLCU(nil)
-	lcu.watchEventsWithNoticesFn = func(ctx context.Context, out chan<- ports.LCUEvent, notices chan<- ports.LCUWatchNotice) error {
-		_ = out
+	lcu.watchEventsWithNoticesFn = func(ctx context.Context, _ chan<- ports.LCUEvent, notices chan<- ports.LCUWatchNotice) error {
 		close(started)
 		select {
 		case notices <- ports.LCUWatchNotice{
@@ -510,8 +507,7 @@ func watchTestRequest(onCycle func(WatchCycle)) WatchRequest {
 }
 
 func watchEventsWithNoticesFrom(events <-chan ports.LCUEvent) func(context.Context, chan<- ports.LCUEvent, chan<- ports.LCUWatchNotice) error {
-	return func(ctx context.Context, out chan<- ports.LCUEvent, notices chan<- ports.LCUWatchNotice) error {
-		_ = notices
+	return func(ctx context.Context, out chan<- ports.LCUEvent, _ chan<- ports.LCUWatchNotice) error {
 		for {
 			select {
 			case event := <-events:

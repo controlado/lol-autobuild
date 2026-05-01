@@ -51,8 +51,7 @@ func rootCmd() *cobra.Command {
 		Use:   "lol-autobuild",
 		Short: "Automate League of Legends setup from Coachless data",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			_ = args
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runUI(cmd.Context(), defaultConfigPath)
 		},
 	}
@@ -69,8 +68,7 @@ func uiCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ui",
 		Short: "Open the local settings UI",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			_ = args
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runUI(cmd.Context(), configPath)
 		},
 	}

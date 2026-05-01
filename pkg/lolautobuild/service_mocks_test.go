@@ -15,8 +15,7 @@ type tokenProviderStub struct {
 	err    error
 }
 
-func (t tokenProviderStub) AccessToken(ctx context.Context) (string, error) {
-	_ = ctx
+func (t tokenProviderStub) AccessToken(_ context.Context) (string, error) {
 	if t.err != nil {
 		return "", t.err
 	}
@@ -24,13 +23,11 @@ func (t tokenProviderStub) AccessToken(ctx context.Context) (string, error) {
 	return t.token, nil
 }
 
-func (t tokenProviderStub) Refresh(ctx context.Context) (ports.TokenPair, error) {
-	_ = ctx
+func (t tokenProviderStub) Refresh(_ context.Context) (ports.TokenPair, error) {
 	return ports.TokenPair{AccessToken: t.token, ExpiresAt: time.Now().Add(10 * time.Minute)}, t.err
 }
 
-func (t tokenProviderStub) Claims(ctx context.Context) (ports.TokenClaims, error) {
-	_ = ctx
+func (t tokenProviderStub) Claims(_ context.Context) (ports.TokenClaims, error) {
 	if t.err != nil {
 		return ports.TokenClaims{}, t.err
 	}
@@ -51,16 +48,11 @@ type coachlessStub struct {
 	itemErr         error
 }
 
-func (c *coachlessStub) Refresh(ctx context.Context, refreshToken string) (ports.TokenPair, error) {
-	_ = ctx
-	_ = refreshToken
+func (c *coachlessStub) Refresh(_ context.Context, _ string) (ports.TokenPair, error) {
 	return ports.TokenPair{}, errors.New("unused")
 }
 
-func (c *coachlessStub) GetPatches(ctx context.Context, accessToken string) ([]ports.PatchInfo, error) {
-	_ = ctx
-	_ = accessToken
-
+func (c *coachlessStub) GetPatches(_ context.Context, _ string) ([]ports.PatchInfo, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -72,10 +64,7 @@ func (c *coachlessStub) GetPatches(ctx context.Context, accessToken string) ([]p
 	return []ports.PatchInfo{{Label: "16.7", Major: 16, Patch: 7, MatchCount: 1}}, nil
 }
 
-func (c *coachlessStub) GetKeystoneData(ctx context.Context, accessToken string, req ports.KeystoneRequest) ([]ports.KeystoneStat, error) {
-	_ = ctx
-	_ = accessToken
-
+func (c *coachlessStub) GetKeystoneData(_ context.Context, _ string, req ports.KeystoneRequest) ([]ports.KeystoneStat, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -88,10 +77,7 @@ func (c *coachlessStub) GetKeystoneData(ctx context.Context, accessToken string,
 	return []ports.KeystoneStat{{Rune: 8437, WPAOverall: 1.4, Occurrence: 1000}}, nil
 }
 
-func (c *coachlessStub) GetSummonerSpellStats(ctx context.Context, accessToken string, req ports.SummonerSpellStatsRequest) ([]ports.SummonerSpellStat, error) {
-	_ = ctx
-	_ = accessToken
-
+func (c *coachlessStub) GetSummonerSpellStats(_ context.Context, _ string, req ports.SummonerSpellStatsRequest) ([]ports.SummonerSpellStat, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -107,10 +93,7 @@ func (c *coachlessStub) GetSummonerSpellStats(ctx context.Context, accessToken s
 	}, nil
 }
 
-func (c *coachlessStub) GetItemStats(ctx context.Context, accessToken string, req ports.ItemStatsRequest) ([]ports.ItemStat, error) {
-	_ = ctx
-	_ = accessToken
-
+func (c *coachlessStub) GetItemStats(_ context.Context, _ string, req ports.ItemStatsRequest) ([]ports.ItemStat, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -141,8 +124,7 @@ type lcuStub struct {
 	watchErr                 error
 }
 
-func (l *lcuStub) DetectSelection(ctx context.Context) (ports.DetectedSelection, error) {
-	_ = ctx
+func (l *lcuStub) DetectSelection(_ context.Context) (ports.DetectedSelection, error) {
 	l.detectCalls++
 	if l.detectErr != nil {
 		return ports.DetectedSelection{}, l.detectErr
@@ -150,20 +132,17 @@ func (l *lcuStub) DetectSelection(ctx context.Context) (ports.DetectedSelection,
 	return l.detectedSelection, nil
 }
 
-func (l *lcuStub) ApplyItemSet(ctx context.Context, req ports.ApplyItemSetRequest) error {
-	_ = ctx
+func (l *lcuStub) ApplyItemSet(_ context.Context, req ports.ApplyItemSetRequest) error {
 	l.itemSetCalls = append(l.itemSetCalls, req)
 	return nil
 }
 
-func (l *lcuStub) ApplyRunePage(ctx context.Context, req ports.ApplyRunePageRequest) error {
-	_ = ctx
+func (l *lcuStub) ApplyRunePage(_ context.Context, req ports.ApplyRunePageRequest) error {
 	l.runePageCalls = append(l.runePageCalls, req)
 	return nil
 }
 
-func (l *lcuStub) ApplySummonerSpells(ctx context.Context, req ports.ApplySummonerSpellsRequest) error {
-	_ = ctx
+func (l *lcuStub) ApplySummonerSpells(_ context.Context, req ports.ApplySummonerSpellsRequest) error {
 	l.spellCalls = append(l.spellCalls, req)
 	return nil
 }

@@ -124,9 +124,8 @@ func (s BrowserSource) tokenPairFromRawBody(raw []byte) (ports.TokenPair, bool) 
 
 type EnvManualSource struct{}
 
-func (EnvManualSource) Acquire(ctx context.Context) (ports.TokenPair, error) {
+func (EnvManualSource) Acquire(_ context.Context) (ports.TokenPair, error) {
 	var (
-		_       = ctx
 		access  = strings.TrimSpace(os.Getenv("COACHLESS_ACCESS_TOKEN"))
 		refresh = strings.TrimSpace(os.Getenv("COACHLESS_REFRESH_TOKEN"))
 		expRaw  = strings.TrimSpace(os.Getenv("COACHLESS_ACCESS_TOKEN_EXP"))

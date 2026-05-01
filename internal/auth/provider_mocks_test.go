@@ -13,9 +13,7 @@ type fakeStore struct {
 	writeErr error
 }
 
-func (s *fakeStore) ReadTokens(ctx context.Context) (ports.TokenPair, error) {
-	_ = ctx
-
+func (s *fakeStore) ReadTokens(_ context.Context) (ports.TokenPair, error) {
 	if s.readErr != nil {
 		return ports.TokenPair{}, s.readErr
 	}
@@ -23,9 +21,7 @@ func (s *fakeStore) ReadTokens(ctx context.Context) (ports.TokenPair, error) {
 	return s.pair, nil
 }
 
-func (s *fakeStore) WriteTokens(ctx context.Context, pair ports.TokenPair) error {
-	_ = ctx
-
+func (s *fakeStore) WriteTokens(_ context.Context, pair ports.TokenPair) error {
 	if s.writeErr != nil {
 		return s.writeErr
 	}
@@ -34,8 +30,7 @@ func (s *fakeStore) WriteTokens(ctx context.Context, pair ports.TokenPair) error
 	return nil
 }
 
-func (s *fakeStore) ClearTokens(ctx context.Context) error {
-	_ = ctx
+func (s *fakeStore) ClearTokens(_ context.Context) error {
 	s.pair = ports.TokenPair{}
 	return nil
 }
@@ -45,10 +40,7 @@ type fakeCoachless struct {
 	err       error
 }
 
-func (f fakeCoachless) Refresh(ctx context.Context, refreshToken string) (ports.TokenPair, error) {
-	_ = ctx
-	_ = refreshToken
-
+func (f fakeCoachless) Refresh(_ context.Context, _ string) (ports.TokenPair, error) {
 	if f.err != nil {
 		return ports.TokenPair{}, f.err
 	}
@@ -56,30 +48,19 @@ func (f fakeCoachless) Refresh(ctx context.Context, refreshToken string) (ports.
 	return f.refreshed, nil
 }
 
-func (fakeCoachless) GetPatches(ctx context.Context, accessToken string) ([]ports.PatchInfo, error) {
-	_ = ctx
-	_ = accessToken
+func (fakeCoachless) GetPatches(_ context.Context, _ string) ([]ports.PatchInfo, error) {
 	return nil, errors.New("unused")
 }
 
-func (fakeCoachless) GetKeystoneData(ctx context.Context, accessToken string, req ports.KeystoneRequest) ([]ports.KeystoneStat, error) {
-	_ = ctx
-	_ = accessToken
-	_ = req
+func (fakeCoachless) GetKeystoneData(_ context.Context, _ string, _ ports.KeystoneRequest) ([]ports.KeystoneStat, error) {
 	return nil, errors.New("unused")
 }
 
-func (fakeCoachless) GetSummonerSpellStats(ctx context.Context, accessToken string, req ports.SummonerSpellStatsRequest) ([]ports.SummonerSpellStat, error) {
-	_ = ctx
-	_ = accessToken
-	_ = req
+func (fakeCoachless) GetSummonerSpellStats(_ context.Context, _ string, _ ports.SummonerSpellStatsRequest) ([]ports.SummonerSpellStat, error) {
 	return nil, errors.New("unused")
 }
 
-func (fakeCoachless) GetItemStats(ctx context.Context, accessToken string, req ports.ItemStatsRequest) ([]ports.ItemStat, error) {
-	_ = ctx
-	_ = accessToken
-	_ = req
+func (fakeCoachless) GetItemStats(_ context.Context, _ string, _ ports.ItemStatsRequest) ([]ports.ItemStat, error) {
 	return nil, errors.New("unused")
 }
 
@@ -88,9 +69,7 @@ type fakeManualSource struct {
 	err  error
 }
 
-func (m fakeManualSource) Acquire(ctx context.Context) (ports.TokenPair, error) {
-	_ = ctx
-
+func (m fakeManualSource) Acquire(_ context.Context) (ports.TokenPair, error) {
 	if m.err != nil {
 		return ports.TokenPair{}, m.err
 	}
@@ -103,9 +82,7 @@ type fakeAutoSource struct {
 	err  error
 }
 
-func (a fakeAutoSource) Acquire(ctx context.Context) (ports.TokenPair, error) {
-	_ = ctx
-
+func (a fakeAutoSource) Acquire(_ context.Context) (ports.TokenPair, error) {
 	if a.err != nil {
 		return ports.TokenPair{}, a.err
 	}

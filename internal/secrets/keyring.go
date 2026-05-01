@@ -21,9 +21,7 @@ func NewKeyringStore(service string) *KeyringStore {
 	return &KeyringStore{Service: service}
 }
 
-func (s *KeyringStore) ReadTokens(ctx context.Context) (ports.TokenPair, error) {
-	_ = ctx
-
+func (s *KeyringStore) ReadTokens(_ context.Context) (ports.TokenPair, error) {
 	raw, err := keyring.Get(s.Service, tokenUsername)
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
@@ -41,9 +39,7 @@ func (s *KeyringStore) ReadTokens(ctx context.Context) (ports.TokenPair, error) 
 	return pair, nil
 }
 
-func (s *KeyringStore) WriteTokens(ctx context.Context, pair ports.TokenPair) error {
-	_ = ctx
-
+func (s *KeyringStore) WriteTokens(_ context.Context, pair ports.TokenPair) error {
 	raw, err := json.Marshal(pair)
 	if err != nil {
 		return fmt.Errorf("encode tokens: %w", err)
@@ -56,9 +52,7 @@ func (s *KeyringStore) WriteTokens(ctx context.Context, pair ports.TokenPair) er
 	return nil
 }
 
-func (s *KeyringStore) ClearTokens(ctx context.Context) error {
-	_ = ctx
-
+func (s *KeyringStore) ClearTokens(_ context.Context) error {
 	if err := keyring.Delete(s.Service, tokenUsername); err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
 			return nil

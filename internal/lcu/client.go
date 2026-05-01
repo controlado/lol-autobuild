@@ -28,9 +28,7 @@ func NewClient(enabled bool, lockfilePath string) *Client {
 	}
 }
 
-func (c *Client) ApplyRunePage(ctx context.Context, req ports.ApplyRunePageRequest) error {
-	_ = ctx
-
+func (c *Client) ApplyRunePage(_ context.Context, req ports.ApplyRunePageRequest) error {
 	if !c.Enabled {
 		return ErrNotConfigured
 	}
