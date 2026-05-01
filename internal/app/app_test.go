@@ -449,50 +449,32 @@ func TestSaveSettingsReturnsErrorWithoutMutatingConfig(t *testing.T) {
 	}
 }
 
-func TestSaveSettingsRestartsRunningWatcherWithNewConfig(t *testing.T) {
+func TestSaveSettingsMarksRunningWatcherConfigStaleWithoutRestart(t *testing.T) {
 	cfg := testConfig()
 	cfg.Sync.Patch = "14.10"
 
 	store := &recordingConfigStore{}
 	firstSvc := newStubService()
-	secondSvc := newStubService()
 	firstStopped := make(chan struct{})
-	secondStopped := make(chan struct{})
 
 	firstSvc.watchFn = func(ctx context.Context, req lolautobuild.WatchRequest) error {
 		<-ctx.Done()
 		close(firstStopped)
 		return nil
 	}
-	secondSvc.watchFn = func(ctx context.Context, req lolautobuild.WatchRequest) error {
-		<-ctx.Done()
-		close(secondStopped)
-		return nil
-	}
 
 	var (
 		factoryMu   sync.Mutex
 		factoryCfgs []config.Config
-		factoryCall int
 	)
 	app := newTestApp(t, testAppOptions{
 		cfg:         cfg,
 		configStore: store,
 		serviceFactory: func(got config.Config) (lolautobuild.Service, error) {
 			factoryMu.Lock()
+			defer factoryMu.Unlock()
 			factoryCfgs = append(factoryCfgs, got)
-			factoryCall++
-			call := factoryCall
-			factoryMu.Unlock()
-
-			switch call {
-			case 1:
-				return firstSvc, nil
-			case 2:
-				return secondSvc, nil
-			default:
-				return nil, errors.New("unexpected extra factory call")
-			}
+			return firstSvc, nil
 		},
 	})
 
@@ -502,6 +484,9 @@ func TestSaveSettingsRestartsRunningWatcherWithNewConfig(t *testing.T) {
 	}
 	if !startState.Watcher.Running {
 		t.Fatal("expected watcher to be running after first start")
+	}
+	if startState.Watcher.ConfigStale {
+		t.Fatal("expected watcher config to start fresh")
 	}
 
 	firstCall := waitForWatchCall(t, firstSvc)
@@ -528,9 +513,6 @@ func TestSaveSettingsRestartsRunningWatcherWithNewConfig(t *testing.T) {
 		t.Fatalf("SaveSettings() message = %q, want empty", message.Text)
 	}
 
-	waitForSignal(t, firstStopped, "first watcher stop")
-	secondCall := waitForWatchCall(t, secondSvc)
-
 	if store.saveCount() != 1 {
 		t.Fatalf("Save() calls = %d, want 1", store.saveCount())
 	}
@@ -542,18 +524,24 @@ func TestSaveSettingsRestartsRunningWatcherWithNewConfig(t *testing.T) {
 	gotFactoryCfgs := append([]config.Config(nil), factoryCfgs...)
 	factoryMu.Unlock()
 
-	if len(gotFactoryCfgs) != 2 {
-		t.Fatalf("factory configs recorded = %d, want 2", len(gotFactoryCfgs))
+	if len(gotFactoryCfgs) != 1 {
+		t.Fatalf("factory configs recorded = %d, want 1", len(gotFactoryCfgs))
 	}
 	if gotFactoryCfgs[0] != cfg {
 		t.Fatalf("first factory config = %+v, want %+v", gotFactoryCfgs[0], cfg)
 	}
-	if gotFactoryCfgs[1] != wantCfg {
-		t.Fatalf("second factory config = %+v, want %+v", gotFactoryCfgs[1], wantCfg)
+
+	select {
+	case <-firstStopped:
+		t.Fatal("watcher should not stop during settings save")
+	default:
 	}
-	assertWatchRequestMatchesConfig(t, secondCall.req, wantCfg)
+
 	if !state.Watcher.Running {
-		t.Fatal("expected watcher to remain running after restart")
+		t.Fatal("expected watcher to remain running after save")
+	}
+	if !state.Watcher.ConfigStale {
+		t.Fatal("expected watcher config to be stale after save")
 	}
 	if state.Settings != settingsFromConfig(wantCfg) {
 		t.Fatalf("state.Settings = %+v, want %+v", state.Settings, settingsFromConfig(wantCfg))
@@ -563,7 +551,102 @@ func TestSaveSettingsRestartsRunningWatcherWithNewConfig(t *testing.T) {
 	if stopped.Watcher.Running {
 		t.Fatal("expected watcher to stop")
 	}
-	waitForSignal(t, secondStopped, "second watcher stop")
+	if stopped.Watcher.ConfigStale {
+		t.Fatal("expected stopped watcher config to be fresh")
+	}
+	waitForSignal(t, firstStopped, "first watcher stop")
+}
+
+func TestSaveSettingsKeepsRunningWatcherConfigFreshForEquivalentConfig(t *testing.T) {
+	cfg := testConfig()
+	cfg.Sync.Patch = "14.10"
+
+	store := &recordingConfigStore{}
+	svc := newStubService()
+	watchStopped := make(chan struct{})
+	svc.watchFn = func(ctx context.Context, req lolautobuild.WatchRequest) error {
+		<-ctx.Done()
+		close(watchStopped)
+		return nil
+	}
+
+	app := newTestApp(t, testAppOptions{
+		cfg:         cfg,
+		configStore: store,
+		serviceFactory: func(config.Config) (lolautobuild.Service, error) {
+			return svc, nil
+		},
+	})
+
+	if state, message := app.StartWatcher(context.Background()); !message.Empty() || !state.Watcher.Running {
+		t.Fatalf("StartWatcher() state = %+v, message = %q", state, message.Text)
+	}
+	waitForWatchCall(t, svc)
+
+	state, message := app.SaveSettings(context.Background(), settingsFromConfig(cfg))
+	if !message.Empty() {
+		t.Fatalf("SaveSettings() message = %q, want empty", message.Text)
+	}
+	if state.Watcher.ConfigStale {
+		t.Fatal("expected equivalent settings to keep watcher config fresh")
+	}
+	if !state.Watcher.Running {
+		t.Fatal("expected watcher to remain running")
+	}
+
+	_ = app.StopWatcher(context.Background())
+	waitForSignal(t, watchStopped, "watcher stop")
+}
+
+func TestStartWatcherUsesLatestSavedConfig(t *testing.T) {
+	cfg := testConfig()
+	cfg.Sync.Patch = "14.10"
+
+	store := &recordingConfigStore{}
+	svc := newStubService()
+	watchStopped := make(chan struct{})
+	svc.watchFn = func(ctx context.Context, req lolautobuild.WatchRequest) error {
+		<-ctx.Done()
+		close(watchStopped)
+		return nil
+	}
+
+	var gotFactoryCfg config.Config
+	app := newTestApp(t, testAppOptions{
+		cfg:         cfg,
+		configStore: store,
+		serviceFactory: func(got config.Config) (lolautobuild.Service, error) {
+			gotFactoryCfg = got
+			return svc, nil
+		},
+	})
+
+	settings := settingsFromConfig(cfg)
+	settings.Patch = "15.2"
+	settings.ApplyItems = false
+	wantCfg := cfg
+	applySettings(&wantCfg, settings)
+
+	if _, message := app.SaveSettings(context.Background(), settings); !message.Empty() {
+		t.Fatalf("SaveSettings() message = %q, want empty", message.Text)
+	}
+
+	state, message := app.StartWatcher(context.Background())
+	if !message.Empty() {
+		t.Fatalf("StartWatcher() message = %q, want empty", message.Text)
+	}
+	if state.Watcher.ConfigStale {
+		t.Fatal("expected started watcher config to be fresh")
+	}
+	if gotFactoryCfg != wantCfg {
+		t.Fatalf("factory config = %+v, want %+v", gotFactoryCfg, wantCfg)
+	}
+
+	call := waitForWatchCall(t, svc)
+	assertWatchRequestMatchesConfig(t, call.req, wantCfg)
+
+	_ = app.StopWatcher(context.Background())
+	waitForSignal(t, watchStopped, "watcher stop")
 }
 
 func TestStartWatcherLifecycle(t *testing.T) {

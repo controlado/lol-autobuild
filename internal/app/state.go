@@ -39,8 +39,9 @@ type (
 		At           time.Time `json:"at"`
 	}
 	WatcherState struct {
-		Running    bool                `json:"running"`
-		LastNotice *WatcherNoticeState `json:"last_notice,omitempty"`
+		Running     bool                `json:"running"`
+		ConfigStale bool                `json:"config_stale"`
+		LastNotice  *WatcherNoticeState `json:"last_notice,omitempty"`
 	}
 	State struct {
 		Settings      Settings                 `json:"settings"`

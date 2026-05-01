@@ -33,12 +33,14 @@ type App struct {
 	configStore    ConfigStore
 	cfg            config.Config
 
-	syncRunning     bool
-	watcherStarting bool
-	watcherRunning  bool
-	watcherID       int
-	cancelWatcher   context.CancelFunc
-	updateState     UpdateState
+	syncRunning      bool
+	watcherStarting  bool
+	watcherRunning   bool
+	watcherID        int
+	cancelWatcher    context.CancelFunc
+	watcherConfig    config.Config
+	watcherConfigSet bool
+	updateState      UpdateState
 
 	lastErrorMessage string
 	lastErrorCode    string
@@ -76,9 +78,13 @@ func (a *App) State(ctx context.Context) State {
 	defer a.mu.Unlock()
 
 	return State{
-		Settings:      settingsFromConfig(cfg),
-		LCU:           status,
-		Watcher:       WatcherState{Running: a.watcherRunning, LastNotice: cloneWatcherNotice(a.lastWatchNotice)},
+		Settings: settingsFromConfig(cfg),
+		LCU:      status,
+		Watcher: WatcherState{
+			Running:     a.watcherRunning,
+			ConfigStale: a.watcherConfigStaleLocked(cfg),
+			LastNotice:  cloneWatcherNotice(a.lastWatchNotice),
+		},
 		Update:        cloneUpdateState(a.updateState),
 		SyncRunning:   a.syncRunning,
 		LastSync:      cloneSyncResult(a.lastSync),
@@ -102,15 +108,13 @@ func (a *App) SaveSettings(ctx context.Context, settings Settings) (State, UserM
 	a.mu.Lock()
 	a.cfg = cfg
 	a.setLastErrorMessage(UserMessage{})
-	watcherRunning := a.watcherRunning
 	a.mu.Unlock()
 
-	if watcherRunning {
-		a.StopWatcher(ctx)
-		return a.StartWatcher(ctx)
-	}
-
 	return a.State(ctx), UserMessage{}
+}
+
+func (a *App) watcherConfigStaleLocked(cfg config.Config) bool {
+	return a.watcherRunning && a.watcherConfigSet && cfg != a.watcherConfig
 }
 
 func (a *App) lastSyncAtSnapshot() *time.Time {
@@ -196,7 +200,7 @@ func (a *App) StartWatcher(ctx context.Context) (State, UserMessage) {
 		return State{}, coachlessLoginMissingMessage()
 	}
 
-	watcherCtx, ok := a.startReservedWatcher(watcherID)
+	watcherCtx, ok := a.startReservedWatcher(watcherID, cfg)
 	if !ok {
 		a.releaseWatcher(watcherID, nil)
 		return a.State(ctx), watcherStartFailedMessage()
@@ -232,6 +236,8 @@ func (a *App) runWatcher(ctx context.Context, watcherID int, svc lolautobuild.Se
 
 	a.cancelWatcher = nil
 	a.watcherRunning = false
+	a.watcherConfig = config.Config{}
+	a.watcherConfigSet = false
 
 	if err != nil && ctx.Err() == nil {
 		a.setLastErrorMessage(userMessageFromErr(err))
@@ -253,7 +259,7 @@ func (a *App) reserveWatcherStart() (cfg config.Config, watcherID int, ok bool) 
 	return a.cfg, a.watcherID, true
 }
 
-func (a *App) startReservedWatcher(watcherID int) (watcherCtx context.Context, ok bool) {
+func (a *App) startReservedWatcher(watcherID int, cfg config.Config) (watcherCtx context.Context, ok bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -264,6 +270,8 @@ func (a *App) startReservedWatcher(watcherID int) (watcherCtx context.Context, o
 	watcherCtx, a.cancelWatcher = context.WithCancel(context.Background())
 	a.watcherStarting = false
 	a.watcherRunning = true
+	a.watcherConfig = cfg
+	a.watcherConfigSet = true
 
 	return watcherCtx, true
 }
@@ -331,6 +339,8 @@ func (a *App) StopWatcher(ctx context.Context) State {
 	a.cancelWatcher = nil
 	a.watcherStarting = false
 	a.watcherRunning = false
+	a.watcherConfig = config.Config{}
+	a.watcherConfigSet = false
 	a.mu.Unlock()
 
 	if cancel != nil {
@@ -355,6 +365,8 @@ func (a *App) releaseWatcher(watcherID int, err error) {
 	a.cancelWatcher = nil
 	a.watcherStarting = false
 	a.watcherRunning = false
+	a.watcherConfig = config.Config{}
+	a.watcherConfigSet = false
 
 	if err != nil {
 		a.setLastErrorMessage(userMessageFromErr(err))
