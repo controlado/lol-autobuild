@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"encoding/json"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -112,6 +113,133 @@ func mustListenTCP(t *testing.T, addr string) net.Listener {
 	}
 
 	return listener
+}
+
+func TestIndexReferencesStaticAssetsAndEscapesToken(t *testing.T) {
+	token := `test-token"<>&`
+	server, err := NewServer(Options{
+		App:         new(stubApp),
+		OpenBrowser: func(string) error { return nil },
+		Token:       token,
+		Out:         io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET / status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if contentType := rec.Header().Get("Content-Type"); !strings.Contains(contentType, "text/html") {
+		t.Fatalf("Content-Type = %q, want text/html", contentType)
+	}
+	if cacheControl := rec.Header().Get("Cache-Control"); cacheControl != "no-store" {
+		t.Fatalf("Cache-Control = %q, want no-store", cacheControl)
+	}
+
+	body := rec.Body.String()
+	for _, want := range []string{
+		`<link rel="stylesheet" href="/assets/styles.css">`,
+		`<script src="/assets/app.js" defer></script>`,
+		`<meta name="lol-autobuild-api-token" content="` + html.EscapeString(token) + `">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("index body missing %q", want)
+		}
+	}
+	for _, unwanted := range []string{
+		"<style>",
+		"const token =",
+		"__API_TOKEN__",
+		token,
+	} {
+		if strings.Contains(body, unwanted) {
+			t.Fatalf("index body contains %q", unwanted)
+		}
+	}
+}
+
+func TestStaticAssets(t *testing.T) {
+	server, err := NewServer(Options{
+		App:         new(stubApp),
+		OpenBrowser: func(string) error { return nil },
+		Token:       "test-token",
+		Out:         io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	tests := []struct {
+		name            string
+		method          string
+		target          string
+		wantStatus      int
+		wantContentType string
+		wantBody        string
+		forbidBody      string
+	}{
+		{
+			name:            "css",
+			method:          http.MethodGet,
+			target:          "/assets/styles.css",
+			wantStatus:      http.StatusOK,
+			wantContentType: "text/css",
+			wantBody:        ":root",
+		},
+		{
+			name:            "javascript",
+			method:          http.MethodGet,
+			target:          "/assets/app.js",
+			wantStatus:      http.StatusOK,
+			wantContentType: "text/javascript",
+			wantBody:        "const tokenMeta",
+			forbidBody:      "__API_TOKEN__",
+		},
+		{
+			name:       "unknown asset",
+			method:     http.MethodGet,
+			target:     "/assets/missing.js",
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name:       "method not allowed",
+			method:     http.MethodPost,
+			target:     "/assets/app.js",
+			wantStatus: http.StatusMethodNotAllowed,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.target, nil)
+			rec := httptest.NewRecorder()
+			server.Handler().ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("%s %s status = %d, want %d", tt.method, tt.target, rec.Code, tt.wantStatus)
+			}
+			if tt.wantStatus != http.StatusOK {
+				return
+			}
+
+			if contentType := rec.Header().Get("Content-Type"); !strings.Contains(contentType, tt.wantContentType) {
+				t.Fatalf("Content-Type = %q, want %s", contentType, tt.wantContentType)
+			}
+			if cacheControl := rec.Header().Get("Cache-Control"); cacheControl != "no-store" {
+				t.Fatalf("Cache-Control = %q, want no-store", cacheControl)
+			}
+			if body := rec.Body.String(); !strings.Contains(body, tt.wantBody) {
+				t.Fatalf("body missing %q", tt.wantBody)
+			} else if tt.forbidBody != "" && strings.Contains(body, tt.forbidBody) {
+				t.Fatalf("body contains %q", tt.forbidBody)
+			}
+		})
+	}
 }
 
 func TestI18NAssets(t *testing.T) {

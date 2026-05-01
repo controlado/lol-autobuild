@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -18,7 +19,7 @@ import (
 	"github.com/controlado/lol-autobuild/internal/app"
 )
 
-//go:embed static/index.html static/i18n/*.json
+//go:embed static/index.html static/assets/*.css static/assets/*.js static/i18n/*.json
 var staticFiles embed.FS
 
 type App interface {
@@ -40,6 +41,16 @@ var (
 var i18nAssetPaths = map[string]string{
 	"/i18n/en.json":    "static/i18n/en.json",
 	"/i18n/pt-BR.json": "static/i18n/pt-BR.json",
+}
+
+type staticAsset struct {
+	path        string
+	contentType string
+}
+
+var staticAssetPaths = map[string]staticAsset{
+	"/assets/app.js":     {path: "static/assets/app.js", contentType: "text/javascript; charset=utf-8"},
+	"/assets/styles.css": {path: "static/assets/styles.css", contentType: "text/css; charset=utf-8"},
 }
 
 const (
@@ -142,6 +153,7 @@ func listenUI(preferredAddr, fallbackAddr string) (net.Listener, bool, error) {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.handleIndex)
+	mux.HandleFunc("/assets/", s.handleStaticAsset)
 	mux.HandleFunc("/i18n/", s.handleI18N)
 	mux.HandleFunc("/api/state", s.handleState)
 	mux.HandleFunc("/api/config", s.handleSaveConfig)
@@ -175,9 +187,33 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	page := strings.ReplaceAll(string(raw), "__API_TOKEN__", s.token)
+	page := strings.ReplaceAll(string(raw), "__API_TOKEN__", html.EscapeString(s.token))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
 	_, _ = io.WriteString(w, page)
+}
+
+func (s *Server) handleStaticAsset(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodGet) {
+		return
+	}
+
+	asset, ok := staticAssetPaths[r.URL.Path]
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+
+	raw, err := staticFiles.ReadFile(asset.path)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, uiFileMissingMessage)
+		return
+	}
+
+	w.Header().Set("Content-Type", asset.contentType)
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(raw)
 }
 
 func (s *Server) handleI18N(w http.ResponseWriter, r *http.Request) {
