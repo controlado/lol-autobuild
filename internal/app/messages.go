@@ -40,9 +40,7 @@ func userMessageFromErr(err error) UserMessage {
 		return UserMessage{Code: MessageCodeLCUChampSelectUnavailable, Text: "Champ select is not ready."}
 	case errors.Is(err, lcu.ErrChampionNotSelected):
 		return UserMessage{Code: MessageCodeLCUChampionNotSelected, Text: "Select a champion first."}
-	case errors.Is(err, auth.ErrNotImplemented):
-		return UserMessage{Code: MessageCodeCoachlessLoginMissing, Text: "Coachless login is missing."}
-	case strings.Contains(err.Error(), "unable to acquire valid access token"):
+	case errors.Is(err, auth.ErrNotImplemented), strings.Contains(err.Error(), "unable to acquire valid access token"):
 		return UserMessage{Code: MessageCodeCoachlessLoginMissing, Text: "Coachless login is missing."}
 	default:
 		return UserMessage{Text: err.Error()}
