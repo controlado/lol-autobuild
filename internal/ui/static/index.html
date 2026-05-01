@@ -121,7 +121,7 @@
 
     .status-strip {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
       margin-bottom: 18px;
     }
@@ -599,8 +599,20 @@
     .actions {
       display: flex;
       flex-wrap: wrap;
+      align-items: center;
       gap: 8px;
       padding-top: 2px;
+    }
+
+    .watcher-config-warning {
+      margin: 2px 0 0;
+      padding: 10px 12px;
+      border: 1px solid rgba(229, 189, 99, 0.48);
+      border-radius: 8px;
+      color: var(--amber);
+      background: #151106;
+      line-height: 1.35;
+      white-space: pre-line;
     }
 
     button {
@@ -902,6 +914,11 @@
         <p class="label" data-i18n="state.write_mode">Client changes</p>
         <p class="value is-info" id="modeStatus">Simulation: no client changes</p>
       </div>
+      <div class="stat">
+        <p class="label" data-i18n="settings.autosave_status">Settings</p>
+        <p class="value is-good" id="autoSaveStatus" role="status" aria-atomic="true"
+          data-i18n="settings.autosave_saved">Changes saved</p>
+      </div>
     </section>
 
     <form id="settingsForm" class="workspace">
@@ -964,11 +981,13 @@
           </fieldset>
 
           <div class="actions">
-            <button type="submit" id="saveButton" data-i18n="action.save">Save</button>
             <button type="button" id="syncButton" data-i18n="action.sync_now">Sync now</button>
             <button type="button" id="watcherButton" class="secondary" data-i18n="action.start_watcher">Start
               watcher</button>
           </div>
+          <div class="watcher-config-warning" id="watcherConfigWarning" role="status" aria-atomic="true"
+            data-i18n="settings.watcher_config_stale" hidden>Watcher is using previous settings.
+Stop and start the watcher to apply changes.</div>
         </section>
 
         <section class="panel panel-coachless panel-stack" id="coachlessPanel" aria-labelledby="coachlessDataTitle">
@@ -1070,7 +1089,7 @@
             </div>
           </div>
           <div class="log-section" aria-labelledby="logsTitle">
-            <h3 class="label" id="logsTitle" data-i18n="logs.title">Logs</h3>
+            <h3 class="label" id="logsTitle" data-i18n="logs.title">Diagnostics</h3>
             <div class="message" id="messageBox" role="status" aria-live="polite" data-i18n="message.no_sync_session">No
               sync has run in this session.</div>
             <div class="log-box" role="log" aria-labelledby="logsTitle">
@@ -1134,9 +1153,10 @@
       spellsSuboptions: document.getElementById("spellsSuboptions"),
       keepFlash: document.getElementById("keepFlash"),
       dryRun: document.getElementById("dryRun"),
-      saveButton: document.getElementById("saveButton"),
       syncButton: document.getElementById("syncButton"),
       watcherButton: document.getElementById("watcherButton"),
+      autoSaveStatus: document.getElementById("autoSaveStatus"),
+      watcherConfigWarning: document.getElementById("watcherConfigWarning"),
       updateButton: document.getElementById("updateButton"),
       updateBanner: document.getElementById("updateBanner"),
       updateText: document.getElementById("updateText"),
@@ -1161,6 +1181,13 @@
 
     let currentMessage = { key: "message.no_sync_session" };
     let currentMessageIsError = false;
+    let currentAutoSaveStatus = { key: "settings.autosave_saved", tone: "good" };
+
+    const autoSaveDebounceMillis = 600;
+    let autoSaveTimer = 0;
+    let autoSaveDirty = false;
+    let autoSaveInFlight = null;
+    let actionInFlight = false;
 
     let formsLoaded = false;
 
@@ -1321,6 +1348,7 @@
       }
 
       applyStaticTranslations();
+      renderAutoSaveStatus();
       positionAdvancedSliderTicks();
       renderUpdateButton();
       if (formsLoaded) {
@@ -1563,7 +1591,6 @@
 
     function setBusy(isBusy) {
       ids.main.setAttribute("aria-busy", String(isBusy));
-      ids.saveButton.disabled = isBusy;
       ids.syncButton.disabled = isBusy;
       ids.watcherButton.disabled = isBusy;
     }
@@ -1630,6 +1657,16 @@
       ids.messageBox.classList.toggle("error", isError);
       ids.messageBox.setAttribute("role", isError ? "alert" : "status");
       ids.messageBox.textContent = textForDescriptor(currentMessage) || t("message.no_sync_session");
+    }
+
+    function renderAutoSaveStatus() {
+      ids.autoSaveStatus.className = `value${currentAutoSaveStatus.tone ? ` is-${currentAutoSaveStatus.tone}` : ""}`;
+      ids.autoSaveStatus.textContent = t(currentAutoSaveStatus.key);
+    }
+
+    function setAutoSaveStatus(key, tone = "") {
+      currentAutoSaveStatus = { key, tone };
+      renderAutoSaveStatus();
     }
 
     function setValue(element, text, tone = "") {
@@ -1778,6 +1815,7 @@
       ids.watcherButton.textContent = watcherRunning ? t("action.stop_watcher") : t("action.start_watcher");
       ids.watcherButton.setAttribute("aria-pressed", String(watcherRunning));
       setValue(ids.watcherStatus, watcherRunning ? t("watcher.running") : t("watcher.stopped"), watcherRunning ? "good" : "");
+      ids.watcherConfigWarning.hidden = !(state.watcher && state.watcher.config_stale);
 
       if (state.lcu.state === "connected") {
         setValue(ids.lcuStatus, t("lcu.connected"), "good");
@@ -1858,8 +1896,84 @@
       }
     }
 
-    async function post(path, body, progressKey) {
+    function scheduleSave() {
+      autoSaveDirty = true;
+      setAutoSaveStatus("settings.autosave_saving");
+
+      if (autoSaveTimer) {
+        clearTimeout(autoSaveTimer);
+      }
+
+      autoSaveTimer = setTimeout(() => {
+        autoSaveTimer = 0;
+        saveSettingsNow().catch(() => { });
+      }, autoSaveDebounceMillis);
+    }
+
+    async function saveSettingsNow() {
+      if (autoSaveInFlight) {
+        await autoSaveInFlight;
+        if (autoSaveDirty) {
+          return saveSettingsNow();
+        }
+        return;
+      }
+
+      if (!autoSaveDirty) {
+        return;
+      }
+
+      const settings = readSettings();
+      autoSaveDirty = false;
+      setAutoSaveStatus("settings.autosave_saving");
+
+      autoSaveInFlight = api("/api/config", {
+        method: "POST",
+        body: JSON.stringify(settings)
+      }).then(state => {
+        currentState = state;
+        renderState(state);
+        setAutoSaveStatus("settings.autosave_saved", "good");
+      }).catch(error => {
+        autoSaveDirty = true;
+        setAutoSaveStatus("settings.autosave_failed", "bad");
+        throw error;
+      }).finally(() => {
+        autoSaveInFlight = null;
+      });
+
+      await autoSaveInFlight;
+
+      if (autoSaveDirty) {
+        return saveSettingsNow();
+      }
+    }
+
+    async function flushPendingSave() {
+      if (autoSaveTimer) {
+        clearTimeout(autoSaveTimer);
+        autoSaveTimer = 0;
+      }
+
+      await saveSettingsNow();
+    }
+
+    async function runExclusiveAction(action) {
+      if (actionInFlight) {
+        return;
+      }
+
+      actionInFlight = true;
       setBusy(true);
+      try {
+        await action();
+      } finally {
+        actionInFlight = false;
+        setBusy(false);
+      }
+    }
+
+    async function postRequest(path, body, progressKey) {
       setMessage({ key: progressKey });
       appendLog([{ key: progressKey }], `action:${progressKey}`);
       try {
@@ -1874,9 +1988,24 @@
       } catch (error) {
         setMessage({ key: error.code, fallback: error.fallback || error.message }, true);
         await loadState().catch(() => { });
-      } finally {
-        setBusy(false);
       }
+    }
+
+    async function post(path, body, progressKey) {
+      await runExclusiveAction(() => postRequest(path, body, progressKey));
+    }
+
+    async function postAfterSaving(path, body, progressKey) {
+      await runExclusiveAction(async () => {
+        try {
+          await flushPendingSave();
+        } catch (error) {
+          setMessage({ key: error.code, fallback: error.fallback || error.message }, true);
+          return;
+        }
+
+        await postRequest(path, body, progressKey);
+      });
     }
 
     async function initialize() {
@@ -1897,24 +2026,51 @@
     });
     ids.form.addEventListener("submit", event => {
       event.preventDefault();
-      post("/api/config", readSettings(), "action.saving_settings");
+      flushPendingSave().catch(error => {
+        setMessage({ key: error.code, fallback: error.fallback || error.message }, true);
+      });
     });
 
-    ids.applySpells.addEventListener("change", syncSpellsSuboptions);
-    ids.dryRun.addEventListener("change", () => renderModeStatus(readSettings()));
-    ids.patch.addEventListener("input", renderAdvancedSliderValues);
-    ids.patchRangeSlider.addEventListener("input", renderAdvancedSliderValues);
-    ids.leagueTierPresetSlider.addEventListener("input", renderAdvancedSliderValues);
+    ids.lcuEnabled.addEventListener("change", scheduleSave);
+    ids.applyItems.addEventListener("change", scheduleSave);
+    ids.applySpells.addEventListener("change", () => {
+      syncSpellsSuboptions();
+      scheduleSave();
+    });
+    ids.keepFlash.addEventListener("change", scheduleSave);
+    ids.dryRun.addEventListener("change", () => {
+      renderModeStatus(readSettings());
+      scheduleSave();
+    });
+    ids.patch.addEventListener("input", () => {
+      renderAdvancedSliderValues();
+      scheduleSave();
+    });
+    ids.patchRangeSlider.addEventListener("input", () => {
+      renderAdvancedSliderValues();
+      scheduleSave();
+    });
+    ids.leagueTierPresetSlider.addEventListener("input", () => {
+      renderAdvancedSliderValues();
+      scheduleSave();
+    });
     ids.spellsOptionsButton.addEventListener("click", () => {
       const isOpen = ids.spellsOptionsButton.getAttribute("aria-expanded") === "true";
       setSpellsSuboptionsOpen(!isOpen);
     });
-    ids.syncButton.addEventListener("click", () => post("/api/sync", null, "action.running_sync"));
+    ids.syncButton.addEventListener("click", () => {
+      postAfterSaving("/api/sync", null, "action.running_sync").catch(error => {
+        setMessage({ fallback: error.message }, true);
+      });
+    });
     ids.updateButton.addEventListener("click", () => checkUpdates(true));
     ids.watcherButton.addEventListener("click", () => {
       const path = watcherRunning ? "/api/watch/stop" : "/api/watch/start";
       const message = watcherRunning ? "action.stopping_watcher" : "action.starting_watcher";
-      post(path, null, message);
+      const action = watcherRunning ? post(path, null, message) : postAfterSaving(path, null, message);
+      action.catch(error => {
+        setMessage({ fallback: error.message }, true);
+      });
     });
 
     initialize().catch(error => {

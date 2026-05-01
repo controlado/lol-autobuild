@@ -16,8 +16,9 @@ import (
 )
 
 type stubApp struct {
-	state app.State
-	saved app.Settings
+	state     app.State
+	saveState *app.State
+	saved     app.Settings
 }
 
 func (sa *stubApp) State(context.Context) (s app.State) {
@@ -25,6 +26,13 @@ func (sa *stubApp) State(context.Context) (s app.State) {
 }
 func (sa *stubApp) SaveSettings(_ context.Context, settings app.Settings) (s app.State, msg app.UserMessage) {
 	sa.saved = settings
+	if sa.saveState != nil {
+		s = *sa.saveState
+		if s.Settings == (app.Settings{}) {
+			s.Settings = settings
+		}
+		return s, app.UserMessage{}
+	}
 	s = app.State{Settings: settings}
 	return
 }
@@ -294,7 +302,8 @@ func TestAPIErrorIncludesCode(t *testing.T) {
 }
 
 func TestSaveConfigAcceptsAdvancedFilters(t *testing.T) {
-	recApp := new(stubApp)
+	saveState := app.State{Watcher: app.WatcherState{Running: true, ConfigStale: true}}
+	recApp := &stubApp{saveState: &saveState}
 	server, err := NewServer(Options{
 		App:         recApp,
 		OpenBrowser: func(string) error { return nil },
@@ -334,5 +343,8 @@ func TestSaveConfigAcceptsAdvancedFilters(t *testing.T) {
 	}
 	if state.Settings.PatchAdditionsMode != "manual" || state.Settings.PatchAdditions != 4 || state.Settings.LeagueTierPreset != "master_plus" {
 		t.Fatalf("response advanced settings = %#v", state.Settings)
+	}
+	if !state.Watcher.ConfigStale {
+		t.Fatal("response watcher.config_stale = false, want true")
 	}
 }
