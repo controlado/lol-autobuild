@@ -30,8 +30,11 @@ func lockfileCandidate(source string, lockfilePath string) connectionCandidate {
 }
 
 func processLockfileCandidate(source string, exePath string) (connectionCandidate, bool) {
-	exePath = strings.TrimSpace(exePath)
+	exePath = cleanExecutablePath(exePath)
 	if exePath == "" {
+		return connectionCandidate{}, false
+	}
+	if _, ok := normalizeLCUProcessName(exePath); !ok {
 		return connectionCandidate{}, false
 	}
 
@@ -118,6 +121,13 @@ func discoverProcessConnections(ctx context.Context) []connectionCandidate {
 }
 
 func parseProcessArgs(args []string) (connectionInfo, error) {
+	if len(args) == 0 {
+		return connectionInfo{}, errUnsupportedProcess
+	}
+	if _, ok := normalizeLCUProcessName(args[0]); !ok {
+		return connectionInfo{}, errUnsupportedProcess
+	}
+
 	values := parseArgValues(args)
 
 	rawPort := strings.TrimSpace(values["app-port"])

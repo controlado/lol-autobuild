@@ -28,13 +28,27 @@ func TestDetectSelectionReturnsNotConfiguredWhenDisabled(t *testing.T) {
 func TestParseLockfileValid(t *testing.T) {
 	t.Parallel()
 
-	info, err := parseLockfile([]byte("LeagueClientUx:1234:61538:secret:https"))
-	if err != nil {
-		t.Fatalf("parseLockfile() error = %v", err)
+	tests := []struct {
+		name string
+		raw  string
+	}{
+		{name: "league client", raw: "LeagueClient:1234:61538:secret:https"},
+		{name: "league client ux", raw: "LeagueClientUx:1234:61538:secret:https"},
 	}
 
-	if info.Port != 61538 || info.Password != "secret" || info.Protocol != "https" {
-		t.Fatalf("unexpected lockfile info: %#v", info)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			info, err := parseLockfile([]byte(tt.raw))
+			if err != nil {
+				t.Fatalf("parseLockfile() error = %v", err)
+			}
+
+			if info.Port != 61538 || info.Password != "secret" || info.Protocol != "https" {
+				t.Fatalf("unexpected lockfile info: %#v", info)
+			}
+		})
 	}
 }
 
@@ -44,6 +58,18 @@ func TestParseLockfileInvalid(t *testing.T) {
 	_, err := parseLockfile([]byte("invalid"))
 	if !errors.Is(err, ErrInvalidLockfile) {
 		t.Fatalf("expected ErrInvalidLockfile, got %v", err)
+	}
+}
+
+func TestParseLockfileRejectsRiotClient(t *testing.T) {
+	t.Parallel()
+
+	_, err := parseLockfile([]byte("RiotClientUx:1234:61538:secret:https"))
+	if !errors.Is(err, ErrInvalidLockfile) {
+		t.Fatalf("expected ErrInvalidLockfile, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "unsupported process") {
+		t.Fatalf("expected unsupported process error, got %v", err)
 	}
 }
 
