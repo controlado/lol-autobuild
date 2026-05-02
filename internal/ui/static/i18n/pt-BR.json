@@ -24,7 +24,7 @@
   "state.league_client": "League Client",
   "state.watcher": "Watcher",
   "state.write_mode": "Mudanças no client",
-  "state.pending": "Pendente",
+  "state.coming_soon": "Em breve",
   "state.no_sync_yet": "Sem sincronização",
   "state.not_applied": "Não aplicado",
   "state.applied": "Aplicado",
