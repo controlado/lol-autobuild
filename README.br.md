@@ -8,7 +8,7 @@
 
 Configure itens e spells do League of Legends com dados do Coachless.
 
-<img width="1300" height="1000" alt="interface local do lol-autobuild" src="https://github.com/user-attachments/assets/7d684e0c-a097-4939-895d-463a4408738e" />
+<img width="1300" height="1162" alt="interface local do lol-autobuild" src="docs/assets/screenshots/ui-pt-br.png" />
 
 </div>
 

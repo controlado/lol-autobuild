@@ -8,7 +8,7 @@
 
 Set up League of Legends item sets and summoner spells from Coachless data.
 
-<img width="1300" height="1000" alt="lol-autobuild local UI" src="https://github.com/user-attachments/assets/7d684e0c-a097-4939-895d-463a4408738e" />
+<img width="1300" height="1162" alt="lol-autobuild local UI" src="docs/assets/screenshots/ui-en.png" />
 
 </div>
 
