@@ -2,12 +2,9 @@ package lcu
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/controlado/lol-autobuild/internal/ports"
 )
 
 type Client struct {
@@ -26,16 +23,4 @@ func NewClient(enabled bool, lockfilePath string) *Client {
 		WatchReconnectDelay:        time.Second,
 		discoverProcessConnections: discoverProcessConnections,
 	}
-}
-
-func (c *Client) ApplyRunePage(_ context.Context, req ports.ApplyRunePageRequest) error {
-	if !c.Enabled {
-		return ErrNotConfigured
-	}
-
-	if req.DryRun {
-		return nil
-	}
-
-	return fmt.Errorf("apply rune page: %w", ErrNotConfigured)
 }

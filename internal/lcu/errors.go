@@ -13,6 +13,8 @@ var (
 	ErrPositionDetectionUnsupportedQueue = errors.New("position detection is unsupported for this queue")
 	ErrInvalidItemSetRequest             = errors.New("invalid item set apply request")
 	ErrItemSetApplyFailed                = errors.New("apply item set failed")
+	ErrInvalidRunePageRequest            = errors.New("invalid rune page apply request")
+	ErrRunePageApplyFailed               = errors.New("apply rune page failed")
 	ErrInvalidSummonerSpellsRequest      = errors.New("invalid summoner spells apply request")
 	ErrChampionSelectionChanged          = errors.New("champion selection changed during apply")
 	ErrSummonerSpellsApplyFailed         = errors.New("apply summoner spells failed")

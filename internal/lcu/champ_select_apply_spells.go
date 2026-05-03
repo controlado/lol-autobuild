@@ -26,31 +26,13 @@ func (c *Client) ApplySummonerSpells(ctx context.Context, req ports.ApplySummone
 	var (
 		attempt          = newConnectionAttempt()
 		candidateHandler = func(info connectionInfo, candidateLabel string) (success bool) {
-			session, err := c.fetchChampSelectSession(ctx, info)
-			if err != nil {
-				attempt.observe(candidateLabel, ErrChampSelectUnavailable, err)
+			selection := c.validatedLocalPlayerSelection(ctx, info, req.ChampionID)
+			if selection.err != nil {
+				attempt.observe(candidateLabel, selection.baseErr, selection.err)
 				return false
 			}
 
-			member, err := localPlayerFromSession(session)
-			if err != nil {
-				attempt.observe(candidateLabel, ErrChampSelectUnavailable, err)
-				return false
-			}
-
-			if member.ChampionID <= 0 {
-				err = fmt.Errorf("expected championId %d, got %d", req.ChampionID, member.ChampionID)
-				attempt.observe(candidateLabel, ErrChampionNotSelected, err)
-				return false
-			}
-
-			if member.ChampionID != req.ChampionID {
-				err := fmt.Errorf("expected championId %d, got %d", req.ChampionID, member.ChampionID)
-				attempt.observe(candidateLabel, ErrChampionSelectionChanged, err)
-				return false
-			}
-
-			spell1ID, spell2ID := spellIDsForApply(req.SpellIDs, member.Spell1ID, member.Spell2ID, req.KeepFlash)
+			spell1ID, spell2ID := spellIDsForApply(req.SpellIDs, selection.member.Spell1ID, selection.member.Spell2ID, req.KeepFlash)
 			if err := c.patchSelectionSpells(ctx, info, spell1ID, spell2ID); err != nil {
 				if errors.Is(err, ErrChampSelectUnavailable) {
 					attempt.observe(candidateLabel, ErrChampSelectUnavailable, err)

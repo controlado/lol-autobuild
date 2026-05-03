@@ -30,7 +30,7 @@ sync:
   patch_additions: 2
   league_tier_preset: emerald_plus
   apply_items: true
-  apply_runes: false
+  apply_runes: true
   apply_spells: true
   keep_flash: true
   dry_run: false

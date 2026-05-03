@@ -39,8 +39,10 @@ func (c *Client) WatchEventsWithNotices(ctx context.Context, out chan<- ports.LC
 		return ErrLCUEventsChannelRequired
 	}
 
-	reconnectDelay := c.watchReconnectDelay()
-	connectionID := 0
+	var (
+		reconnectDelay = c.watchReconnectDelay()
+		connectionID   int
+	)
 
 	for {
 		if ctx.Err() != nil {

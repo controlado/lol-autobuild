@@ -6,7 +6,7 @@
 
 # lol-autobuild
 
-Configure itens e spells do League of Legends com dados do Coachless.
+Configure runas, itens e spells do League of Legends com dados do Coachless.
 
 <img width="1300" height="1162" alt="interface local do lol-autobuild" src="docs/assets/screenshots/ui-pt-br.png" />
 
@@ -20,7 +20,7 @@ Escolha o ZIP do seu sistema, extraia os arquivos e rode `lol-autobuild`.
 
 ## O que ele faz
 
-`lol-autobuild` conecta no client durante a seleção de campeões. Ele lê seu campeão e sua rota, consulta dados do Coachless e prepara itens e spells recomendadas. A aplicação de runas ainda está pendente.
+`lol-autobuild` conecta no client durante a seleção de campeões. Ele lê seu campeão e sua rota, consulta dados do Coachless e aplica páginas de runas, itens e spells recomendadas.
 
 ## Sobre o Coachless
 

@@ -82,6 +82,45 @@ func (c *Client) GetKeystoneData(ctx context.Context, accessToken string, req po
 	return out, nil
 }
 
+func (c *Client) GetSecondaryTreePlaycount(ctx context.Context, accessToken string, req ports.SecondaryTreePlaycountRequest) ([]ports.RuneTreePlaycount, error) {
+	var (
+		endpoint = "/api/Rune/GetSecondaryTreePlaycount"
+		out      []ports.RuneTreePlaycount
+	)
+
+	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, req, &out); err != nil {
+		return nil, err
+	}
+
+	return out, nil
+}
+
+func (c *Client) GetRuneStatsForKeystoneAndTree(ctx context.Context, accessToken string, req ports.RuneStatsRequest) (ports.RuneStatsByRow, error) {
+	var (
+		endpoint = "/api/Rune/GetRunesForKeystoneAndTree"
+		out      ports.RuneStatsByRow
+	)
+
+	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, req, &out); err != nil {
+		return ports.RuneStatsByRow{}, err
+	}
+
+	return out, nil
+}
+
+func (c *Client) GetShardStatsForKeystoneAndTree(ctx context.Context, accessToken string, req ports.ShardStatsRequest) (ports.ShardStats, error) {
+	var (
+		endpoint = "/api/Rune/GetShardsForKeystoneAndTree"
+		out      ports.ShardStats
+	)
+
+	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, req, &out); err != nil {
+		return ports.ShardStats{}, err
+	}
+
+	return out, nil
+}
+
 func (c *Client) GetSummonerSpellStats(ctx context.Context, accessToken string, req ports.SummonerSpellStatsRequest) ([]ports.SummonerSpellStat, error) {
 	var (
 		out      []ports.SummonerSpellStat

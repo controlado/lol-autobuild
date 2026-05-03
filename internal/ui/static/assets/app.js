@@ -16,6 +16,7 @@ const knownMessageKeys = {
   "Select a champion first.": "lcu.champion_not_selected",
   "Coachless login is missing.": "coachless.login_missing",
   "Another sync is already running": "sync.already_running",
+  "Rune page limit reached. Delete a rune page in League Client or keep an AutoBuild page available for reuse.": "sync.rune_page_limit_reached",
   "Watcher pre-start failed.": "watch.pre_start_failed",
   "Watcher start failed.": "watch.start_failed",
   "Invalid UI token.": "ui.invalid_token",
@@ -61,6 +62,7 @@ const ids = {
   positionValue: document.getElementById("positionValue"),
   queueValue: document.getElementById("queueValue"),
   itemsValue: document.getElementById("itemsValue"),
+  runesValue: document.getElementById("runesValue"),
   spellsValue: document.getElementById("spellsValue")
 };
 let watcherRunning = false;
@@ -460,7 +462,7 @@ function readSettings() {
     ...patchRangeSettings,
     league_tier_preset: selectedLeagueTierPreset(),
     apply_items: ids.applyItems.checked,
-    apply_runes: false,
+    apply_runes: ids.applyRunes.checked,
     apply_spells: ids.applySpells.checked,
     keep_flash: ids.keepFlash.checked,
     dry_run: ids.dryRun.checked
@@ -693,7 +695,7 @@ function renderForms(state) {
   ids.patchRangeSlider.value = String(patchRangeIndexFromValue(patchRangeValueFromSettings(settings)));
   ids.leagueTierPresetSlider.value = String(leagueTierIndexFromPreset(settings.league_tier_preset || "emerald_plus"));
   ids.applyItems.checked = settings.apply_items;
-  ids.applyRunes.checked = false;
+  ids.applyRunes.checked = settings.apply_runes;
   ids.applySpells.checked = settings.apply_spells;
   ids.keepFlash.checked = settings.keep_flash;
   ids.dryRun.checked = settings.dry_run;
@@ -726,6 +728,7 @@ function renderState(state) {
   setCell(ids.positionValue, sync ? sync.DetectedPosition || t("state.not_detected") : t("state.no_sync_yet"));
   setCell(ids.queueValue, sync ? String(sync.DetectedQueueID) : t("state.no_sync_yet"));
   setCell(ids.itemsValue, sync ? appliedText(sync.ItemSetApplied) : t("state.not_applied"), sync && sync.ItemSetApplied ? "good" : "");
+  setCell(ids.runesValue, sync ? appliedText(sync.RunePageApplied) : t("state.not_applied"), sync && sync.RunePageApplied ? "good" : "");
   setCell(ids.spellsValue, sync ? appliedText(sync.SpellsApplied) : t("state.not_applied"), sync && sync.SpellsApplied ? "good" : "");
 
   if (state.last_error) {
@@ -928,6 +931,7 @@ ids.form.addEventListener("submit", event => {
 
 ids.lcuEnabled.addEventListener("change", scheduleSave);
 ids.applyItems.addEventListener("change", scheduleSave);
+ids.applyRunes.addEventListener("change", scheduleSave);
 ids.applySpells.addEventListener("change", () => {
   syncSpellsSuboptions();
   scheduleSave();

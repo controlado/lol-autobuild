@@ -56,6 +56,18 @@ func (fakeCoachless) GetKeystoneData(_ context.Context, _ string, _ ports.Keysto
 	return nil, errors.New("unused")
 }
 
+func (fakeCoachless) GetSecondaryTreePlaycount(_ context.Context, _ string, _ ports.SecondaryTreePlaycountRequest) ([]ports.RuneTreePlaycount, error) {
+	return nil, errors.New("unused")
+}
+
+func (fakeCoachless) GetRuneStatsForKeystoneAndTree(_ context.Context, _ string, _ ports.RuneStatsRequest) (ports.RuneStatsByRow, error) {
+	return ports.RuneStatsByRow{}, errors.New("unused")
+}
+
+func (fakeCoachless) GetShardStatsForKeystoneAndTree(_ context.Context, _ string, _ ports.ShardStatsRequest) (ports.ShardStats, error) {
+	return ports.ShardStats{}, errors.New("unused")
+}
+
 func (fakeCoachless) GetSummonerSpellStats(_ context.Context, _ string, _ ports.SummonerSpellStatsRequest) ([]ports.SummonerSpellStat, error) {
 	return nil, errors.New("unused")
 }

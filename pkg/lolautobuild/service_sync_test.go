@@ -3,7 +3,9 @@ package lolautobuild
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/controlado/lol-autobuild/internal/ports"
@@ -72,6 +74,9 @@ func TestSyncDryRunDetectsChampionButDoesNotApplyLCU(t *testing.T) {
 	if len(coachless.keystoneCalls) != 1 {
 		t.Fatalf("expected one keystone call, got %d", len(coachless.keystoneCalls))
 	}
+	if len(coachless.treeCalls)+len(coachless.runeCalls)+len(coachless.shardCalls) != 0 {
+		t.Fatalf("dry-run should not load full rune page data, got trees=%d runes=%d shards=%d", len(coachless.treeCalls), len(coachless.runeCalls), len(coachless.shardCalls))
+	}
 	if coachless.keystoneCalls[0].CommonFilters.Role != 0 {
 		t.Fatalf("expected detected top role code 0, got %d", coachless.keystoneCalls[0].CommonFilters.Role)
 	}
@@ -138,6 +143,14 @@ func TestSyncUsesDetectedChampionIDInApplyRequests(t *testing.T) {
 	if !lcu.spellCalls[0].KeepFlash {
 		t.Fatalf("summoner spell apply should keep flash")
 	}
+	wantPage := ports.RunePage{
+		PrimaryStyleID:  ports.RuneStyleResolve,
+		SubStyleID:      ports.RuneStyleSorcery,
+		SelectedPerkIDs: []int{8437, 8446, 8444, 8451, 8233, 8224, 5008, 5008, 5002},
+	}
+	if !reflect.DeepEqual(lcu.runePageCalls[0].Page, wantPage) {
+		t.Fatalf("unexpected rune page: %#v", lcu.runePageCalls[0].Page)
+	}
 	if len(coachless.keystoneCalls) != 1 {
 		t.Fatalf("expected one keystone call, got %d", len(coachless.keystoneCalls))
 	}
@@ -146,6 +159,117 @@ func TestSyncUsesDetectedChampionIDInApplyRequests(t *testing.T) {
 	}
 	if len(coachless.keystoneCalls[0].CommonFilters.ChampionIDs) != 1 || coachless.keystoneCalls[0].CommonFilters.ChampionIDs[0] != 777 {
 		t.Fatalf("coachless filters must include detected champion id 777")
+	}
+	if len(coachless.treeCalls) != 1 || len(coachless.runeCalls) != 2 || len(coachless.shardCalls) != 1 {
+		t.Fatalf("expected complete rune page lookups, got trees=%d runes=%d shards=%d", len(coachless.treeCalls), len(coachless.runeCalls), len(coachless.shardCalls))
+	}
+}
+
+func TestSyncTranslatesRunePageLimitWarning(t *testing.T) {
+	t.Parallel()
+
+	coachless := &coachlessStub{}
+	lcu := &lcuStub{
+		detectedSelection: ports.DetectedSelection{
+			ChampionID: 240,
+			Position:   position.Top,
+			QueueID:    420,
+		},
+		runePageErr: fmt.Errorf(`apply rune page failed: {"errorCode":"RPC_ERROR","message":"Max pages reached"}: %w`, ports.ErrRunePageLimitReached),
+	}
+	svc, err := NewService(ServiceDeps{
+		Coachless:   coachless,
+		Tokens:      tokenProviderStub{token: "t"},
+		LCU:         lcu,
+		Recommender: recommend.NewEngine(),
+		Policy:      RecommendationPolicy{MinOccurrence: 100, TopItems: 6, TopSpells: 2},
+	})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	got, err := svc.Sync(context.Background(), SyncRequest{
+		ApplyRunes: true,
+		DryRun:     false,
+	})
+	if err != nil {
+		t.Fatalf("Sync() error = %v", err)
+	}
+
+	if got.RunePageApplied {
+		t.Fatalf("expected rune page apply to fail, got %#v", got)
+	}
+	if len(lcu.runePageCalls) != 1 {
+		t.Fatalf("expected one rune page apply call, got %d", len(lcu.runePageCalls))
+	}
+
+	foundLimitWarning := false
+	for _, warning := range got.Warnings {
+		if warning == runePageLimitReachedWarning {
+			foundLimitWarning = true
+		}
+		if strings.Contains(warning, "RPC_ERROR") || strings.Contains(warning, "Max pages reached") {
+			t.Fatalf("expected translated warning without raw LCU body, got %#v", got.Warnings)
+		}
+	}
+	if !foundLimitWarning {
+		t.Fatalf("expected rune page limit warning, got %#v", got.Warnings)
+	}
+}
+
+func TestSyncDoesNotApplyIncompleteRunePage(t *testing.T) {
+	t.Parallel()
+
+	emptyPrimaryRunes := ports.RuneStatsByRow{
+		RowTwos:   []ports.RuneStat{{Rune: 8444, WPAOverall: 0.8, Occurrence: 1000}},
+		RowThrees: []ports.RuneStat{{Rune: 8451, WPAOverall: 0.7, Occurrence: 1000}},
+	}
+	coachless := &coachlessStub{primaryRunes: &emptyPrimaryRunes}
+	lcu := &lcuStub{
+		detectedSelection: ports.DetectedSelection{
+			ChampionID: 240,
+			Position:   position.Top,
+			QueueID:    420,
+		},
+	}
+	svc, err := NewService(ServiceDeps{
+		Coachless:   coachless,
+		Tokens:      tokenProviderStub{token: "t"},
+		LCU:         lcu,
+		Recommender: recommend.NewEngine(),
+		Policy:      RecommendationPolicy{MinOccurrence: 100, TopItems: 6, TopSpells: 2},
+	})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	got, err := svc.Sync(context.Background(), SyncRequest{
+		ApplyRunes: true,
+		DryRun:     false,
+	})
+	if err != nil {
+		t.Fatalf("Sync() error = %v", err)
+	}
+
+	if got.RunePageApplied {
+		t.Fatalf("expected incomplete rune page to skip apply, got %#v", got)
+	}
+	if len(lcu.runePageCalls) != 0 {
+		t.Fatalf("expected no rune page apply call, got %d", len(lcu.runePageCalls))
+	}
+	if len(coachless.treeCalls) != 1 || len(coachless.runeCalls) != 2 || len(coachless.shardCalls) != 1 {
+		t.Fatalf("expected complete rune page lookup before validation, got trees=%d runes=%d shards=%d", len(coachless.treeCalls), len(coachless.runeCalls), len(coachless.shardCalls))
+	}
+
+	foundWarning := false
+	for _, warning := range got.Warnings {
+		if strings.Contains(warning, "no primary row 1 rune recommendation") {
+			foundWarning = true
+			break
+		}
+	}
+	if !foundWarning {
+		t.Fatalf("expected missing rune row warning, got %#v", got.Warnings)
 	}
 }
 

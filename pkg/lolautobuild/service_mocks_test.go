@@ -39,11 +39,21 @@ type coachlessStub struct {
 	mu              sync.Mutex
 	getPatchesCalls int
 	patches         []ports.PatchInfo
+	treePlaycount   []ports.RuneTreePlaycount
+	primaryRunes    *ports.RuneStatsByRow
+	secondaryRunes  *ports.RuneStatsByRow
+	shards          *ports.ShardStats
 	keystoneCalls   []ports.KeystoneRequest
+	treeCalls       []ports.SecondaryTreePlaycountRequest
+	runeCalls       []ports.RuneStatsRequest
+	shardCalls      []ports.ShardStatsRequest
 	spellCalls      []ports.SummonerSpellStatsRequest
 	itemCalls       []ports.ItemStatsRequest
 	itemStats       []ports.ItemStat
 	keystoneErr     error
+	treeErr         error
+	runeErr         error
+	shardErr        error
 	spellErr        error
 	itemErr         error
 }
@@ -75,6 +85,76 @@ func (c *coachlessStub) GetKeystoneData(_ context.Context, _ string, req ports.K
 	}
 
 	return []ports.KeystoneStat{{Rune: 8437, WPAOverall: 1.4, Occurrence: 1000}}, nil
+}
+
+func (c *coachlessStub) GetSecondaryTreePlaycount(_ context.Context, _ string, req ports.SecondaryTreePlaycountRequest) ([]ports.RuneTreePlaycount, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.treeCalls = append(c.treeCalls, req)
+	if c.treeErr != nil {
+		return nil, c.treeErr
+	}
+	if c.treePlaycount != nil {
+		return append([]ports.RuneTreePlaycount{}, c.treePlaycount...), nil
+	}
+
+	return []ports.RuneTreePlaycount{
+		{Tree: ports.RuneStyleSorcery, Occurrence: 900},
+		{Tree: ports.RuneStylePrecision, Occurrence: 500},
+	}, nil
+}
+
+func (c *coachlessStub) GetRuneStatsForKeystoneAndTree(_ context.Context, _ string, req ports.RuneStatsRequest) (ports.RuneStatsByRow, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.runeCalls = append(c.runeCalls, req)
+	if c.runeErr != nil {
+		return ports.RuneStatsByRow{}, c.runeErr
+	}
+
+	switch req.TreeToLoad {
+	case ports.RuneStyleResolve:
+		if c.primaryRunes != nil {
+			return *c.primaryRunes, nil
+		}
+		return ports.RuneStatsByRow{
+			RowOnes:   []ports.RuneStat{{Rune: 8446, WPAOverall: 0.9, Occurrence: 1000}},
+			RowTwos:   []ports.RuneStat{{Rune: 8444, WPAOverall: 0.8, Occurrence: 1000}},
+			RowThrees: []ports.RuneStat{{Rune: 8451, WPAOverall: 0.7, Occurrence: 1000}},
+		}, nil
+	case ports.RuneStyleSorcery:
+		if c.secondaryRunes != nil {
+			return *c.secondaryRunes, nil
+		}
+		return ports.RuneStatsByRow{
+			RowOnes:   []ports.RuneStat{{Rune: 8224, WPAOverall: 0.6, Occurrence: 1000}},
+			RowTwos:   []ports.RuneStat{{Rune: 8233, WPAOverall: 0.9, Occurrence: 1000}},
+			RowThrees: []ports.RuneStat{{Rune: 8237, WPAOverall: 0.5, Occurrence: 1000}},
+		}, nil
+	default:
+		return ports.RuneStatsByRow{}, nil
+	}
+}
+
+func (c *coachlessStub) GetShardStatsForKeystoneAndTree(_ context.Context, _ string, req ports.ShardStatsRequest) (ports.ShardStats, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.shardCalls = append(c.shardCalls, req)
+	if c.shardErr != nil {
+		return ports.ShardStats{}, c.shardErr
+	}
+	if c.shards != nil {
+		return *c.shards, nil
+	}
+
+	return ports.ShardStats{
+		Offense: []ports.RuneStat{{Rune: 5008, WPAOverall: 0.5, Occurrence: 1000}},
+		Flex:    []ports.RuneStat{{Rune: 5008, WPAOverall: 0.4, Occurrence: 1000}},
+		Defense: []ports.RuneStat{{Rune: 5002, WPAOverall: 0.3, Occurrence: 1000}},
+	}, nil
 }
 
 func (c *coachlessStub) GetSummonerSpellStats(_ context.Context, _ string, req ports.SummonerSpellStatsRequest) ([]ports.SummonerSpellStat, error) {
@@ -118,6 +198,7 @@ type lcuStub struct {
 	detectCalls              int
 	itemSetCalls             []ports.ApplyItemSetRequest
 	runePageCalls            []ports.ApplyRunePageRequest
+	runePageErr              error
 	spellCalls               []ports.ApplySummonerSpellsRequest
 	watchCalls               int
 	watchEventsWithNoticesFn func(context.Context, chan<- ports.LCUEvent, chan<- ports.LCUWatchNotice) error
@@ -139,7 +220,7 @@ func (l *lcuStub) ApplyItemSet(_ context.Context, req ports.ApplyItemSetRequest)
 
 func (l *lcuStub) ApplyRunePage(_ context.Context, req ports.ApplyRunePageRequest) error {
 	l.runePageCalls = append(l.runePageCalls, req)
-	return nil
+	return l.runePageErr
 }
 
 func (l *lcuStub) ApplySummonerSpells(_ context.Context, req ports.ApplySummonerSpellsRequest) error {

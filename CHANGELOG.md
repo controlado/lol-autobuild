@@ -13,6 +13,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added item set apply flow with managed set upsert in LCU.
 - Added staged item set block apply in LCU with ordered block support.
 - Added summoner spell apply flow with Flash slot preservation behavior.
+- Added rune page apply flow that reuses an `AutoBuild` page or creates one in LCU.
 - Added watch orchestration (`Service.Watch`) and `dev watch` command.
 - Added LCU websocket event stream support with reconnect flow.
 - Added browser-assisted Coachless token capture.
@@ -39,7 +40,3 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Removed `--champion-id` CLI flag.
 - Removed `--role` CLI flag.
-
-### Pending
-
-- Rune page apply is still pending in the LCU adapter.

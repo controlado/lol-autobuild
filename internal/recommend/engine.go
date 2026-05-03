@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/controlado/lol-autobuild/internal/ports"
+	"github.com/controlado/lol-autobuild/internal/runes"
 )
 
 type Engine struct{}
@@ -43,6 +44,72 @@ func (e *Engine) Recommend(input ports.RecommendationInput) ports.Recommendation
 	return out
 }
 
+func (e *Engine) RecommendRunePage(input ports.RunePageRecommendationInput) ports.RunePageRecommendation {
+	var out ports.RunePageRecommendation
+
+	primaryStyleID, ok := runes.StyleForKeystone(input.Keystone.Rune)
+	if !ok {
+		out.Warnings = append(out.Warnings, "no primary rune tree was available for keystone recommendation")
+		return out
+	}
+
+	secondaryStyleID, ok := runes.RecommendedSecondaryStyle(input.SecondaryTreePlaycount, primaryStyleID)
+	if !ok {
+		out.Warnings = append(out.Warnings, "no secondary rune tree recommendation was available")
+		return out
+	}
+
+	selectedPerkIDs := []int{input.Keystone.Rune}
+	for _, slot := range []struct {
+		stats   []ports.RuneStat
+		warning string
+	}{
+		{stats: input.PrimaryRunes.RowOnes, warning: "no primary row 1 rune recommendation was available"},
+		{stats: input.PrimaryRunes.RowTwos, warning: "no primary row 2 rune recommendation was available"},
+		{stats: input.PrimaryRunes.RowThrees, warning: "no primary row 3 rune recommendation was available"},
+	} {
+		stat, ok := selectTopRune(slot.stats, input.MinOccurrence)
+		if !ok {
+			out.Warnings = append(out.Warnings, slot.warning)
+			return out
+		}
+		selectedPerkIDs = append(selectedPerkIDs, stat.Rune)
+	}
+
+	secondaryRunes := selectSecondaryRunes(input.SecondaryRunes, input.MinOccurrence)
+	if len(secondaryRunes) != 2 {
+		out.Warnings = append(out.Warnings, "no complete secondary rune recommendation was available")
+		return out
+	}
+	for _, stat := range secondaryRunes {
+		selectedPerkIDs = append(selectedPerkIDs, stat.Rune)
+	}
+
+	for _, slot := range []struct {
+		stats   []ports.RuneStat
+		warning string
+	}{
+		{stats: input.Shards.Offense, warning: "no offense shard recommendation was available"},
+		{stats: input.Shards.Flex, warning: "no flex shard recommendation was available"},
+		{stats: input.Shards.Defense, warning: "no defense shard recommendation was available"},
+	} {
+		stat, ok := selectTopRune(slot.stats, input.MinOccurrence)
+		if !ok {
+			out.Warnings = append(out.Warnings, slot.warning)
+			return out
+		}
+		selectedPerkIDs = append(selectedPerkIDs, stat.Rune)
+	}
+
+	out.Page = &ports.RunePage{
+		PrimaryStyleID:  primaryStyleID,
+		SubStyleID:      secondaryStyleID,
+		SelectedPerkIDs: selectedPerkIDs,
+	}
+
+	return out
+}
+
 func filterKeystones(in []ports.KeystoneStat, minOccurrence int) []ports.KeystoneStat {
 	out := make([]ports.KeystoneStat, 0, len(in))
 	for _, stat := range in {
@@ -59,6 +126,95 @@ func filterKeystones(in []ports.KeystoneStat, minOccurrence int) []ports.Keyston
 	})
 
 	return out
+}
+
+func selectTopRune(in []ports.RuneStat, minOccurrence int) (ports.RuneStat, bool) {
+	out := filterRunesWithFallback(in, minOccurrence)
+	if len(out) == 0 {
+		return ports.RuneStat{}, false
+	}
+
+	sortRuneStats(out)
+	return out[0], true
+}
+
+func selectSecondaryRunes(in ports.RuneStatsByRow, minOccurrence int) []ports.RuneStat {
+	var (
+		rows         = [][]ports.RuneStat{in.RowOnes, in.RowTwos, in.RowThrees}
+		candidates   = make([]ports.RuneStat, 0, 3)
+		selectedRows = make([]bool, len(rows))
+	)
+	for idx, row := range rows {
+		if stat, ok := selectTopRuneStrict(row, minOccurrence); ok {
+			candidates = append(candidates, stat)
+			selectedRows[idx] = true
+		}
+	}
+
+	sortRuneStats(candidates)
+	if len(candidates) >= 2 {
+		return candidates[:2]
+	}
+
+	fallbacks := make([]ports.RuneStat, 0, len(rows))
+	for idx, row := range rows {
+		if selectedRows[idx] {
+			continue
+		}
+		if stat, ok := selectTopRune(row, minOccurrence); ok {
+			fallbacks = append(fallbacks, stat)
+		}
+	}
+
+	sortRuneStats(fallbacks)
+	for _, stat := range fallbacks {
+		candidates = append(candidates, stat)
+		if len(candidates) == 2 {
+			break
+		}
+	}
+
+	sortRuneStats(candidates)
+	return candidates
+}
+
+func selectTopRuneStrict(in []ports.RuneStat, minOccurrence int) (ports.RuneStat, bool) {
+	out := make([]ports.RuneStat, 0, len(in))
+	for _, stat := range in {
+		if stat.Occurrence >= minOccurrence {
+			out = append(out, stat)
+		}
+	}
+	if len(out) == 0 {
+		return ports.RuneStat{}, false
+	}
+
+	sortRuneStats(out)
+	return out[0], true
+}
+
+func filterRunesWithFallback(in []ports.RuneStat, minOccurrence int) []ports.RuneStat {
+	filtered := make([]ports.RuneStat, 0, len(in))
+	for _, stat := range in {
+		if stat.Occurrence >= minOccurrence {
+			filtered = append(filtered, stat)
+		}
+	}
+
+	if len(filtered) > 0 || len(in) == 0 {
+		return filtered
+	}
+
+	return append([]ports.RuneStat{}, in...)
+}
+
+func sortRuneStats(in []ports.RuneStat) {
+	sort.Slice(in, func(i, j int) bool {
+		if in[i].WPAOverall == in[j].WPAOverall {
+			return in[i].Occurrence > in[j].Occurrence
+		}
+		return in[i].WPAOverall > in[j].WPAOverall
+	})
 }
 
 func filterSpells(in []ports.SummonerSpellStat, minOccurrence int) []ports.SummonerSpellStat {

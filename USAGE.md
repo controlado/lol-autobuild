@@ -9,7 +9,7 @@ For the short user guide, read [README.md](README.md). Portuguese version: [READ
 `lol-autobuild` runs a sync cycle that:
 
 - Detects your current champion and position from the local LCU champ select session.
-- Pulls Coachless patch, keystone, summoner spell, and item stats.
+- Pulls Coachless patch, rune, summoner spell, and item stats.
 - Builds recommendations.
 - Applies supported changes in LCU. Set `--dry-run=true` or `sync.dry_run: true` to preview the plan.
 
@@ -22,7 +22,7 @@ For the short user guide, read [README.md](README.md). Portuguese version: [READ
 | Coachless API ingestion | Implemented | Uses API-first flow from `https://api.coachless.gg`. |
 | Item set apply | Implemented | Upserts a managed item set in LCU. |
 | Summoner spells apply | Implemented | Applies two spells and preserves the current Flash slot when possible. |
-| Rune page apply | Pending | Current adapter returns not configured. |
+| Rune page apply | Implemented | Reuses an existing `AutoBuild` rune page when possible. Otherwise creates one without deleting user pages. |
 | Watch mode (`watch`) | Implemented | Syncs once per champ select when the session timer enters `FINALIZATION`. |
 | Local settings UI | Implemented | Opens a local browser page served from `127.0.0.1`. |
 | Browser-assisted auth capture | Implemented | Opens Coachless login and stores tokens from the login response. |
@@ -172,11 +172,10 @@ LCU connection discovery tries League process args first (`--app-port`, `--remot
 - If the finalization sync fails, watch mode waits for the next champ select before it tries again.
 - The local UI uses the `sync` config section. CLI flags still control `sync` and `watch`.
 - Free Coachless tokens use the latest non-Premium patch when the patch setting is blank. Requesting the newest Premium patch or manual patch additions returns an error.
-- Rune page apply is not implemented yet.
+- Rune page apply reuses a deletable `AutoBuild` page or creates one without deleting user pages. If replacing a managed page fails after delete, the app attempts to restore that page and reports the failure context.
 - Browser-assisted auth capture watches the Coachless login response and stores the token pair.
 
 ## Next work
 
-- Implement LCU rune page apply path.
 - Expand queue coverage for position detection.
 - Add clearer diagnostics around auth and LCU failures.

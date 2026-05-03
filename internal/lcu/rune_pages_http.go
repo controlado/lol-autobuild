@@ -1,0 +1,54 @@
+package lcu
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+
+	"github.com/controlado/lol-autobuild/internal/ports"
+)
+
+func (c *Client) fetchCurrentRunePage(ctx context.Context, info connectionInfo) (runePage, bool, error) {
+	page, err := doJSON[runePage](ctx, c, info, http.MethodGet, "/lol-perks/v1/currentpage", nil)
+	if err != nil {
+		if errors.Is(err, errHTTPNotFound) {
+			return runePage{}, false, nil
+		}
+		return runePage{}, false, fmt.Errorf("%w: fetch current rune page: %v", ErrRunePageApplyFailed, err)
+	}
+	return page, true, nil
+}
+
+func (c *Client) fetchRunePages(ctx context.Context, info connectionInfo) ([]runePage, error) {
+	pages, err := doJSON[[]runePage](ctx, c, info, http.MethodGet, "/lol-perks/v1/pages", nil)
+	if err != nil {
+		return nil, fmt.Errorf("%w: fetch rune pages: %v", ErrRunePageApplyFailed, err)
+	}
+	return pages, nil
+}
+
+func (c *Client) deleteRunePage(ctx context.Context, info connectionInfo, pageID int) error {
+	endpoint := fmt.Sprintf("/lol-perks/v1/pages/%d", pageID)
+	if err := doRequest(ctx, c, info, http.MethodDelete, endpoint, nil); err != nil {
+		return fmt.Errorf("%w: delete rune page: %v", ErrRunePageApplyFailed, err)
+	}
+	return nil
+}
+
+func (c *Client) createRunePage(ctx context.Context, info connectionInfo, payload runePageCreateRequest) error {
+	if err := doRequest(ctx, c, info, http.MethodPost, "/lol-perks/v1/pages", payload); err != nil {
+		if isRunePageLimitReached(err) {
+			return fmt.Errorf("%w: create rune page failed LCU validation: %w: %w", ErrRunePageApplyFailed, ports.ErrRunePageLimitReached, err)
+		}
+		return fmt.Errorf("%w: create rune page failed LCU validation: %w", ErrRunePageApplyFailed, err)
+	}
+	return nil
+}
+
+func isRunePageLimitReached(err error) bool {
+	return errors.Is(err, errHTTPStatus) &&
+		strings.Contains(err.Error(), "status: 400") &&
+		strings.Contains(err.Error(), "Max pages reached")
+}

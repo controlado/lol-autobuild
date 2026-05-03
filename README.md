@@ -6,7 +6,7 @@
 
 # lol-autobuild
 
-Set up League of Legends item sets and summoner spells from Coachless data.
+Set up League of Legends rune pages, item sets, and summoner spells from Coachless data.
 
 <img width="1300" height="1162" alt="lol-autobuild local UI" src="docs/assets/screenshots/ui-en.png" />
 
@@ -20,7 +20,7 @@ Pick the ZIP for your system, extract it, and run `lol-autobuild`.
 
 ## What it does
 
-`lol-autobuild` connects to the League Client during champion select. It reads your champion and position, checks Coachless data, and prepares recommended item sets and summoner spells. Rune page apply is still pending.
+`lol-autobuild` connects to the League Client during champion select. It reads your champion and position, checks Coachless data, and applies recommended rune pages, item sets, and summoner spells.
 
 ## About Coachless
 

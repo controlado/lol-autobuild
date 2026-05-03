@@ -242,6 +242,37 @@ func TestStaticAssets(t *testing.T) {
 	}
 }
 
+func TestRuneSettingsAreEnabledInStaticUI(t *testing.T) {
+	htmlRaw, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatalf("read index: %v", err)
+	}
+	jsRaw, err := staticFiles.ReadFile("static/assets/app.js")
+	if err != nil {
+		t.Fatalf("read app.js: %v", err)
+	}
+
+	htmlBody := string(htmlRaw)
+	jsBody := string(jsRaw)
+	for _, unwanted := range []string{
+		`id="applyRunes" disabled`,
+		`data-i18n="state.coming_soon"`,
+	} {
+		if strings.Contains(htmlBody, unwanted) {
+			t.Fatalf("rune checkbox still contains %q", unwanted)
+		}
+	}
+	for _, want := range []string{
+		"apply_runes: ids.applyRunes.checked",
+		"ids.applyRunes.checked = settings.apply_runes",
+		`ids.applyRunes.addEventListener("change", scheduleSave)`,
+	} {
+		if !strings.Contains(jsBody, want) {
+			t.Fatalf("app.js missing %q", want)
+		}
+	}
+}
+
 func TestI18NAssets(t *testing.T) {
 	server, err := NewServer(Options{
 		App:         new(stubApp),
@@ -448,7 +479,7 @@ func TestSaveConfigAcceptsAdvancedFilters(t *testing.T) {
 		"patch_additions":4,
 		"league_tier_preset":"master_plus",
 		"apply_items":true,
-		"apply_runes":false,
+		"apply_runes":true,
 		"apply_spells":true,
 		"keep_flash":true,
 		"dry_run":true,
@@ -464,6 +495,9 @@ func TestSaveConfigAcceptsAdvancedFilters(t *testing.T) {
 	if recApp.saved.PatchAdditionsMode != "manual" || recApp.saved.PatchAdditions != 4 || recApp.saved.LeagueTierPreset != "master_plus" {
 		t.Fatalf("saved advanced settings = %#v", recApp.saved)
 	}
+	if !recApp.saved.ApplyRunes {
+		t.Fatalf("saved apply_runes = false, want true")
+	}
 
 	var state app.State
 	if err := json.Unmarshal(rec.Body.Bytes(), &state); err != nil {
@@ -471,6 +505,9 @@ func TestSaveConfigAcceptsAdvancedFilters(t *testing.T) {
 	}
 	if state.Settings.PatchAdditionsMode != "manual" || state.Settings.PatchAdditions != 4 || state.Settings.LeagueTierPreset != "master_plus" {
 		t.Fatalf("response advanced settings = %#v", state.Settings)
+	}
+	if !state.Settings.ApplyRunes {
+		t.Fatalf("response apply_runes = false, want true")
 	}
 	if !state.Watcher.ConfigStale {
 		t.Fatal("response watcher.config_stale = false, want true")

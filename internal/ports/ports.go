@@ -35,12 +35,65 @@ type RuneEffect struct {
 	Value string `json:"value"`
 }
 
+const (
+	RuneStylePrecision   = 8000
+	RuneStyleDomination  = 8100
+	RuneStyleSorcery     = 8200
+	RuneStyleInspiration = 8300
+	RuneStyleResolve     = 8400
+)
+
+const (
+	RuneKeystonePressTheAttack    = 8005
+	RuneKeystoneLethalTempo       = 8008
+	RuneKeystoneFleetFootwork     = 8021
+	RuneKeystoneConqueror         = 8010
+	RuneKeystoneElectrocute       = 8112
+	RuneKeystoneDarkHarvest       = 8128
+	RuneKeystoneHailOfBlades      = 9923
+	RuneKeystoneSummonAery        = 8214
+	RuneKeystoneArcaneComet       = 8229
+	RuneKeystoneStormraidersSurge = 8230
+	RuneKeystoneDeathfireTouch    = 8992
+	RuneKeystoneGraspOfTheUndying = 8437
+	RuneKeystoneAftershock        = 8439
+	RuneKeystoneGuardian          = 8465
+	RuneKeystoneGlacialAugment    = 8351
+	RuneKeystoneUnsealedSpellbook = 8360
+	RuneKeystoneFirstStrike       = 8369
+)
+
 type KeystoneStat struct {
 	Rune        int          `json:"rune"`
 	RuneType    int          `json:"runeType"`
 	WPAOverall  float64      `json:"wpaOverall"`
 	Occurrence  int          `json:"occurrence"`
 	RuneEffects []RuneEffect `json:"runeEffects"`
+}
+
+type RuneStat struct {
+	Rune        int          `json:"rune"`
+	RuneType    int          `json:"runeType"`
+	WPAOverall  float64      `json:"wpaOverall"`
+	Occurrence  int          `json:"occurrence"`
+	RuneEffects []RuneEffect `json:"runeEffects"`
+}
+
+type RuneTreePlaycount struct {
+	Tree       int     `json:"tree"`
+	Occurrence float64 `json:"occurrence"`
+}
+
+type RuneStatsByRow struct {
+	RowOnes   []RuneStat `json:"rowOnes"`
+	RowTwos   []RuneStat `json:"rowTwos"`
+	RowThrees []RuneStat `json:"rowThrees"`
+}
+
+type ShardStats struct {
+	Offense []RuneStat `json:"offense"`
+	Flex    []RuneStat `json:"flex"`
+	Defense []RuneStat `json:"defense"`
 }
 
 type SummonerSpellStat struct {
@@ -68,6 +121,24 @@ type ItemStat struct {
 
 type KeystoneRequest struct {
 	CommonFilters CommonFilters `json:"commonFilters"`
+}
+
+type SecondaryTreePlaycountRequest struct {
+	CommonFilters CommonFilters `json:"commonFilters"`
+	Tree          int           `json:"tree"`
+	Keystone      int           `json:"keystone"`
+}
+
+type RuneStatsRequest struct {
+	CommonFilters CommonFilters `json:"commonFilters"`
+	Keystone      int           `json:"keystone"`
+	MainTree      int           `json:"mainTree"`
+	TreeToLoad    int           `json:"treeToLoad"`
+}
+
+type ShardStatsRequest struct {
+	CommonFilters CommonFilters `json:"commonFilters"`
+	Keystone      int           `json:"keystone"`
 }
 
 type SummonerSpellStatsRequest struct {
@@ -107,6 +178,9 @@ type CoachlessClient interface {
 	Refresh(ctx context.Context, refreshToken string) (TokenPair, error)
 	GetPatches(ctx context.Context, accessToken string) ([]PatchInfo, error)
 	GetKeystoneData(ctx context.Context, accessToken string, req KeystoneRequest) ([]KeystoneStat, error)
+	GetSecondaryTreePlaycount(ctx context.Context, accessToken string, req SecondaryTreePlaycountRequest) ([]RuneTreePlaycount, error)
+	GetRuneStatsForKeystoneAndTree(ctx context.Context, accessToken string, req RuneStatsRequest) (RuneStatsByRow, error)
+	GetShardStatsForKeystoneAndTree(ctx context.Context, accessToken string, req ShardStatsRequest) (ShardStats, error)
 	GetSummonerSpellStats(ctx context.Context, accessToken string, req SummonerSpellStatsRequest) ([]SummonerSpellStat, error)
 	GetItemStats(ctx context.Context, accessToken string, req ItemStatsRequest) ([]ItemStat, error)
 }
@@ -136,10 +210,16 @@ type ApplyItemSetBlock struct {
 	ItemIDs []int
 }
 
+type RunePage struct {
+	PrimaryStyleID  int
+	SubStyleID      int
+	SelectedPerkIDs []int
+}
+
 type ApplyRunePageRequest struct {
 	ChampionID int
 	Position   position.Position
-	KeystoneID int
+	Page       RunePage
 	DryRun     bool
 }
 
@@ -216,6 +296,21 @@ type Recommendation struct {
 	Warnings       []string
 }
 
+type RunePageRecommendationInput struct {
+	Keystone               KeystoneStat
+	SecondaryTreePlaycount []RuneTreePlaycount
+	PrimaryRunes           RuneStatsByRow
+	SecondaryRunes         RuneStatsByRow
+	Shards                 ShardStats
+	MinOccurrence          int
+}
+
+type RunePageRecommendation struct {
+	Page     *RunePage
+	Warnings []string
+}
+
 type RecommendationEngine interface {
 	Recommend(input RecommendationInput) Recommendation
+	RecommendRunePage(input RunePageRecommendationInput) RunePageRecommendation
 }

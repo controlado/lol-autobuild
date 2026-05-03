@@ -16,7 +16,7 @@
         <p class="label" data-i18n="header.local_ui">Local UI</p>
         <h1 data-i18n="app.title">lol-autobuild</h1>
       </div>
-      <p class="lede" data-i18n="header.lede">Sync League Client item sets and summoner spells from Coachless while
+      <p class="lede" data-i18n="header.lede">Sync League Client rune pages, item sets, and summoner spells from Coachless while
         champ select is open.</p>
       <div class="topbar-meta">
         <button type="button" id="updateButton" class="secondary compact" data-i18n="action.check_updates">Check
@@ -75,10 +75,9 @@
             <div class="sync-options">
               <div class="sync-option">
                 <div class="sync-option-header">
-                  <label class="check is-disabled" aria-disabled="true">
-                    <input type="checkbox" id="applyRunes" disabled>
+                  <label class="check">
+                    <input type="checkbox" id="applyRunes">
                     <span data-i18n="settings.runes">Runes</span>
-                    <span class="tag" data-i18n="state.coming_soon">Coming soon</span>
                   </label>
                 </div>
               </div>
@@ -221,6 +220,10 @@ Stop and start the watcher to apply changes.</div>
             <div class="result-row">
               <span data-i18n="result.items">Items</span>
               <span class="cell-value" id="itemsValue" data-i18n="state.not_applied">Not applied</span>
+            </div>
+            <div class="result-row">
+              <span data-i18n="result.runes">Runes</span>
+              <span class="cell-value" id="runesValue" data-i18n="state.not_applied">Not applied</span>
             </div>
             <div class="result-row">
               <span data-i18n="result.spells">Spells</span>

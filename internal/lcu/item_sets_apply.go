@@ -28,27 +28,9 @@ func (c *Client) ApplyItemSet(ctx context.Context, req ports.ApplyItemSetRequest
 		managedSet       = newManagedItemSet(req, blocks)
 		attempt          = newConnectionAttempt()
 		candidateHandler = func(info connectionInfo, candidateLabel string) (shouldTerminate bool) {
-			session, err := c.fetchChampSelectSession(ctx, info)
-			if err != nil {
-				attempt.observe(candidateLabel, ErrChampSelectUnavailable, err)
-				return false
-			}
-
-			member, err := localPlayerFromSession(session)
-			if err != nil {
-				attempt.observe(candidateLabel, ErrChampSelectUnavailable, err)
-				return false
-			}
-
-			if member.ChampionID <= 0 {
-				err = fmt.Errorf("expected championId %d, got %d", req.ChampionID, member.ChampionID)
-				attempt.observe(candidateLabel, ErrChampionNotSelected, err)
-				return false
-			}
-
-			if member.ChampionID != req.ChampionID {
-				err := fmt.Errorf("expected championId %d, got %d", req.ChampionID, member.ChampionID)
-				attempt.observe(candidateLabel, ErrChampionSelectionChanged, err)
+			selection := c.validatedLocalPlayerSelection(ctx, info, req.ChampionID)
+			if selection.err != nil {
+				attempt.observe(candidateLabel, selection.baseErr, selection.err)
 				return false
 			}
 
