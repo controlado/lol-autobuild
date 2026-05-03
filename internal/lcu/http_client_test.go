@@ -12,6 +12,21 @@ import (
 	"time"
 )
 
+func assertHTTPStatusError(t *testing.T, err error, wantStatusCode int, wantBody string) {
+	t.Helper()
+
+	var statusErr *httpStatusError
+	if !errors.As(err, &statusErr) {
+		t.Fatalf("expected httpStatusError, got %v", err)
+	}
+	if statusErr.StatusCode() != wantStatusCode {
+		t.Fatalf("expected status code %d, got %d", wantStatusCode, statusErr.StatusCode())
+	}
+	if statusErr.Body() != wantBody {
+		t.Fatalf("expected body %q, got %q", wantBody, statusErr.Body())
+	}
+}
+
 func TestDoJSON(t *testing.T) {
 	t.Parallel()
 
@@ -107,11 +122,12 @@ func TestDoJSON(t *testing.T) {
 				if !errors.Is(err, errHTTPNotFound) {
 					t.Fatalf("expected errHTTPNotFound, got %v", err)
 				}
-				if !strings.Contains(err.Error(), "status: 404") {
-					t.Fatalf("expected status in error, got %v", err)
+				if errors.Is(err, errHTTPStatus) {
+					t.Fatalf("expected 404 not to match errHTTPStatus")
 				}
-				if !strings.Contains(err.Error(), "missing") {
-					t.Fatalf("expected body in error, got %v", err)
+				assertHTTPStatusError(t, err, http.StatusNotFound, "missing")
+				if err.Error() != "http: not found: status: 404: missing" {
+					t.Fatalf("unexpected error text: %v", err)
 				}
 				if gotReq.Path != "/missing" {
 					t.Fatalf("expected path /missing, got %q", gotReq.Path)
@@ -146,11 +162,12 @@ func TestDoJSON(t *testing.T) {
 				if !errors.Is(err, errHTTPStatus) {
 					t.Fatalf("expected errHTTPStatus, got %v", err)
 				}
-				if !strings.Contains(err.Error(), "status: 500") {
-					t.Fatalf("expected status in error, got %v", err)
+				if errors.Is(err, errHTTPNotFound) {
+					t.Fatalf("expected 5xx not to match errHTTPNotFound")
 				}
-				if !strings.Contains(err.Error(), "exploded") {
-					t.Fatalf("expected trimmed body in error, got %v", err)
+				assertHTTPStatusError(t, err, http.StatusInternalServerError, "exploded")
+				if err.Error() != "http: bad status: status: 500: exploded" {
+					t.Fatalf("unexpected error text: %v", err)
 				}
 			},
 		},
@@ -170,9 +187,29 @@ func TestDoJSON(t *testing.T) {
 				if !errors.Is(err, errHTTPStatus) {
 					t.Fatalf("expected errHTTPStatus, got %v", err)
 				}
-				if !strings.Contains(err.Error(), "status: 503") {
-					t.Fatalf("expected status in error, got %v", err)
+				assertHTTPStatusError(t, err, http.StatusServiceUnavailable, "")
+				if err.Error() != "http: bad status: status: 503" {
+					t.Fatalf("unexpected error text: %v", err)
 				}
+			},
+		},
+		{
+			name:           "5xx limits response body",
+			method:         http.MethodGet,
+			path:           "/long-body",
+			body:           nil,
+			responseStatus: http.StatusInternalServerError,
+			responseBody:   strings.Repeat("a", httpStatusBodyLimit+10),
+			call: func(ctx context.Context, c *Client, info connectionInfo, method, path string, body any) (any, error) {
+				return doJSON[sampleResponse](ctx, c, info, method, path, body)
+			},
+			assert: func(t *testing.T, _ any, err error, _ requestSnapshot, _ connectionInfo, _ int) {
+				t.Helper()
+
+				if !errors.Is(err, errHTTPStatus) {
+					t.Fatalf("expected errHTTPStatus, got %v", err)
+				}
+				assertHTTPStatusError(t, err, http.StatusInternalServerError, strings.Repeat("a", httpStatusBodyLimit))
 			},
 		},
 		{

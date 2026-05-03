@@ -40,15 +40,16 @@ func (c *Client) deleteRunePage(ctx context.Context, info connectionInfo, pageID
 func (c *Client) createRunePage(ctx context.Context, info connectionInfo, payload runePageCreateRequest) error {
 	if err := doRequest(ctx, c, info, http.MethodPost, "/lol-perks/v1/pages", payload); err != nil {
 		if isRunePageLimitReached(err) {
-			return fmt.Errorf("%w: create rune page failed LCU validation: %w: %w", ErrRunePageApplyFailed, ports.ErrRunePageLimitReached, err)
+			return fmt.Errorf("%w: create rune page failed LCU validation: %w: %v", ErrRunePageApplyFailed, ports.ErrRunePageLimitReached, err)
 		}
-		return fmt.Errorf("%w: create rune page failed LCU validation: %w", ErrRunePageApplyFailed, err)
+		return fmt.Errorf("%w: create rune page failed LCU validation: %v", ErrRunePageApplyFailed, err)
 	}
 	return nil
 }
 
 func isRunePageLimitReached(err error) bool {
-	return errors.Is(err, errHTTPStatus) &&
-		strings.Contains(err.Error(), "status: 400") &&
-		strings.Contains(err.Error(), "Max pages reached")
+	var statusErr *httpStatusError
+	return errors.As(err, &statusErr) &&
+		statusErr.StatusCode() == http.StatusBadRequest &&
+		strings.Contains(statusErr.Body(), "Max pages reached")
 }

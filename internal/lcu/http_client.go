@@ -18,6 +18,46 @@ var (
 	errHTTPStatus   = errors.New("http: bad status")
 )
 
+const httpStatusBodyLimit = 256
+
+type httpStatusError struct {
+	sentinel   error
+	statusCode int
+	body       string
+}
+
+func newHTTPStatusError(statusCode int, body string) *httpStatusError {
+	sentinel := errHTTPStatus
+	if statusCode == http.StatusNotFound {
+		sentinel = errHTTPNotFound
+	}
+
+	return &httpStatusError{
+		sentinel:   sentinel,
+		statusCode: statusCode,
+		body:       body,
+	}
+}
+
+func (e *httpStatusError) Error() string {
+	if e.body == "" {
+		return fmt.Sprintf("%v: status: %d", e.sentinel, e.statusCode)
+	}
+	return fmt.Sprintf("%v: status: %d: %s", e.sentinel, e.statusCode, e.body)
+}
+
+func (e *httpStatusError) Unwrap() error {
+	return e.sentinel
+}
+
+func (e *httpStatusError) StatusCode() int {
+	return e.statusCode
+}
+
+func (e *httpStatusError) Body() string {
+	return e.body
+}
+
 func doRequest(ctx context.Context, c *Client, info connectionInfo, method, path string, body any) error {
 	_, err := doJSON[struct{}](ctx, c, info, method, path, body)
 	return err
@@ -69,16 +109,8 @@ func doJSON[T any](ctx context.Context, c *Client, info connectionInfo, method, 
 		return valueResult, nil
 	}
 
-	err = errHTTPStatus
-	if resp.StatusCode == http.StatusNotFound {
-		err = errHTTPNotFound
-	}
-
-	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
-	if len(bodyBytes) == 0 {
-		return zeroValueResult, fmt.Errorf("%w: status: %d", err, resp.StatusCode)
-	}
-	return zeroValueResult, fmt.Errorf("%w: status: %d: %s", err, resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
+	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, httpStatusBodyLimit))
+	return zeroValueResult, newHTTPStatusError(resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
 }
 
 func (c *Client) httpClient(protocol string) *http.Client {
