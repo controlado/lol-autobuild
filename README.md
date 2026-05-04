@@ -8,9 +8,7 @@
 
 Set up League of Legends rune pages, item sets, and summoner spells from Coachless data.
 
-https://github.com/user-attachments/assets/de2f0f5b-5535-4d4f-b53e-b0a1abefd087
-
-[Watch the demo video](docs/assets/demo/lol-autobuild-demo.mp4)
+[Watch the demo video](https://github.com/user-attachments/assets/de2f0f5b-5535-4d4f-b53e-b0a1abefd087)
 
 </div>
 
