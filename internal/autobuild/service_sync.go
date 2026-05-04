@@ -121,9 +121,10 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 	})
 
 	result := SyncResult{
-		DetectedChampionID: selection.ChampionID,
-		DetectedPosition:   selection.Position.String(),
-		DetectedQueueID:    selection.QueueID,
+		DetectedChampionID:   selection.ChampionID,
+		DetectedChampionName: selection.ChampionName,
+		DetectedPosition:     selection.Position.String(),
+		DetectedQueueID:      selection.QueueID,
 		Warnings: slices.Concat(
 			rec.Warnings,
 			[]string{selectedPatchWarning(patchLabel, patchFilter.PatchAdditions)},
@@ -154,10 +155,11 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 						result.Warnings = append(result.Warnings, "apply runes requested but no complete rune page recommendation was available")
 					}
 				} else if err := s.deps.LCU.ApplyRunePage(ctx, domain.ApplyRunePageRequest{
-					ChampionID: selection.ChampionID,
-					Position:   selection.Position,
-					Page:       *runeRec.Page,
-					DryRun:     false,
+					ChampionID:   selection.ChampionID,
+					ChampionName: selection.ChampionName,
+					Position:     selection.Position,
+					Page:         *runeRec.Page,
+					DryRun:       false,
 				}); err != nil {
 					result.Warnings = append(result.Warnings, runePageApplyWarning(err))
 				} else {
@@ -210,11 +212,11 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 		if !hasAnyItems {
 			result.Warnings = append(result.Warnings, "apply items requested but no item recommendation was available")
 		} else if err := s.deps.LCU.ApplyItemSet(ctx, domain.ApplyItemSetRequest{
-			ChampionID: selection.ChampionID,
-			Position:   selection.Position,
-			Patch:      patchLabel,
-			Blocks:     blocks,
-			DryRun:     false,
+			ChampionID:   selection.ChampionID,
+			ChampionName: selection.ChampionName,
+			Position:     selection.Position,
+			Blocks:       blocks,
+			DryRun:       false,
 		}); err != nil {
 			result.Warnings = append(result.Warnings, "failed to apply item set: "+err.Error())
 		} else {

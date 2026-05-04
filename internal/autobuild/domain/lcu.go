@@ -5,11 +5,11 @@ import "errors"
 var ErrRunePageLimitReached = errors.New("rune page limit reached")
 
 type ApplyItemSetRequest struct {
-	ChampionID int
-	Position   Position
-	Patch      string
-	Blocks     []ApplyItemSetBlock
-	DryRun     bool
+	ChampionID   int
+	ChampionName string
+	Position     Position
+	Blocks       []ApplyItemSetBlock
+	DryRun       bool
 }
 
 type ApplyItemSetBlock struct {
@@ -24,10 +24,11 @@ type RunePage struct {
 }
 
 type ApplyRunePageRequest struct {
-	ChampionID int
-	Position   Position
-	Page       RunePage
-	DryRun     bool
+	ChampionID   int
+	ChampionName string
+	Position     Position
+	Page         RunePage
+	DryRun       bool
 }
 
 type ApplySummonerSpellsRequest struct {
@@ -40,6 +41,7 @@ type ApplySummonerSpellsRequest struct {
 
 type DetectedSelection struct {
 	ChampionID   int
+	ChampionName string
 	Position     Position
 	QueueID      int
 	IsAutofilled bool

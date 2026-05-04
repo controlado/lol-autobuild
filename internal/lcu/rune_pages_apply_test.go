@@ -118,7 +118,7 @@ func TestApplyRunePageSuccessCreatesPageWithoutDeletingUserPage(t *testing.T) {
 		calls              []string
 		createPayload      runePageCreateRequest
 		expectedPerkIDs    = validRunePageApplyRequest().Page.SelectedPerkIDs
-		expectedPageName   = "AutoBuild 240 top"
+		expectedPageName   = "[autobuild] [top] Kled"
 		expectedPrimary    = domain.RuneStylePrecision
 		expectedSecondary  = domain.RuneStyleSorcery
 		expectedCurrentOld = []int{8437, 8446, 8444, 8451, 8233, 8237, 5008, 5008, 5002}
@@ -893,8 +893,9 @@ func TestApplyRunePageReportsRestoreFailureWhenCreateAndRestoreFail(t *testing.T
 
 func validRunePageApplyRequest() domain.ApplyRunePageRequest {
 	return domain.ApplyRunePageRequest{
-		ChampionID: 240,
-		Position:   domain.Top,
+		ChampionID:   240,
+		ChampionName: "Kled",
+		Position:     domain.Top,
 		Page: domain.RunePage{
 			PrimaryStyleID:  domain.RuneStylePrecision,
 			SubStyleID:      domain.RuneStyleSorcery,

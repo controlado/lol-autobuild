@@ -19,6 +19,7 @@ func TestSyncDryRunDetectsChampionButDoesNotApplyLCU(t *testing.T) {
 	lcu := &lcuStub{
 		detectedSelection: domain.DetectedSelection{
 			ChampionID:   240,
+			ChampionName: "Kled",
 			Position:     domain.Top,
 			QueueID:      420,
 			IsAutofilled: false,
@@ -47,6 +48,9 @@ func TestSyncDryRunDetectsChampionButDoesNotApplyLCU(t *testing.T) {
 
 	if got.DetectedChampionID != 240 {
 		t.Fatalf("unexpected detected champion id: %d", got.DetectedChampionID)
+	}
+	if got.DetectedChampionName != "Kled" {
+		t.Fatalf("unexpected detected champion name: %q", got.DetectedChampionName)
 	}
 	if got.DetectedPosition != domain.Top.String() {
 		t.Fatalf("unexpected detected position: %q", got.DetectedPosition)
@@ -88,6 +92,7 @@ func TestSyncUsesDetectedChampionIDInApplyRequests(t *testing.T) {
 	lcu := &lcuStub{
 		detectedSelection: domain.DetectedSelection{
 			ChampionID:   777,
+			ChampionName: "Yone",
 			Position:     domain.Support,
 			QueueID:      440,
 			IsAutofilled: true,
@@ -119,6 +124,9 @@ func TestSyncUsesDetectedChampionIDInApplyRequests(t *testing.T) {
 	if got.DetectedChampionID != 777 {
 		t.Fatalf("expected detected champion 777, got %d", got.DetectedChampionID)
 	}
+	if got.DetectedChampionName != "Yone" {
+		t.Fatalf("expected detected champion Yone, got %q", got.DetectedChampionName)
+	}
 	if got.DetectedPosition != wantPosition.String() {
 		t.Fatalf("expected detected position support, got %q", got.DetectedPosition)
 	}
@@ -135,6 +143,9 @@ func TestSyncUsesDetectedChampionIDInApplyRequests(t *testing.T) {
 
 	if lcu.itemSetCalls[0].ChampionID != 777 || lcu.runePageCalls[0].ChampionID != 777 || lcu.spellCalls[0].ChampionID != 777 {
 		t.Fatalf("apply calls must use detected champion id")
+	}
+	if lcu.itemSetCalls[0].ChampionName != "Yone" || lcu.runePageCalls[0].ChampionName != "Yone" {
+		t.Fatalf("item and rune apply calls must use detected champion name")
 	}
 	if lcu.itemSetCalls[0].Position != wantPosition || lcu.runePageCalls[0].Position != wantPosition || lcu.spellCalls[0].Position != wantPosition {
 		t.Fatalf("apply calls must use detected role")

@@ -39,13 +39,14 @@ type (
 		Source  string             `json:"source,omitempty"`
 	}
 	SyncSummary struct {
-		DetectedChampionID int      `json:"DetectedChampionID"`
-		DetectedPosition   string   `json:"DetectedPosition"`
-		DetectedQueueID    int      `json:"DetectedQueueID"`
-		ItemSetApplied     bool     `json:"ItemSetApplied"`
-		RunePageApplied    bool     `json:"RunePageApplied"`
-		SpellsApplied      bool     `json:"SpellsApplied"`
-		Warnings           []string `json:"Warnings"`
+		DetectedChampionID   int      `json:"DetectedChampionID"`
+		DetectedChampionName string   `json:"DetectedChampionName"`
+		DetectedPosition     string   `json:"DetectedPosition"`
+		DetectedQueueID      int      `json:"DetectedQueueID"`
+		ItemSetApplied       bool     `json:"ItemSetApplied"`
+		RunePageApplied      bool     `json:"RunePageApplied"`
+		SpellsApplied        bool     `json:"SpellsApplied"`
+		Warnings             []string `json:"Warnings"`
 	}
 	WatcherNoticeState struct {
 		Kind         string    `json:"kind"`

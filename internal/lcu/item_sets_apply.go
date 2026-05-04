@@ -193,14 +193,7 @@ func managedItemSetUID(req domain.ApplyItemSetRequest) string {
 }
 
 func managedItemSetTitle(req domain.ApplyItemSetRequest) string {
-	title := fmt.Sprintf("AutoBuild %d %s", req.ChampionID, req.Position.String())
-
-	patch := strings.TrimSpace(req.Patch)
-	if patch != "" {
-		title += " " + patch
-	}
-
-	return title
+	return managedResourceTitle(req.Position, req.ChampionID, req.ChampionName)
 }
 
 func itemSetUIDFromRaw(raw json.RawMessage) string {

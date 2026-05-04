@@ -393,6 +393,7 @@ func logWatchCycle(cycle autobuild.WatchCycle) {
 
 	logger = logger.
 		Int("champion_id", cycle.Result.DetectedChampionID).
+		Str("champion_name", cycle.Result.DetectedChampionName).
 		Str("position", cycle.Result.DetectedPosition).
 		Int("queue_id", cycle.Result.DetectedQueueID).
 		Bool("item_set_applied", cycle.Result.ItemSetApplied).

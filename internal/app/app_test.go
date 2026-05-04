@@ -248,13 +248,14 @@ func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 
 	lastSyncAt := time.Date(2026, time.April, 25, 12, 30, 0, 0, time.UTC)
 	wantLastSync := &autobuild.SyncResult{
-		DetectedChampionID: 238,
-		DetectedPosition:   "mid",
-		DetectedQueueID:    420,
-		ItemSetApplied:     true,
-		RunePageApplied:    true,
-		SpellsApplied:      false,
-		Warnings:           []string{"low sample"},
+		DetectedChampionID:   238,
+		DetectedChampionName: "Zed",
+		DetectedPosition:     "mid",
+		DetectedQueueID:      420,
+		ItemSetApplied:       true,
+		RunePageApplied:      true,
+		SpellsApplied:        false,
+		Warnings:             []string{"low sample"},
 	}
 
 	app.syncRunning = true
@@ -699,13 +700,14 @@ func TestStartWatcherLifecycle(t *testing.T) {
 
 	beforeSuccess := time.Now().UTC()
 	wantResult := &autobuild.SyncResult{
-		DetectedChampionID: 240,
-		DetectedPosition:   "mid",
-		DetectedQueueID:    420,
-		ItemSetApplied:     true,
-		RunePageApplied:    true,
-		SpellsApplied:      true,
-		Warnings:           []string{"manual review"},
+		DetectedChampionID:   240,
+		DetectedChampionName: "Kled",
+		DetectedPosition:     "mid",
+		DetectedQueueID:      420,
+		ItemSetApplied:       true,
+		RunePageApplied:      true,
+		SpellsApplied:        true,
+		Warnings:             []string{"manual review"},
 	}
 	call.req.OnCycle(autobuild.WatchCycle{Result: wantResult})
 	afterSuccess := time.Now().UTC()
@@ -862,13 +864,14 @@ func TestRunSyncSuccess(t *testing.T) {
 	cfg.Settings.DryRun = false
 
 	wantResult := autobuild.SyncResult{
-		DetectedChampionID: 84,
-		DetectedPosition:   "support",
-		DetectedQueueID:    420,
-		ItemSetApplied:     true,
-		RunePageApplied:    false,
-		SpellsApplied:      false,
-		Warnings:           []string{"partial sync"},
+		DetectedChampionID:   84,
+		DetectedChampionName: "Akali",
+		DetectedPosition:     "support",
+		DetectedQueueID:      420,
+		ItemSetApplied:       true,
+		RunePageApplied:      false,
+		SpellsApplied:        false,
+		Warnings:             []string{"partial sync"},
 	}
 
 	svc := newStubService()

@@ -36,6 +36,7 @@ func (c *Client) DetectSelection(ctx context.Context) (detectedSelection domain.
 				attempt.observe(candidateLabel, classifyDetectSelectionError(err), err)
 				return false
 			}
+			detectedSelection.ChampionName = c.resolveChampionName(ctx, info, detectedSelection.ChampionID)
 
 			return true
 		}

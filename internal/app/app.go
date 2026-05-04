@@ -435,13 +435,14 @@ func cloneSyncSummary(res *SyncSummary) *SyncSummary {
 
 func syncSummaryFromResult(res autobuild.SyncResult) *SyncSummary {
 	return &SyncSummary{
-		DetectedChampionID: res.DetectedChampionID,
-		DetectedPosition:   res.DetectedPosition,
-		DetectedQueueID:    res.DetectedQueueID,
-		ItemSetApplied:     res.ItemSetApplied,
-		RunePageApplied:    res.RunePageApplied,
-		SpellsApplied:      res.SpellsApplied,
-		Warnings:           append([]string{}, res.Warnings...),
+		DetectedChampionID:   res.DetectedChampionID,
+		DetectedChampionName: res.DetectedChampionName,
+		DetectedPosition:     res.DetectedPosition,
+		DetectedQueueID:      res.DetectedQueueID,
+		ItemSetApplied:       res.ItemSetApplied,
+		RunePageApplied:      res.RunePageApplied,
+		SpellsApplied:        res.SpellsApplied,
+		Warnings:             append([]string{}, res.Warnings...),
 	}
 }
 

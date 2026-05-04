@@ -181,9 +181,9 @@ func TestApplyItemSetSuccessUpsertsManagedSet(t *testing.T) {
 	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 
 	err := client.ApplyItemSet(context.Background(), domain.ApplyItemSetRequest{
-		ChampionID: 240,
-		Position:   domain.Support,
-		Patch:      "16.7",
+		ChampionID:   240,
+		ChampionName: "Kled",
+		Position:     domain.Support,
 		Blocks: []domain.ApplyItemSetBlock{
 			{Type: "Starter", ItemIDs: []int{1055, 3006, 1055}},
 		},
@@ -227,7 +227,7 @@ func TestApplyItemSetSuccessUpsertsManagedSet(t *testing.T) {
 		t.Fatalf("expected exactly one managed set after upsert, got %d (%v)", managedCount, uids)
 	}
 
-	if managed.Title != "AutoBuild 240 support 16.7" {
+	if managed.Title != "[autobuild] [support] Kled" {
 		t.Fatalf("unexpected managed title: %q", managed.Title)
 	}
 	if len(managed.Blocks) != 1 || managed.Blocks[0].Type != "Starter" {
@@ -287,7 +287,6 @@ func TestApplyItemSetPreservesOrderedBlocksAndEmptyBlocks(t *testing.T) {
 	err := client.ApplyItemSet(context.Background(), domain.ApplyItemSetRequest{
 		ChampionID: 240,
 		Position:   domain.Support,
-		Patch:      "16.7",
 		Blocks: []domain.ApplyItemSetBlock{
 			{Type: "Starter", ItemIDs: []int{1055, 3006, 1055}},
 			{Type: "1st Item", ItemIDs: []int{}},
@@ -373,7 +372,6 @@ func TestApplyItemSetFallsBackWhenProcessCandidateFails(t *testing.T) {
 	err := client.ApplyItemSet(context.Background(), domain.ApplyItemSetRequest{
 		ChampionID: 240,
 		Position:   domain.Support,
-		Patch:      "16.7",
 		Blocks: []domain.ApplyItemSetBlock{
 			{Type: "Starter", ItemIDs: []int{1055, 3006}},
 		},
@@ -415,7 +413,6 @@ func TestApplyItemSetAllCandidatesFailRespectsPriority(t *testing.T) {
 	err := client.ApplyItemSet(context.Background(), domain.ApplyItemSetRequest{
 		ChampionID: 240,
 		Position:   domain.Support,
-		Patch:      "16.7",
 		Blocks: []domain.ApplyItemSetBlock{
 			{Type: "Starter", ItemIDs: []int{1055, 3006}},
 		},
@@ -444,7 +441,6 @@ func TestApplyItemSetFailsWhenChampionIsNotSelected(t *testing.T) {
 	err := client.ApplyItemSet(context.Background(), domain.ApplyItemSetRequest{
 		ChampionID: 240,
 		Position:   domain.Support,
-		Patch:      "16.7",
 		Blocks: []domain.ApplyItemSetBlock{
 			{Type: "Starter", ItemIDs: []int{1055, 3006}},
 		},

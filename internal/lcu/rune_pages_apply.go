@@ -180,13 +180,10 @@ func runePageCreateRequestFromPage(page runePage) runePageCreateRequest {
 }
 
 func managedRunePageTitle(req domain.ApplyRunePageRequest) string {
-	parts := []string{"AutoBuild", fmt.Sprint(req.ChampionID)}
-	if position := strings.TrimSpace(req.Position.String()); position != "" {
-		parts = append(parts, position)
-	}
-	return strings.Join(parts, " ")
+	return managedResourceTitle(req.Position, req.ChampionID, req.ChampionName)
 }
 
 func isManagedRunePage(page runePage) bool {
-	return strings.HasPrefix(strings.TrimSpace(page.Name), "AutoBuild ")
+	name := strings.TrimSpace(page.Name)
+	return strings.HasPrefix(name, managedNamePrefix+" ") || strings.HasPrefix(name, legacyAutoBuildPrefix)
 }

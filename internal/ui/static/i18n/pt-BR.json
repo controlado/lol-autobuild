@@ -71,7 +71,7 @@
   "result.summary": "Resumo",
   "result.last_sync_result": "Resultado da última sincronização",
   "result.updated": "Horário do sync",
-  "result.champion_id": "ID do campeão",
+  "result.champion_id": "Campeão",
   "result.position": "Posição",
   "result.queue_id": "ID da fila",
   "result.items": "Itens",

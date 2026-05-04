@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
@@ -127,6 +128,115 @@ func TestDetectSelectionFromChampSelect(t *testing.T) {
 	}
 	if !selection.IsAutofilled {
 		t.Fatalf("expected autofill flag true")
+	}
+}
+
+func TestDetectSelectionResolvesChampionNameFromCachedSummary(t *testing.T) {
+	t.Parallel()
+
+	var summaryCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/lol-champ-select/v1/session":
+			_, _ = fmt.Fprint(w, `{"queueId":420,"localPlayerCellId":3,"myTeam":[{"cellId":3,"championId":240,"assignedPosition":"TOP","isAutofilled":false}]}`)
+		case "/lol-game-data/assets/v1/champion-summary.json":
+			summaryCalls.Add(1)
+			_, _ = fmt.Fprint(w, `[{"id":240,"name":"Kled"},{"id":777,"name":"Yone"}]`)
+		case "/lol-game-data/assets/v1/champions/240.json":
+			t.Fatalf("unexpected champion detail lookup")
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	lockfilePath := filepath.Join(t.TempDir(), "lockfile")
+	writeLockfile(t, lockfilePath, mustServerPort(t, server.URL))
+
+	client := NewClient(true, lockfilePath)
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
+
+	for range 2 {
+		selection, err := client.DetectSelection(context.Background())
+		if err != nil {
+			t.Fatalf("DetectSelection() error = %v", err)
+		}
+		if selection.ChampionName != "Kled" {
+			t.Fatalf("ChampionName = %q, want Kled", selection.ChampionName)
+		}
+	}
+
+	if got := summaryCalls.Load(); got != 1 {
+		t.Fatalf("summary calls = %d, want 1", got)
+	}
+}
+
+func TestDetectSelectionFallsBackToChampionDetailWhenSummaryMisses(t *testing.T) {
+	t.Parallel()
+
+	var detailCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/lol-champ-select/v1/session":
+			_, _ = fmt.Fprint(w, `{"queueId":420,"localPlayerCellId":3,"myTeam":[{"cellId":3,"championId":240,"assignedPosition":"TOP","isAutofilled":false}]}`)
+		case "/lol-game-data/assets/v1/champion-summary.json":
+			_, _ = fmt.Fprint(w, `[{"id":777,"name":"Yone"}]`)
+		case "/lol-game-data/assets/v1/champions/240.json":
+			detailCalls.Add(1)
+			_, _ = fmt.Fprint(w, `{"id":240,"name":"Kled"}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	lockfilePath := filepath.Join(t.TempDir(), "lockfile")
+	writeLockfile(t, lockfilePath, mustServerPort(t, server.URL))
+
+	client := NewClient(true, lockfilePath)
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
+
+	selection, err := client.DetectSelection(context.Background())
+	if err != nil {
+		t.Fatalf("DetectSelection() error = %v", err)
+	}
+	if selection.ChampionName != "Kled" {
+		t.Fatalf("ChampionName = %q, want Kled", selection.ChampionName)
+	}
+	if got := detailCalls.Load(); got != 1 {
+		t.Fatalf("detail calls = %d, want 1", got)
+	}
+}
+
+func TestDetectSelectionContinuesWhenChampionNameLookupFails(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/lol-champ-select/v1/session":
+			_, _ = fmt.Fprint(w, `{"queueId":420,"localPlayerCellId":3,"myTeam":[{"cellId":3,"championId":240,"assignedPosition":"TOP","isAutofilled":false}]}`)
+		case "/lol-game-data/assets/v1/champion-summary.json":
+			http.Error(w, "summary unavailable", http.StatusInternalServerError)
+		case "/lol-game-data/assets/v1/champions/240.json":
+			http.NotFound(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	lockfilePath := filepath.Join(t.TempDir(), "lockfile")
+	writeLockfile(t, lockfilePath, mustServerPort(t, server.URL))
+
+	client := NewClient(true, lockfilePath)
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
+
+	selection, err := client.DetectSelection(context.Background())
+	if err != nil {
+		t.Fatalf("DetectSelection() error = %v", err)
+	}
+	if selection.ChampionID != 240 || selection.ChampionName != "" {
+		t.Fatalf("selection = %#v, want champion 240 without name", selection)
 	}
 }
 

@@ -580,6 +580,22 @@ function appliedText(value) {
   return value ? t("state.applied") : t("state.not_applied");
 }
 
+function championText(sync) {
+  if (!sync) {
+    return t("state.no_sync_yet");
+  }
+
+  const name = String(sync.DetectedChampionName || "").trim();
+  const id = Number(sync.DetectedChampionID || 0);
+  if (name && id > 0) {
+    return `${name} (#${id})`;
+  }
+  if (name) {
+    return name;
+  }
+  return id > 0 ? String(id) : t("state.not_detected");
+}
+
 function renderModeStatus(settings) {
   if (!settings) {
     return;
@@ -724,7 +740,7 @@ function renderState(state) {
 
   const sync = state.last_sync;
   setCell(ids.updatedValue, formatTime(state.last_sync_at));
-  setCell(ids.championValue, sync ? String(sync.DetectedChampionID) : t("state.no_sync_yet"));
+  setCell(ids.championValue, championText(sync));
   setCell(ids.positionValue, sync ? sync.DetectedPosition || t("state.not_detected") : t("state.no_sync_yet"));
   setCell(ids.queueValue, sync ? String(sync.DetectedQueueID) : t("state.no_sync_yet"));
   setCell(ids.itemsValue, sync ? appliedText(sync.ItemSetApplied) : t("state.not_applied"), sync && sync.ItemSetApplied ? "good" : "");

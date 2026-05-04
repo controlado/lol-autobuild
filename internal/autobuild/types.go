@@ -42,13 +42,14 @@ type SyncRequest struct {
 }
 
 type SyncResult struct {
-	DetectedChampionID int
-	DetectedPosition   string
-	DetectedQueueID    int
-	ItemSetApplied     bool
-	RunePageApplied    bool
-	SpellsApplied      bool
-	Warnings           []string
+	DetectedChampionID   int
+	DetectedChampionName string
+	DetectedPosition     string
+	DetectedQueueID      int
+	ItemSetApplied       bool
+	RunePageApplied      bool
+	SpellsApplied        bool
+	Warnings             []string
 }
 
 type WatchRequest struct {
