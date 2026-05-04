@@ -11,7 +11,7 @@ For the short user guide, read [README.md](README.md). Portuguese version: [READ
 - Detects your current champion and position from the local LCU champ select session.
 - Pulls Coachless patch, rune, summoner spell, and item stats.
 - Builds recommendations.
-- Applies supported changes in LCU. Set `--dry-run=true` or `sync.dry_run: true` to preview the plan.
+- Applies supported changes in LCU. Preview with `--dry-run` or `sync.dry_run: true`.
 
 ## Capability matrix
 
@@ -102,7 +102,7 @@ Flags:
 - `--apply-runes` (default `true`)
 - `--apply-spells` (default `true`)
 - `--config string` (default `"config.yaml"`)
-- `--dry-run` (default `true`)
+- `--dry-run` (CLI uses `sync.dry_run` when you omit the flag)
 - `--patch string` (empty = latest patch from Coachless)
 
 ### `lol-autobuild watch`
@@ -119,12 +119,12 @@ Flags:
 - `--apply-runes` (default `true`)
 - `--apply-spells` (default `true`)
 - `--config string` (default `"config.yaml"`)
-- `--dry-run` (default `true`)
+- `--dry-run` (CLI uses `sync.dry_run` when you omit the flag)
 - `--patch string` (empty = latest patch from Coachless)
 
 `watch` waits for champ select finalization before it syncs. It does not run a sync cycle at startup.
 
-CLI `sync` and `watch` default to `--dry-run=true`. Pass `--dry-run=false` to apply LCU changes from the CLI.
+CLI `sync` and `watch` use `sync.dry_run` when you omit `--dry-run`. Pass `--dry-run` to preview or `--dry-run=false` to apply LCU changes from the CLI.
 
 ## Config reference
 
@@ -170,7 +170,7 @@ LCU connection discovery tries League process args first (`--app-port`, `--remot
 - Watch mode only reacts to champ select session `Create` and `Update` events from `/lol-champ-select/v1/session` when `data.timer.phase == "FINALIZATION"`.
 - Watch mode attempts one sync per champ select. A session `Delete` or a new non-finalized `Create` event resets that lock.
 - If the finalization sync fails, watch mode waits for the next champ select before it tries again.
-- The local UI uses the `sync` config section. CLI flags still control `sync` and `watch`.
+- The local UI and CLI read the `sync` config section. CLI flags override patch, apply, and dry-run fields.
 - Free Coachless tokens use the latest non-Premium patch when the patch setting is blank. Requesting the newest Premium patch or manual patch additions returns an error.
 - Rune page apply reuses a deletable `AutoBuild` page or creates one without deleting user pages. If replacing a managed page fails after delete, the app attempts to restore that page and reports the failure context.
 - Browser-assisted auth capture watches the Coachless login response and stores the token pair.

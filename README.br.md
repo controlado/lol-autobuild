@@ -56,7 +56,7 @@ Observar a seleção de campeões em modo de preview pela CLI:
 lol-autobuild watch --dry-run
 ```
 
-Comandos da CLI usam dry-run por padrão. Passe `--dry-run=false` para aplicar mudanças no client.
+Comandos da CLI leem `sync.dry_run` da configuração. Passe `--dry-run` para simular ou `--dry-run=false` para aplicar mudanças no client.
 
 Comandos avançados, configuração e limites ficam em [USAGE.md](USAGE.md).
 

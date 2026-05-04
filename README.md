@@ -56,7 +56,7 @@ Watch champion select in CLI preview mode:
 lol-autobuild watch --dry-run
 ```
 
-CLI commands use dry-run by default. Pass `--dry-run=false` to apply changes to the League Client.
+CLI commands read `sync.dry_run` from config. Pass `--dry-run` to preview or `--dry-run=false` to apply changes to the League Client.
 
 Advanced commands, config, and limits live in [USAGE.md](USAGE.md).
 
