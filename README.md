@@ -8,7 +8,9 @@
 
 Set up League of Legends rune pages, item sets, and summoner spells from Coachless data.
 
-<img width="1300" height="1162" alt="lol-autobuild local UI" src="docs/assets/screenshots/ui-en.png" />
+<video width="1300" controls muted playsinline src="docs/assets/demo/lol-autobuild-demo.mp4"></video>
+
+[Watch the demo video](docs/assets/demo/lol-autobuild-demo.mp4)
 
 </div>
 
