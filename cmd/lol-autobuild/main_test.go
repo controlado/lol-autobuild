@@ -44,6 +44,30 @@ func TestRunCommandsUseDryRunFlagDefaultFromConfig(t *testing.T) {
 	}
 }
 
+func TestSubcommandsRejectPositionalArgs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		cmd  func() *cobra.Command
+	}{
+		{name: "ui", cmd: uiCmd},
+		{name: "sync", cmd: syncCmd},
+		{name: "watch", cmd: watchCmd},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cmd := tt.cmd()
+			if err := cmd.Args(cmd, []string{"extra"}); err == nil {
+				t.Fatal("Args() error = nil, want error for positional arg")
+			}
+		})
+	}
+}
+
 func TestSyncRequestFromConfigAndFlagsUsesConfigByDefault(t *testing.T) {
 	t.Parallel()
 

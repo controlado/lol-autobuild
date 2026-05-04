@@ -68,6 +68,7 @@ func uiCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ui",
 		Short: "Open the local settings UI",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runUI(cmd.Context(), configPath)
 		},
@@ -83,6 +84,7 @@ func syncCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sync",
 		Short: "Run one synchronization cycle",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfigAndLogging(flags.ConfigPath)
 			if err != nil {
@@ -120,6 +122,7 @@ func watchCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "watch",
 		Short: "Watch LCU events and run synchronization continuously",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfigAndLogging(flags.ConfigPath)
 			if err != nil {
