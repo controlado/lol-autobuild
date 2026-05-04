@@ -9,7 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Added champion and position autodetection through LCU champ select session reads.
-- Added detected selection fields to `SyncResult` (`DetectedChampionID`, `DetectedRole`, `DetectedQueueID`).
+- Added detected selection fields to `SyncResult` (`DetectedChampionID`, `DetectedPosition`, `DetectedQueueID`).
 - Added item set apply flow with managed set upsert in LCU.
 - Added staged item set block apply in LCU with ordered block support.
 - Added summoner spell apply flow with Flash slot preservation behavior.
