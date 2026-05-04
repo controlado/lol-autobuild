@@ -13,8 +13,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
-	"github.com/controlado/lol-autobuild/internal/position"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 )
 
 func TestApplyRunePageReturnsNotConfiguredWhenDisabled(t *testing.T) {
@@ -45,11 +44,11 @@ func TestApplyRunePageInvalidRequest(t *testing.T) {
 
 	tests := []struct {
 		name string
-		req  ports.ApplyRunePageRequest
+		req  domain.ApplyRunePageRequest
 	}{
 		{
 			name: "champion must be > 0",
-			req: func() ports.ApplyRunePageRequest {
+			req: func() domain.ApplyRunePageRequest {
 				req := validRunePageApplyRequest()
 				req.ChampionID = 0
 				return req
@@ -57,7 +56,7 @@ func TestApplyRunePageInvalidRequest(t *testing.T) {
 		},
 		{
 			name: "position must be valid",
-			req: func() ports.ApplyRunePageRequest {
+			req: func() domain.ApplyRunePageRequest {
 				req := validRunePageApplyRequest()
 				req.Position = "invalid"
 				return req
@@ -65,7 +64,7 @@ func TestApplyRunePageInvalidRequest(t *testing.T) {
 		},
 		{
 			name: "primary style must be valid",
-			req: func() ports.ApplyRunePageRequest {
+			req: func() domain.ApplyRunePageRequest {
 				req := validRunePageApplyRequest()
 				req.Page.PrimaryStyleID = 9999
 				return req
@@ -73,7 +72,7 @@ func TestApplyRunePageInvalidRequest(t *testing.T) {
 		},
 		{
 			name: "styles must be distinct",
-			req: func() ports.ApplyRunePageRequest {
+			req: func() domain.ApplyRunePageRequest {
 				req := validRunePageApplyRequest()
 				req.Page.SubStyleID = req.Page.PrimaryStyleID
 				return req
@@ -81,7 +80,7 @@ func TestApplyRunePageInvalidRequest(t *testing.T) {
 		},
 		{
 			name: "requires nine perks",
-			req: func() ports.ApplyRunePageRequest {
+			req: func() domain.ApplyRunePageRequest {
 				req := validRunePageApplyRequest()
 				req.Page.SelectedPerkIDs = req.Page.SelectedPerkIDs[:8]
 				return req
@@ -89,7 +88,7 @@ func TestApplyRunePageInvalidRequest(t *testing.T) {
 		},
 		{
 			name: "perk ids must be positive",
-			req: func() ports.ApplyRunePageRequest {
+			req: func() domain.ApplyRunePageRequest {
 				req := validRunePageApplyRequest()
 				req.Page.SelectedPerkIDs[3] = 0
 				return req
@@ -120,8 +119,8 @@ func TestApplyRunePageSuccessCreatesPageWithoutDeletingUserPage(t *testing.T) {
 		createPayload      runePageCreateRequest
 		expectedPerkIDs    = validRunePageApplyRequest().Page.SelectedPerkIDs
 		expectedPageName   = "AutoBuild 240 top"
-		expectedPrimary    = ports.RuneStylePrecision
-		expectedSecondary  = ports.RuneStyleSorcery
+		expectedPrimary    = domain.RuneStylePrecision
+		expectedSecondary  = domain.RuneStyleSorcery
 		expectedCurrentOld = []int{8437, 8446, 8444, 8451, 8233, 8237, 5008, 5008, 5002}
 	)
 
@@ -136,8 +135,8 @@ func TestApplyRunePageSuccessCreatesPageWithoutDeletingUserPage(t *testing.T) {
 				Current:         true,
 				IsDeletable:     true,
 				Name:            "User Page",
-				PrimaryStyleID:  ports.RuneStyleResolve,
-				SubStyleID:      ports.RuneStyleSorcery,
+				PrimaryStyleID:  domain.RuneStyleResolve,
+				SubStyleID:      domain.RuneStyleSorcery,
 				SelectedPerkIDs: expectedCurrentOld,
 			})
 		case "/lol-perks/v1/pages/validate":
@@ -152,8 +151,8 @@ func TestApplyRunePageSuccessCreatesPageWithoutDeletingUserPage(t *testing.T) {
 						Current:         true,
 						IsDeletable:     true,
 						Name:            "User Page",
-						PrimaryStyleID:  ports.RuneStyleResolve,
-						SubStyleID:      ports.RuneStyleSorcery,
+						PrimaryStyleID:  domain.RuneStyleResolve,
+						SubStyleID:      domain.RuneStyleSorcery,
 						SelectedPerkIDs: expectedCurrentOld,
 					},
 				})
@@ -210,8 +209,8 @@ func TestApplyRunePageReusesExistingManagedPageWhenCurrentIsUserPage(t *testing.
 				Current:         true,
 				IsDeletable:     true,
 				Name:            "User Page",
-				PrimaryStyleID:  ports.RuneStyleResolve,
-				SubStyleID:      ports.RuneStyleSorcery,
+				PrimaryStyleID:  domain.RuneStyleResolve,
+				SubStyleID:      domain.RuneStyleSorcery,
 				SelectedPerkIDs: []int{8437, 8446, 8444, 8451, 8233, 8237, 5008, 5008, 5002},
 			})
 		case "/lol-perks/v1/pages":
@@ -277,8 +276,8 @@ func TestApplyRunePageRestoresNonCurrentManagedPageWithoutSelectingItWhenCreateF
 						Current:         false,
 						IsDeletable:     true,
 						Name:            "AutoBuild 777 mid",
-						PrimaryStyleID:  ports.RuneStyleResolve,
-						SubStyleID:      ports.RuneStyleSorcery,
+						PrimaryStyleID:  domain.RuneStyleResolve,
+						SubStyleID:      domain.RuneStyleSorcery,
 						SelectedPerkIDs: []int{8437, 8446, 8444, 8451, 8233, 8237, 5008, 5008, 5002},
 					},
 				})
@@ -532,8 +531,8 @@ func TestApplyRunePageSuccessReplacesManagedPage(t *testing.T) {
 				Current:         true,
 				IsDeletable:     true,
 				Name:            "AutoBuild 240 top",
-				PrimaryStyleID:  ports.RuneStyleResolve,
-				SubStyleID:      ports.RuneStyleSorcery,
+				PrimaryStyleID:  domain.RuneStyleResolve,
+				SubStyleID:      domain.RuneStyleSorcery,
 				SelectedPerkIDs: []int{8437, 8446, 8444, 8451, 8233, 8237, 5008, 5008, 5002},
 			})
 		case "/lol-perks/v1/pages/validate":
@@ -584,8 +583,8 @@ func TestApplyRunePageReturnsCreateErrorForUserPage(t *testing.T) {
 				Current:         true,
 				IsDeletable:     true,
 				Name:            "User Page",
-				PrimaryStyleID:  ports.RuneStyleResolve,
-				SubStyleID:      ports.RuneStyleSorcery,
+				PrimaryStyleID:  domain.RuneStyleResolve,
+				SubStyleID:      domain.RuneStyleSorcery,
 				SelectedPerkIDs: []int{8437, 8446, 8444, 8451, 8233, 8237, 5008, 5008, 5002},
 			})
 		case "/lol-perks/v1/pages/validate":
@@ -618,7 +617,7 @@ func TestApplyRunePageReturnsCreateErrorForUserPage(t *testing.T) {
 	if !strings.Contains(err.Error(), "create rune page failed LCU validation") {
 		t.Fatalf("expected create validation context, got %v", err)
 	}
-	if errors.Is(err, ports.ErrRunePageLimitReached) {
+	if errors.Is(err, domain.ErrRunePageLimitReached) {
 		t.Fatalf("unexpected ErrRunePageLimitReached for generic create failure")
 	}
 }
@@ -655,7 +654,7 @@ func TestApplyRunePageReturnsLimitReachedWhenCreateHitsPageCap(t *testing.T) {
 	if !errors.Is(err, ErrRunePageApplyFailed) {
 		t.Fatalf("expected ErrRunePageApplyFailed, got %v", err)
 	}
-	if !errors.Is(err, ports.ErrRunePageLimitReached) {
+	if !errors.Is(err, domain.ErrRunePageLimitReached) {
 		t.Fatalf("expected ErrRunePageLimitReached, got %v", err)
 	}
 	if !postCalled {
@@ -677,8 +676,8 @@ func TestApplyRunePageFailsWhenCurrentPageIsNotDeletable(t *testing.T) {
 				Current:         true,
 				IsDeletable:     false,
 				Name:            "AutoBuild 240 top",
-				PrimaryStyleID:  ports.RuneStylePrecision,
-				SubStyleID:      ports.RuneStyleSorcery,
+				PrimaryStyleID:  domain.RuneStylePrecision,
+				SubStyleID:      domain.RuneStyleSorcery,
 				SelectedPerkIDs: validRunePageApplyRequest().Page.SelectedPerkIDs,
 			})
 		case "/lol-perks/v1/pages/123", "/lol-perks/v1/pages":
@@ -735,8 +734,8 @@ func TestApplyRunePageRestoresPreviousPageWhenCreateFails(t *testing.T) {
 				Current:         true,
 				IsDeletable:     true,
 				Name:            restoredOldName,
-				PrimaryStyleID:  ports.RuneStyleResolve,
-				SubStyleID:      ports.RuneStyleSorcery,
+				PrimaryStyleID:  domain.RuneStyleResolve,
+				SubStyleID:      domain.RuneStyleSorcery,
 				SelectedPerkIDs: restorePerkIDs,
 			})
 		case "/lol-perks/v1/pages/validate":
@@ -767,7 +766,7 @@ func TestApplyRunePageRestoresPreviousPageWhenCreateFails(t *testing.T) {
 	if postCount != 2 {
 		t.Fatalf("expected create plus restore calls, got %d", postCount)
 	}
-	if restorePayload.Name != restoredOldName || !restorePayload.Current || restorePayload.PrimaryStyleID != ports.RuneStyleResolve {
+	if restorePayload.Name != restoredOldName || !restorePayload.Current || restorePayload.PrimaryStyleID != domain.RuneStyleResolve {
 		t.Fatalf("unexpected restore payload: %#v", restorePayload)
 	}
 	if !reflect.DeepEqual(restorePayload.SelectedPerkIDs, restorePerkIDs) {
@@ -801,8 +800,8 @@ func TestApplyRunePageRestoresPreviousPageWhenApplyContextIsCanceledAfterDelete(
 				Current:         true,
 				IsDeletable:     true,
 				Name:            restoredOldName,
-				PrimaryStyleID:  ports.RuneStyleResolve,
-				SubStyleID:      ports.RuneStyleSorcery,
+				PrimaryStyleID:  domain.RuneStyleResolve,
+				SubStyleID:      domain.RuneStyleSorcery,
 				SelectedPerkIDs: restorePerkIDs,
 			})
 		case "/lol-perks/v1/pages/validate":
@@ -837,7 +836,7 @@ func TestApplyRunePageRestoresPreviousPageWhenApplyContextIsCanceledAfterDelete(
 	if atomic.LoadInt32(&postCount) != 2 {
 		t.Fatalf("expected create plus restore calls, got %d", postCount)
 	}
-	if restorePayload.Name != restoredOldName || !restorePayload.Current || restorePayload.PrimaryStyleID != ports.RuneStyleResolve {
+	if restorePayload.Name != restoredOldName || !restorePayload.Current || restorePayload.PrimaryStyleID != domain.RuneStyleResolve {
 		t.Fatalf("unexpected restore payload: %#v", restorePayload)
 	}
 	if !reflect.DeepEqual(restorePayload.SelectedPerkIDs, restorePerkIDs) {
@@ -862,8 +861,8 @@ func TestApplyRunePageReportsRestoreFailureWhenCreateAndRestoreFail(t *testing.T
 				Current:         true,
 				IsDeletable:     true,
 				Name:            "AutoBuild 240 top",
-				PrimaryStyleID:  ports.RuneStyleResolve,
-				SubStyleID:      ports.RuneStyleSorcery,
+				PrimaryStyleID:  domain.RuneStyleResolve,
+				SubStyleID:      domain.RuneStyleSorcery,
 				SelectedPerkIDs: []int{8437, 8446, 8444, 8451, 8233, 8237, 5008, 5008, 5002},
 			})
 		case "/lol-perks/v1/pages/validate":
@@ -892,13 +891,13 @@ func TestApplyRunePageReportsRestoreFailureWhenCreateAndRestoreFail(t *testing.T
 	}
 }
 
-func validRunePageApplyRequest() ports.ApplyRunePageRequest {
-	return ports.ApplyRunePageRequest{
+func validRunePageApplyRequest() domain.ApplyRunePageRequest {
+	return domain.ApplyRunePageRequest{
 		ChampionID: 240,
-		Position:   position.Top,
-		Page: ports.RunePage{
-			PrimaryStyleID:  ports.RuneStylePrecision,
-			SubStyleID:      ports.RuneStyleSorcery,
+		Position:   domain.Top,
+		Page: domain.RunePage{
+			PrimaryStyleID:  domain.RuneStylePrecision,
+			SubStyleID:      domain.RuneStyleSorcery,
 			SelectedPerkIDs: []int{8005, 9101, 9104, 8299, 8233, 8237, 5005, 5008, 5002},
 		},
 	}

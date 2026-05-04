@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/controlado/lol-autobuild/pkg/lolautobuild"
+	"github.com/controlado/lol-autobuild/internal/autobuild"
 )
 
 type Config struct {
@@ -84,16 +84,16 @@ func Defaults() Config {
 		},
 		Recommendation: RecommendationConfig{
 			MinOccurrence: 1000,
-			TopItems:      6,
+			TopItems:      10,
 			TopSpells:     2,
 		},
 		LCU: LCUConfig{
 			Enabled: false,
 		},
 		Sync: SyncConfig{
-			PatchAdditionsMode: lolautobuild.PatchAdditionsModeAuto,
-			PatchAdditions:     lolautobuild.PatchAdditionsDefault,
-			LeagueTierPreset:   lolautobuild.LeagueTierPresetDefault,
+			PatchAdditionsMode: autobuild.PatchAdditionsModeAuto,
+			PatchAdditions:     autobuild.PatchAdditionsDefault,
+			LeagueTierPreset:   autobuild.LeagueTierPresetDefault,
 			ApplyItems:         true,
 			ApplyRunes:         true,
 			ApplySpells:        true,
@@ -143,21 +143,21 @@ func (c Config) Validate() error {
 	}
 
 	switch c.Sync.PatchAdditionsMode {
-	case lolautobuild.PatchAdditionsModeAuto, lolautobuild.PatchAdditionsModeManual:
+	case autobuild.PatchAdditionsModeAuto, autobuild.PatchAdditionsModeManual:
 	default:
-		errs = append(errs, fmt.Errorf("sync.patch_additions_mode must be %s or %s", lolautobuild.PatchAdditionsModeAuto, lolautobuild.PatchAdditionsModeManual))
+		errs = append(errs, fmt.Errorf("sync.patch_additions_mode must be %s or %s", autobuild.PatchAdditionsModeAuto, autobuild.PatchAdditionsModeManual))
 	}
 
-	if c.Sync.PatchAdditions < 0 || c.Sync.PatchAdditions > lolautobuild.PatchAdditionsMax {
-		errs = append(errs, fmt.Errorf("sync.patch_additions must be between 0 and %d", lolautobuild.PatchAdditionsMax))
+	if c.Sync.PatchAdditions < 0 || c.Sync.PatchAdditions > autobuild.PatchAdditionsMax {
+		errs = append(errs, fmt.Errorf("sync.patch_additions must be between 0 and %d", autobuild.PatchAdditionsMax))
 	}
 
 	switch c.Sync.LeagueTierPreset {
-	case lolautobuild.LeagueTierPresetGoldPlus,
-		lolautobuild.LeagueTierPresetPlatinumPlus,
-		lolautobuild.LeagueTierPresetEmeraldPlus,
-		lolautobuild.LeagueTierPresetDiamondPlus,
-		lolautobuild.LeagueTierPresetMasterPlus:
+	case autobuild.LeagueTierPresetGoldPlus,
+		autobuild.LeagueTierPresetPlatinumPlus,
+		autobuild.LeagueTierPresetEmeraldPlus,
+		autobuild.LeagueTierPresetDiamondPlus,
+		autobuild.LeagueTierPresetMasterPlus:
 	default:
 		errs = append(errs, errors.New("sync.league_tier_preset is invalid"))
 	}

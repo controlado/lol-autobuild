@@ -1,21 +1,19 @@
-package lolautobuild
+package autobuild
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
-	"github.com/controlado/lol-autobuild/internal/position"
-	"github.com/controlado/lol-autobuild/internal/recommend"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
+	"github.com/controlado/lol-autobuild/internal/autobuild/recommend"
 )
 
 func TestWatchDoesNotRunStartupSyncAndStopsGracefully(t *testing.T) {
 	t.Parallel()
 
 	started := make(chan struct{})
-	lcu := watchTestLCU(func(ctx context.Context, _ chan<- ports.LCUEvent, _ chan<- ports.LCUWatchNotice) error {
+	lcu := watchTestLCU(func(ctx context.Context, _ chan<- domain.LCUEvent, _ chan<- domain.LCUWatchNotice) error {
 		close(started)
 		<-ctx.Done()
 		return nil
@@ -56,7 +54,7 @@ func TestWatchDoesNotRunStartupSyncAndStopsGracefully(t *testing.T) {
 func TestWatchIgnoresNonFinalizationEventsAndSyncsOnFinalization(t *testing.T) {
 	t.Parallel()
 
-	events := make(chan ports.LCUEvent)
+	events := make(chan domain.LCUEvent)
 	lcu := watchTestLCU(watchEventsWithNoticesFrom(events))
 	svc := newWatchTestService(t, lcu)
 
@@ -74,11 +72,10 @@ func TestWatchIgnoresNonFinalizationEventsAndSyncsOnFinalization(t *testing.T) {
 
 	sendWatchEvent(t, events, champSelectSessionEvent("Create", "BAN_PICK"))
 	sendWatchEvent(t, events, champSelectSessionEvent("Update", "BAN_PICK"))
-	sendWatchEvent(t, events, ports.LCUEvent{EventType: "Update", URI: "/lol-champ-select/v1/session"})
-	sendWatchEvent(t, events, ports.LCUEvent{
+	sendWatchEvent(t, events, domain.LCUEvent{EventType: "Update", URI: "/lol-champ-select/v1/session"})
+	sendWatchEvent(t, events, domain.LCUEvent{
 		EventType: "Create",
 		URI:       "/lol-champ-select/v1/grid",
-		Data:      json.RawMessage(`{"timer":{"phase":"FINALIZATION"}}`),
 	})
 
 	assertNoWatchCycle(t, cycleCh, 80*time.Millisecond)
@@ -107,7 +104,7 @@ func TestWatchIgnoresNonFinalizationEventsAndSyncsOnFinalization(t *testing.T) {
 func TestWatchRunsOnlyOncePerFinalization(t *testing.T) {
 	t.Parallel()
 
-	events := make(chan ports.LCUEvent)
+	events := make(chan domain.LCUEvent)
 	lcu := watchTestLCU(watchEventsWithNoticesFrom(events))
 	svc := newWatchTestService(t, lcu)
 
@@ -147,11 +144,11 @@ func TestWatchResetsFinalizationLockBetweenChampSelects(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		resetEvent ports.LCUEvent
+		resetEvent domain.LCUEvent
 	}{
 		{
 			name:       "delete session",
-			resetEvent: ports.LCUEvent{EventType: "Delete", URI: "/lol-champ-select/v1/session"},
+			resetEvent: domain.LCUEvent{EventType: "Delete", URI: "/lol-champ-select/v1/session"},
 		},
 		{
 			name:       "new non-finalized create",
@@ -163,7 +160,7 @@ func TestWatchResetsFinalizationLockBetweenChampSelects(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			events := make(chan ports.LCUEvent)
+			events := make(chan domain.LCUEvent)
 			lcu := watchTestLCU(watchEventsWithNoticesFrom(events))
 			svc := newWatchTestService(t, lcu)
 
@@ -222,7 +219,7 @@ func TestWatchReconcilesSnapshotEvents(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			events := make(chan ports.LCUEvent)
+			events := make(chan domain.LCUEvent)
 			lcu := watchTestLCU(watchEventsWithNoticesFrom(events))
 			svc := newWatchTestService(t, lcu)
 
@@ -238,7 +235,7 @@ func TestWatchReconcilesSnapshotEvents(t *testing.T) {
 				}))
 			}()
 
-			sendWatchEvent(t, events, champSelectSessionEventFromSource("Snapshot", tt.phase, ports.LCUEventSourceSnapshot, 1, "9876"))
+			sendWatchEvent(t, events, champSelectSessionEventFromSource("Snapshot", tt.phase, domain.LCUEventSourceSnapshot, 1, "9876"))
 
 			if tt.wantSync {
 				cycle := waitForWatchCycle(t, cycleCh)
@@ -271,35 +268,35 @@ func TestWatchSessionGateDeduplicatesMixedGameIDPayloads(t *testing.T) {
 
 	tests := []struct {
 		name               string
-		beforeFirstCycle   []ports.LCUEvent
-		afterFirstCycle    []ports.LCUEvent
+		beforeFirstCycle   []domain.LCUEvent
+		afterFirstCycle    []domain.LCUEvent
 		wantFirstEventType string
 	}{
 		{
 			name: "game id then missing game id",
-			beforeFirstCycle: []ports.LCUEvent{
-				champSelectSessionEventFromSource("Update", "FINALIZATION", ports.LCUEventSourceStream, 1, "9876"),
+			beforeFirstCycle: []domain.LCUEvent{
+				champSelectSessionEventFromSource("Update", "FINALIZATION", domain.LCUEventSourceStream, 1, "9876"),
 			},
-			afterFirstCycle: []ports.LCUEvent{
-				champSelectSessionEventFromSource("Update", "FINALIZATION", ports.LCUEventSourceStream, 1, ""),
+			afterFirstCycle: []domain.LCUEvent{
+				champSelectSessionEventFromSource("Update", "FINALIZATION", domain.LCUEventSourceStream, 1, ""),
 			},
 			wantFirstEventType: "Update",
 		},
 		{
 			name: "missing game id then game id after sync",
-			beforeFirstCycle: []ports.LCUEvent{
-				champSelectSessionEventFromSource("Update", "FINALIZATION", ports.LCUEventSourceStream, 1, ""),
+			beforeFirstCycle: []domain.LCUEvent{
+				champSelectSessionEventFromSource("Update", "FINALIZATION", domain.LCUEventSourceStream, 1, ""),
 			},
-			afterFirstCycle: []ports.LCUEvent{
-				champSelectSessionEventFromSource("Update", "FINALIZATION", ports.LCUEventSourceStream, 1, "9876"),
+			afterFirstCycle: []domain.LCUEvent{
+				champSelectSessionEventFromSource("Update", "FINALIZATION", domain.LCUEventSourceStream, 1, "9876"),
 			},
 			wantFirstEventType: "Update",
 		},
 		{
 			name: "missing game id promoted while pending",
-			beforeFirstCycle: []ports.LCUEvent{
-				champSelectSessionEventFromSource("Update", "FINALIZATION", ports.LCUEventSourceStream, 1, ""),
-				champSelectSessionEventFromSource("Update", "FINALIZATION", ports.LCUEventSourceStream, 1, "9876"),
+			beforeFirstCycle: []domain.LCUEvent{
+				champSelectSessionEventFromSource("Update", "FINALIZATION", domain.LCUEventSourceStream, 1, ""),
+				champSelectSessionEventFromSource("Update", "FINALIZATION", domain.LCUEventSourceStream, 1, "9876"),
 			},
 			wantFirstEventType: "Update",
 		},
@@ -309,7 +306,7 @@ func TestWatchSessionGateDeduplicatesMixedGameIDPayloads(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			events := make(chan ports.LCUEvent)
+			events := make(chan domain.LCUEvent)
 			lcu := watchTestLCU(watchEventsWithNoticesFrom(events))
 			svc := newWatchTestService(t, lcu)
 
@@ -354,15 +351,15 @@ func TestWatchSessionGateAllowsNewFinalizationWindows(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		secondEvent ports.LCUEvent
+		secondEvent domain.LCUEvent
 	}{
 		{
 			name:        "reconnected update without game id",
-			secondEvent: champSelectSessionEventFromSource("Update", "FINALIZATION", ports.LCUEventSourceStream, 2, ""),
+			secondEvent: champSelectSessionEventFromSource("Update", "FINALIZATION", domain.LCUEventSourceStream, 2, ""),
 		},
 		{
 			name:        "create finalization starts new anonymous session",
-			secondEvent: champSelectSessionEventFromSource("Create", "FINALIZATION", ports.LCUEventSourceStream, 1, ""),
+			secondEvent: champSelectSessionEventFromSource("Create", "FINALIZATION", domain.LCUEventSourceStream, 1, ""),
 		},
 	}
 
@@ -370,7 +367,7 @@ func TestWatchSessionGateAllowsNewFinalizationWindows(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			events := make(chan ports.LCUEvent)
+			events := make(chan domain.LCUEvent)
 			lcu := watchTestLCU(watchEventsWithNoticesFrom(events))
 			svc := newWatchTestService(t, lcu)
 
@@ -386,7 +383,7 @@ func TestWatchSessionGateAllowsNewFinalizationWindows(t *testing.T) {
 				}))
 			}()
 
-			sendWatchEvent(t, events, champSelectSessionEventFromSource("Update", "FINALIZATION", ports.LCUEventSourceStream, 1, ""))
+			sendWatchEvent(t, events, champSelectSessionEventFromSource("Update", "FINALIZATION", domain.LCUEventSourceStream, 1, ""))
 			_ = waitForWatchCycle(t, cycleCh)
 
 			sendWatchEvent(t, events, tt.secondEvent)
@@ -407,11 +404,11 @@ func TestWatchForwardsSnapshotUnavailableNotice(t *testing.T) {
 
 	started := make(chan struct{})
 	lcu := watchTestLCU(nil)
-	lcu.watchEventsWithNoticesFn = func(ctx context.Context, _ chan<- ports.LCUEvent, notices chan<- ports.LCUWatchNotice) error {
+	lcu.watchEventsWithNoticesFn = func(ctx context.Context, _ chan<- domain.LCUEvent, notices chan<- domain.LCUWatchNotice) error {
 		close(started)
 		select {
-		case notices <- ports.LCUWatchNotice{
-			Kind:    ports.LCUWatchNoticeSnapshotWaiting,
+		case notices <- domain.LCUWatchNotice{
+			Kind:    domain.LCUWatchNoticeSnapshotWaiting,
 			Message: "snapshot unavailable",
 			Err:     context.DeadlineExceeded,
 			URI:     champSelectSessionURI,
@@ -483,11 +480,11 @@ func newWatchTestService(t *testing.T, lcu *lcuStub) Service {
 	return svc
 }
 
-func watchTestLCU(watcher func(context.Context, chan<- ports.LCUEvent, chan<- ports.LCUWatchNotice) error) *lcuStub {
+func watchTestLCU(watcher func(context.Context, chan<- domain.LCUEvent, chan<- domain.LCUWatchNotice) error) *lcuStub {
 	return &lcuStub{
-		detectedSelection: ports.DetectedSelection{
+		detectedSelection: domain.DetectedSelection{
 			ChampionID: 240,
-			Position:   position.Mid,
+			Position:   domain.Mid,
 			QueueID:    420,
 		},
 		watchEventsWithNoticesFn: watcher,
@@ -506,8 +503,8 @@ func watchTestRequest(onCycle func(WatchCycle)) WatchRequest {
 	}
 }
 
-func watchEventsWithNoticesFrom(events <-chan ports.LCUEvent) func(context.Context, chan<- ports.LCUEvent, chan<- ports.LCUWatchNotice) error {
-	return func(ctx context.Context, out chan<- ports.LCUEvent, _ chan<- ports.LCUWatchNotice) error {
+func watchEventsWithNoticesFrom(events <-chan domain.LCUEvent) func(context.Context, chan<- domain.LCUEvent, chan<- domain.LCUWatchNotice) error {
+	return func(ctx context.Context, out chan<- domain.LCUEvent, _ chan<- domain.LCUWatchNotice) error {
 		for {
 			select {
 			case event := <-events:
@@ -523,30 +520,22 @@ func watchEventsWithNoticesFrom(events <-chan ports.LCUEvent) func(context.Conte
 	}
 }
 
-func champSelectSessionEvent(eventType string, phase string) ports.LCUEvent {
+func champSelectSessionEvent(eventType string, phase string) domain.LCUEvent {
 	return champSelectSessionEventFromSource(eventType, phase, "", 0, "")
 }
 
-func champSelectSessionEventFromSource(eventType string, phase string, source ports.LCUEventSource, connectionID int, gameID string) ports.LCUEvent {
-	payload := map[string]any{
-		"timer": map[string]any{
-			"phase": phase,
-		},
-	}
-	if gameID != "" {
-		payload["gameId"] = gameID
-	}
-	raw, _ := json.Marshal(payload)
-	return ports.LCUEvent{
-		EventType:    eventType,
-		URI:          "/lol-champ-select/v1/session",
-		Data:         raw,
-		Source:       source,
-		ConnectionID: connectionID,
+func champSelectSessionEventFromSource(eventType string, phase string, source domain.LCUEventSource, connectionID int, gameID string) domain.LCUEvent {
+	return domain.LCUEvent{
+		EventType:        eventType,
+		URI:              "/lol-champ-select/v1/session",
+		Source:           source,
+		ConnectionID:     connectionID,
+		ChampSelectPhase: phase,
+		GameID:           gameID,
 	}
 }
 
-func sendWatchEvent(t *testing.T, events chan<- ports.LCUEvent, event ports.LCUEvent) {
+func sendWatchEvent(t *testing.T, events chan<- domain.LCUEvent, event domain.LCUEvent) {
 	t.Helper()
 
 	select {

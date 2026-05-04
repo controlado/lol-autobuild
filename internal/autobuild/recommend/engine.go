@@ -3,8 +3,8 @@ package recommend
 import (
 	"sort"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
-	"github.com/controlado/lol-autobuild/internal/runes"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
+	"github.com/controlado/lol-autobuild/internal/autobuild/runes"
 )
 
 type Engine struct{}
@@ -13,8 +13,8 @@ func NewEngine() *Engine {
 	return &Engine{}
 }
 
-func (e *Engine) Recommend(input ports.RecommendationInput) ports.Recommendation {
-	out := ports.Recommendation{}
+func (e *Engine) Recommend(input domain.RecommendationInput) domain.Recommendation {
+	out := domain.Recommendation{}
 
 	keystones := filterKeystones(input.KeystoneStats, input.MinOccurrence)
 	if len(keystones) > 0 {
@@ -44,8 +44,8 @@ func (e *Engine) Recommend(input ports.RecommendationInput) ports.Recommendation
 	return out
 }
 
-func (e *Engine) RecommendRunePage(input ports.RunePageRecommendationInput) ports.RunePageRecommendation {
-	var out ports.RunePageRecommendation
+func (e *Engine) RecommendRunePage(input domain.RunePageRecommendationInput) domain.RunePageRecommendation {
+	var out domain.RunePageRecommendation
 
 	primaryStyleID, ok := runes.StyleForKeystone(input.Keystone.Rune)
 	if !ok {
@@ -61,7 +61,7 @@ func (e *Engine) RecommendRunePage(input ports.RunePageRecommendationInput) port
 
 	selectedPerkIDs := []int{input.Keystone.Rune}
 	for _, slot := range []struct {
-		stats   []ports.RuneStat
+		stats   []domain.RuneStat
 		warning string
 	}{
 		{stats: input.PrimaryRunes.RowOnes, warning: "no primary row 1 rune recommendation was available"},
@@ -86,7 +86,7 @@ func (e *Engine) RecommendRunePage(input ports.RunePageRecommendationInput) port
 	}
 
 	for _, slot := range []struct {
-		stats   []ports.RuneStat
+		stats   []domain.RuneStat
 		warning string
 	}{
 		{stats: input.Shards.Offense, warning: "no offense shard recommendation was available"},
@@ -101,7 +101,7 @@ func (e *Engine) RecommendRunePage(input ports.RunePageRecommendationInput) port
 		selectedPerkIDs = append(selectedPerkIDs, stat.Rune)
 	}
 
-	out.Page = &ports.RunePage{
+	out.Page = &domain.RunePage{
 		PrimaryStyleID:  primaryStyleID,
 		SubStyleID:      secondaryStyleID,
 		SelectedPerkIDs: selectedPerkIDs,
@@ -110,8 +110,8 @@ func (e *Engine) RecommendRunePage(input ports.RunePageRecommendationInput) port
 	return out
 }
 
-func filterKeystones(in []ports.KeystoneStat, minOccurrence int) []ports.KeystoneStat {
-	out := make([]ports.KeystoneStat, 0, len(in))
+func filterKeystones(in []domain.KeystoneStat, minOccurrence int) []domain.KeystoneStat {
+	out := make([]domain.KeystoneStat, 0, len(in))
 	for _, stat := range in {
 		if stat.Occurrence >= minOccurrence {
 			out = append(out, stat)
@@ -128,20 +128,20 @@ func filterKeystones(in []ports.KeystoneStat, minOccurrence int) []ports.Keyston
 	return out
 }
 
-func selectTopRune(in []ports.RuneStat, minOccurrence int) (ports.RuneStat, bool) {
+func selectTopRune(in []domain.RuneStat, minOccurrence int) (domain.RuneStat, bool) {
 	out := filterRunesWithFallback(in, minOccurrence)
 	if len(out) == 0 {
-		return ports.RuneStat{}, false
+		return domain.RuneStat{}, false
 	}
 
 	sortRuneStats(out)
 	return out[0], true
 }
 
-func selectSecondaryRunes(in ports.RuneStatsByRow, minOccurrence int) []ports.RuneStat {
+func selectSecondaryRunes(in domain.RuneStatsByRow, minOccurrence int) []domain.RuneStat {
 	var (
-		rows         = [][]ports.RuneStat{in.RowOnes, in.RowTwos, in.RowThrees}
-		candidates   = make([]ports.RuneStat, 0, 3)
+		rows         = [][]domain.RuneStat{in.RowOnes, in.RowTwos, in.RowThrees}
+		candidates   = make([]domain.RuneStat, 0, 3)
 		selectedRows = make([]bool, len(rows))
 	)
 	for idx, row := range rows {
@@ -156,7 +156,7 @@ func selectSecondaryRunes(in ports.RuneStatsByRow, minOccurrence int) []ports.Ru
 		return candidates[:2]
 	}
 
-	fallbacks := make([]ports.RuneStat, 0, len(rows))
+	fallbacks := make([]domain.RuneStat, 0, len(rows))
 	for idx, row := range rows {
 		if selectedRows[idx] {
 			continue
@@ -178,23 +178,23 @@ func selectSecondaryRunes(in ports.RuneStatsByRow, minOccurrence int) []ports.Ru
 	return candidates
 }
 
-func selectTopRuneStrict(in []ports.RuneStat, minOccurrence int) (ports.RuneStat, bool) {
-	out := make([]ports.RuneStat, 0, len(in))
+func selectTopRuneStrict(in []domain.RuneStat, minOccurrence int) (domain.RuneStat, bool) {
+	out := make([]domain.RuneStat, 0, len(in))
 	for _, stat := range in {
 		if stat.Occurrence >= minOccurrence {
 			out = append(out, stat)
 		}
 	}
 	if len(out) == 0 {
-		return ports.RuneStat{}, false
+		return domain.RuneStat{}, false
 	}
 
 	sortRuneStats(out)
 	return out[0], true
 }
 
-func filterRunesWithFallback(in []ports.RuneStat, minOccurrence int) []ports.RuneStat {
-	filtered := make([]ports.RuneStat, 0, len(in))
+func filterRunesWithFallback(in []domain.RuneStat, minOccurrence int) []domain.RuneStat {
+	filtered := make([]domain.RuneStat, 0, len(in))
 	for _, stat := range in {
 		if stat.Occurrence >= minOccurrence {
 			filtered = append(filtered, stat)
@@ -205,10 +205,10 @@ func filterRunesWithFallback(in []ports.RuneStat, minOccurrence int) []ports.Run
 		return filtered
 	}
 
-	return append([]ports.RuneStat{}, in...)
+	return append([]domain.RuneStat{}, in...)
 }
 
-func sortRuneStats(in []ports.RuneStat) {
+func sortRuneStats(in []domain.RuneStat) {
 	sort.Slice(in, func(i, j int) bool {
 		if in[i].WPAOverall == in[j].WPAOverall {
 			return in[i].Occurrence > in[j].Occurrence
@@ -217,8 +217,8 @@ func sortRuneStats(in []ports.RuneStat) {
 	})
 }
 
-func filterSpells(in []ports.SummonerSpellStat, minOccurrence int) []ports.SummonerSpellStat {
-	out := make([]ports.SummonerSpellStat, 0, len(in))
+func filterSpells(in []domain.SummonerSpellStat, minOccurrence int) []domain.SummonerSpellStat {
+	out := make([]domain.SummonerSpellStat, 0, len(in))
 	for _, stat := range in {
 		if stat.Occurrence >= minOccurrence {
 			out = append(out, stat)
@@ -235,8 +235,8 @@ func filterSpells(in []ports.SummonerSpellStat, minOccurrence int) []ports.Summo
 	return out
 }
 
-func filterItems(in []ports.ItemStat, minOccurrence int) []ports.ItemStat {
-	out := make([]ports.ItemStat, 0, len(in))
+func filterItems(in []domain.ItemStat, minOccurrence int) []domain.ItemStat {
+	out := make([]domain.ItemStat, 0, len(in))
 	for _, stat := range in {
 		if stat.Occurrence >= minOccurrence {
 			out = append(out, stat)

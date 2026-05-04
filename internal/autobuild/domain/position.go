@@ -1,8 +1,14 @@
-package position
+package domain
 
 import (
+	"errors"
 	"fmt"
 	"strings"
+)
+
+var (
+	ErrPositionNotAssigned = errors.New("position not assigned")
+	ErrPositionUnknown     = errors.New("position unknown")
 )
 
 type Position string
@@ -15,7 +21,7 @@ const (
 	Support Position = "support"
 )
 
-func FromRaw(r string) (Position, error) {
+func PositionFromRaw(r string) (Position, error) {
 	switch strings.ToLower(strings.TrimSpace(r)) {
 	case "top", "0":
 		return Top, nil
@@ -28,9 +34,9 @@ func FromRaw(r string) (Position, error) {
 	case "support", "sup", "utility", "4":
 		return Support, nil
 	case "", "fill", "unselected":
-		return "", ErrNotAssigned
+		return "", ErrPositionNotAssigned
 	default:
-		return "", fmt.Errorf("%w: position %q", ErrUnknown, r)
+		return "", fmt.Errorf("%w: position %q", ErrPositionUnknown, r)
 	}
 }
 

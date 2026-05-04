@@ -1,13 +1,5 @@
 package app
 
-import (
-	"errors"
-	"strings"
-
-	"github.com/controlado/lol-autobuild/internal/auth"
-	"github.com/controlado/lol-autobuild/internal/lcu"
-)
-
 const (
 	MessageCodeLCUOff                    = "lcu.off"
 	MessageCodeLCULockfileNotFound       = "lcu.lockfile_not_found"
@@ -29,22 +21,11 @@ func (m UserMessage) Empty() bool {
 }
 
 func userMessageFromErr(err error) UserMessage {
-	switch {
-	case err == nil:
+	if err == nil {
 		return UserMessage{}
-	case errors.Is(err, lcu.ErrNotConfigured):
-		return UserMessage{Code: MessageCodeLCUOff, Text: "LCU is off."}
-	case errors.Is(err, lcu.ErrLockfileNotFound):
-		return UserMessage{Code: MessageCodeLCULockfileNotFound, Text: "League Client is not open."}
-	case errors.Is(err, lcu.ErrChampSelectUnavailable):
-		return UserMessage{Code: MessageCodeLCUChampSelectUnavailable, Text: "Champ select is not ready."}
-	case errors.Is(err, lcu.ErrChampionNotSelected):
-		return UserMessage{Code: MessageCodeLCUChampionNotSelected, Text: "Select a champion first."}
-	case errors.Is(err, auth.ErrNotImplemented), strings.Contains(err.Error(), "unable to acquire valid access token"):
-		return UserMessage{Code: MessageCodeCoachlessLoginMissing, Text: "Coachless login is missing."}
-	default:
-		return UserMessage{Text: err.Error()}
 	}
+
+	return UserMessage{Text: err.Error()}
 }
 
 func syncAlreadyRunningMessage() UserMessage {
@@ -57,8 +38,4 @@ func watcherPreStartFailedMessage() UserMessage {
 
 func watcherStartFailedMessage() UserMessage {
 	return UserMessage{Code: MessageCodeWatcherStartFailed, Text: "Watcher start failed."}
-}
-
-func coachlessLoginMissingMessage() UserMessage {
-	return UserMessage{Code: MessageCodeCoachlessLoginMissing, Text: "Coachless login is missing."}
 }

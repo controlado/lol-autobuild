@@ -9,19 +9,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 	"github.com/gorilla/websocket"
 )
 
-func TestWatchEventsWithNoticesForwardsRawEventsAndStopsOnCancel(t *testing.T) {
+func TestWatchEventsWithNoticesInterpretsEventsAndStopsOnCancel(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name    string
-		notices chan ports.LCUWatchNotice
+		notices chan domain.LCUWatchNotice
 	}{
 		{name: "nil notices"},
-		{name: "buffered notices", notices: make(chan ports.LCUWatchNotice, 4)},
+		{name: "buffered notices", notices: make(chan domain.LCUWatchNotice, 4)},
 	}
 
 	for _, tt := range tests {
@@ -74,7 +74,10 @@ func TestWatchEventsWithNoticesForwardsRawEventsAndStopsOnCancel(t *testing.T) {
 					map[string]any{
 						"eventType": "Create",
 						"uri":       "/lol-champ-select/v1/session",
-						"data":      map[string]any{"localPlayerCellId": 3},
+						"data": map[string]any{
+							"gameId": 9876,
+							"timer":  map[string]any{"phase": "FINALIZATION"},
+						},
 					},
 				}); err != nil {
 					t.Errorf("write event frame: %v", err)
@@ -95,7 +98,7 @@ func TestWatchEventsWithNoticesForwardsRawEventsAndStopsOnCancel(t *testing.T) {
 				}
 			}
 
-			events := make(chan ports.LCUEvent, 1)
+			events := make(chan domain.LCUEvent, 1)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
@@ -112,14 +115,14 @@ func TestWatchEventsWithNoticesForwardsRawEventsAndStopsOnCancel(t *testing.T) {
 				if event.URI != "/lol-champ-select/v1/session" {
 					t.Fatalf("expected uri /lol-champ-select/v1/session, got %q", event.URI)
 				}
-				if event.Source != ports.LCUEventSourceStream {
-					t.Fatalf("event.Source = %q, want %q", event.Source, ports.LCUEventSourceStream)
+				if event.Source != domain.LCUEventSourceStream {
+					t.Fatalf("event.Source = %q, want %q", event.Source, domain.LCUEventSourceStream)
 				}
 				if event.ConnectionID != 1 {
 					t.Fatalf("event.ConnectionID = %d, want 1", event.ConnectionID)
 				}
-				if len(event.Data) == 0 {
-					t.Fatal("expected non-empty raw event data")
+				if event.ChampSelectPhase != "FINALIZATION" || event.GameID != "9876" {
+					t.Fatalf("event interpreted data = phase %q game %q, want FINALIZATION and 9876", event.ChampSelectPhase, event.GameID)
 				}
 			case <-time.After(2 * time.Second):
 				t.Fatal("timed out waiting for forwarded event")
@@ -197,7 +200,7 @@ func TestWatchEventsWithNoticesReconnectsAfterDisconnect(t *testing.T) {
 		}
 	}
 
-	events := make(chan ports.LCUEvent, 1)
+	events := make(chan domain.LCUEvent, 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -271,8 +274,8 @@ func TestWatchEventsWithNoticesEmitsConnectedAndFinalizationSnapshot(t *testing.
 		}
 	}
 
-	events := make(chan ports.LCUEvent, 1)
-	notices := make(chan ports.LCUWatchNotice, 4)
+	events := make(chan domain.LCUEvent, 1)
+	notices := make(chan domain.LCUWatchNotice, 4)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -281,35 +284,26 @@ func TestWatchEventsWithNoticesEmitsConnectedAndFinalizationSnapshot(t *testing.
 		errCh <- client.WatchEventsWithNotices(ctx, events, notices)
 	}()
 
-	connected := waitForLCUNotice(t, notices, ports.LCUWatchNoticeConnected)
+	connected := waitForLCUNotice(t, notices, domain.LCUWatchNoticeConnected)
 	if connected.ConnectionID != 1 {
 		t.Fatalf("connected.ConnectionID = %d, want 1", connected.ConnectionID)
 	}
 
-	snapshot := waitForLCUNotice(t, notices, ports.LCUWatchNoticeSnapshotFinalization)
+	snapshot := waitForLCUNotice(t, notices, domain.LCUWatchNoticeSnapshotFinalization)
 	if snapshot.Phase != "FINALIZATION" {
 		t.Fatalf("snapshot.Phase = %q, want FINALIZATION", snapshot.Phase)
 	}
 
 	select {
 	case event := <-events:
-		if event.Source != ports.LCUEventSourceSnapshot {
-			t.Fatalf("event.Source = %q, want %q", event.Source, ports.LCUEventSourceSnapshot)
+		if event.Source != domain.LCUEventSourceSnapshot {
+			t.Fatalf("event.Source = %q, want %q", event.Source, domain.LCUEventSourceSnapshot)
 		}
 		if event.EventType != snapshotEventType {
 			t.Fatalf("event.EventType = %q, want %q", event.EventType, snapshotEventType)
 		}
-		var payload struct {
-			GameID int `json:"gameId"`
-			Timer  struct {
-				Phase string `json:"phase"`
-			} `json:"timer"`
-		}
-		if err := json.Unmarshal(event.Data, &payload); err != nil {
-			t.Fatalf("decode snapshot event data: %v", err)
-		}
-		if payload.GameID != 9876 || payload.Timer.Phase != "FINALIZATION" {
-			t.Fatalf("snapshot payload = %+v, want gameId 9876 and FINALIZATION", payload)
+		if event.GameID != "9876" || event.ChampSelectPhase != "FINALIZATION" {
+			t.Fatalf("snapshot event = %+v, want gameId 9876 and FINALIZATION", event)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for snapshot event")
@@ -384,8 +378,8 @@ func TestWatchEventsWithNoticesReportsReconnectAndContinues(t *testing.T) {
 		}
 	}
 
-	events := make(chan ports.LCUEvent, 1)
-	notices := make(chan ports.LCUWatchNotice, 8)
+	events := make(chan domain.LCUEvent, 1)
+	notices := make(chan domain.LCUWatchNotice, 8)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -394,8 +388,8 @@ func TestWatchEventsWithNoticesReportsReconnectAndContinues(t *testing.T) {
 		errCh <- client.WatchEventsWithNotices(ctx, events, notices)
 	}()
 
-	_ = waitForLCUNotice(t, notices, ports.LCUWatchNoticeConnected)
-	reconnecting := waitForLCUNotice(t, notices, ports.LCUWatchNoticeReconnecting)
+	_ = waitForLCUNotice(t, notices, domain.LCUWatchNoticeConnected)
+	reconnecting := waitForLCUNotice(t, notices, domain.LCUWatchNoticeReconnecting)
 	if reconnecting.Err == nil {
 		t.Fatal("expected reconnecting notice error")
 	}
@@ -430,7 +424,7 @@ func TestWatchEventsWithNoticesReportsReconnectAndContinues(t *testing.T) {
 func TestDecodeLCUEvent(t *testing.T) {
 	t.Parallel()
 
-	payload := []byte(`[8,"OnJsonApiEvent",{"eventType":"Create","uri":"/lol-champ-select/v1/session","data":{"foo":"bar"}}]`)
+	payload := []byte(`[8,"OnJsonApiEvent",{"eventType":"Create","uri":"/lol-champ-select/v1/session","data":{"gameId":"abc","timer":{"phase":"FINALIZATION"}}}]`)
 
 	event, ok, err := decodeEvent(payload)
 	if err != nil {
@@ -446,12 +440,12 @@ func TestDecodeLCUEvent(t *testing.T) {
 	if event.URI != "/lol-champ-select/v1/session" {
 		t.Fatalf("expected uri /lol-champ-select/v1/session, got %q", event.URI)
 	}
-	if string(event.Data) != `{"foo":"bar"}` {
-		t.Fatalf("unexpected raw data: %s", string(event.Data))
+	if event.GameID != "abc" || event.ChampSelectPhase != "FINALIZATION" {
+		t.Fatalf("event interpreted data = phase %q game %q, want FINALIZATION and abc", event.ChampSelectPhase, event.GameID)
 	}
 }
 
-func waitForLCUNotice(t *testing.T, notices <-chan ports.LCUWatchNotice, kind ports.LCUWatchNoticeKind) ports.LCUWatchNotice {
+func waitForLCUNotice(t *testing.T, notices <-chan domain.LCUWatchNotice, kind domain.LCUWatchNoticeKind) domain.LCUWatchNotice {
 	t.Helper()
 
 	deadline := time.After(3 * time.Second)
@@ -463,7 +457,7 @@ func waitForLCUNotice(t *testing.T, notices <-chan ports.LCUWatchNotice, kind po
 			}
 		case <-deadline:
 			t.Fatalf("timed out waiting for notice %q", kind)
-			return ports.LCUWatchNotice{}
+			return domain.LCUWatchNotice{}
 		}
 	}
 }

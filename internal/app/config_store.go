@@ -1,10 +1,12 @@
 package app
 
-import (
-	"github.com/controlado/lol-autobuild/internal/config"
-)
+import "time"
+
+type RuntimeConfig struct {
+	Settings      Settings
+	WatchDebounce time.Duration
+}
 
 type ConfigStore interface {
-	Load() (config.Config, error)
-	Save(new config.Config) error
+	Save(new RuntimeConfig) error
 }

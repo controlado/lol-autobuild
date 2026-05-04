@@ -9,36 +9,34 @@ import (
 	"testing"
 	"time"
 
-	"github.com/controlado/lol-autobuild/internal/config"
-	"github.com/controlado/lol-autobuild/internal/lcu"
-	"github.com/controlado/lol-autobuild/internal/update"
-	"github.com/controlado/lol-autobuild/pkg/lolautobuild"
+	"github.com/controlado/lol-autobuild/internal/autobuild"
 )
 
 const testTimeout = 2 * time.Second
 
 type testAppOptions struct {
-	cfg            config.Config
+	cfg            RuntimeConfig
 	serviceFactory ServiceFactory
-	statusChecker  StatusChecker
+	lcuStatus      LCUStatusProvider
 	updateChecker  UpdateChecker
 	configStore    ConfigStore
+	messageFromErr MessageMapper
 }
 
 func newTestApp(t *testing.T, opts testAppOptions) *App {
 	t.Helper()
 
-	if opts.cfg == (config.Config{}) {
-		opts.cfg = config.Defaults()
+	if opts.cfg == (RuntimeConfig{}) {
+		opts.cfg = testConfig()
 	}
 	if opts.serviceFactory == nil {
-		opts.serviceFactory = func(config.Config) (lolautobuild.Service, error) {
+		opts.serviceFactory = func(RuntimeConfig) (autobuild.Service, error) {
 			return newStubService(), nil
 		}
 	}
-	if opts.statusChecker == nil {
-		opts.statusChecker = func(context.Context, config.Config) lcu.ConnectionStatus {
-			return lcu.ConnectionStatus{State: lcu.ConnectionStateOff, Message: "LCU is off"}
+	if opts.lcuStatus == nil {
+		opts.lcuStatus = func(context.Context, RuntimeConfig) LCUStatus {
+			return LCUStatus{State: LCUConnectionStateOff, Message: "LCU is off"}
 		}
 	}
 	if opts.updateChecker == nil {
@@ -48,7 +46,14 @@ func newTestApp(t *testing.T, opts testAppOptions) *App {
 		opts.configStore = &recordingConfigStore{}
 	}
 
-	app, err := New(opts.serviceFactory, opts.statusChecker, opts.updateChecker, opts.configStore, opts.cfg)
+	app, err := New(Options{
+		ServiceFactory:   opts.serviceFactory,
+		LCUStatus:        opts.lcuStatus,
+		UpdateChecker:    opts.updateChecker,
+		ConfigStore:      opts.configStore,
+		RuntimeConfig:    opts.cfg,
+		MessageFromError: opts.messageFromErr,
+	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -59,7 +64,7 @@ func newTestApp(t *testing.T, opts testAppOptions) *App {
 type stubUpdateChecker struct {
 	mu             sync.Mutex
 	currentVersion string
-	checkFn        func(context.Context) (update.Result, error)
+	checkFn        func(context.Context) (UpdateCheckResult, error)
 	calls          int
 }
 
@@ -70,7 +75,7 @@ func (s *stubUpdateChecker) CurrentVersion() string {
 	return s.currentVersion
 }
 
-func (s *stubUpdateChecker) Check(ctx context.Context) (update.Result, error) {
+func (s *stubUpdateChecker) Check(ctx context.Context) (UpdateCheckResult, error) {
 	s.mu.Lock()
 	s.calls++
 	fn := s.checkFn
@@ -81,7 +86,7 @@ func (s *stubUpdateChecker) Check(ctx context.Context) (update.Result, error) {
 		return fn(ctx)
 	}
 
-	return update.Result{CurrentVersion: currentVersion, LatestVersion: currentVersion}, nil
+	return UpdateCheckResult{CurrentVersion: currentVersion, LatestVersion: currentVersion}, nil
 }
 
 func (s *stubUpdateChecker) callCount() int {
@@ -93,20 +98,11 @@ func (s *stubUpdateChecker) callCount() int {
 
 type recordingConfigStore struct {
 	mu       sync.Mutex
-	loadCfg  config.Config
-	loadErr  error
 	saveErr  error
-	savedCfg []config.Config
+	savedCfg []RuntimeConfig
 }
 
-func (s *recordingConfigStore) Load() (config.Config, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return s.loadCfg, s.loadErr
-}
-
-func (s *recordingConfigStore) Save(newCfg config.Config) error {
+func (s *recordingConfigStore) Save(newCfg RuntimeConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -121,12 +117,12 @@ func (s *recordingConfigStore) saveCount() int {
 	return len(s.savedCfg)
 }
 
-func (s *recordingConfigStore) lastSaved() config.Config {
+func (s *recordingConfigStore) lastSaved() RuntimeConfig {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if len(s.savedCfg) == 0 {
-		return config.Config{}
+		return RuntimeConfig{}
 	}
 
 	return s.savedCfg[len(s.savedCfg)-1]
@@ -134,19 +130,19 @@ func (s *recordingConfigStore) lastSaved() config.Config {
 
 type syncCall struct {
 	ctx context.Context
-	req lolautobuild.SyncRequest
+	req autobuild.SyncRequest
 }
 
 type watchCall struct {
 	ctx context.Context
-	req lolautobuild.WatchRequest
+	req autobuild.WatchRequest
 }
 
 type stubService struct {
 	mu sync.Mutex
 
-	syncFn  func(context.Context, lolautobuild.SyncRequest) (lolautobuild.SyncResult, error)
-	watchFn func(context.Context, lolautobuild.WatchRequest) error
+	syncFn  func(context.Context, autobuild.SyncRequest) (autobuild.SyncResult, error)
+	watchFn func(context.Context, autobuild.WatchRequest) error
 
 	syncCalls  []syncCall
 	watchCalls []watchCall
@@ -162,7 +158,7 @@ func newStubService() *stubService {
 	}
 }
 
-func (s *stubService) Sync(ctx context.Context, req lolautobuild.SyncRequest) (lolautobuild.SyncResult, error) {
+func (s *stubService) Sync(ctx context.Context, req autobuild.SyncRequest) (autobuild.SyncResult, error) {
 	call := syncCall{ctx: ctx, req: req}
 
 	s.mu.Lock()
@@ -182,10 +178,10 @@ func (s *stubService) Sync(ctx context.Context, req lolautobuild.SyncRequest) (l
 		return fn(ctx, req)
 	}
 
-	return lolautobuild.SyncResult{}, nil
+	return autobuild.SyncResult{}, nil
 }
 
-func (s *stubService) Watch(ctx context.Context, req lolautobuild.WatchRequest) error {
+func (s *stubService) Watch(ctx context.Context, req autobuild.WatchRequest) error {
 	call := watchCall{ctx: ctx, req: req}
 
 	s.mu.Lock()
@@ -228,20 +224,20 @@ func (s *stubService) watchCallCount() int {
 
 func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 	cfg := testConfig()
-	cfg.Sync.Patch = "14.8"
-	cfg.Sync.ApplyRunes = false
-	cfg.Sync.DryRun = false
-	cfg.LCU.Enabled = true
+	cfg.Settings.Patch = "14.8"
+	cfg.Settings.ApplyRunes = false
+	cfg.Settings.DryRun = false
+	cfg.Settings.LCUEnabled = true
 
-	wantStatus := lcu.ConnectionStatus{
-		State:  lcu.ConnectionStateConnected,
+	wantStatus := LCUStatus{
+		State:  LCUConnectionStateConnected,
 		Source: "status-check",
 	}
 
 	statusCalls := 0
 	app := newTestApp(t, testAppOptions{
 		cfg: cfg,
-		statusChecker: func(_ context.Context, got config.Config) lcu.ConnectionStatus {
+		lcuStatus: func(_ context.Context, got RuntimeConfig) LCUStatus {
 			statusCalls++
 			if got != cfg {
 				t.Fatalf("status checker received config %+v, want %+v", got, cfg)
@@ -251,7 +247,7 @@ func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 	})
 
 	lastSyncAt := time.Date(2026, time.April, 25, 12, 30, 0, 0, time.UTC)
-	wantLastSync := &lolautobuild.SyncResult{
+	wantLastSync := &autobuild.SyncResult{
 		DetectedChampionID: 238,
 		DetectedPosition:   "mid",
 		DetectedQueueID:    420,
@@ -265,7 +261,7 @@ func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 	app.watcherRunning = true
 	app.lastErrorMessage = "previous error"
 	app.lastErrorCode = "test.error"
-	app.lastSync = cloneSyncResult(wantLastSync)
+	app.lastSync = syncSummaryFromResult(*wantLastSync)
 	app.lastSyncAt = lastSyncAt
 	app.updateState = UpdateState{
 		Status:         UpdateStatusAvailable,
@@ -281,8 +277,8 @@ func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 		t.Fatalf("status checker calls = %d, want 1", statusCalls)
 	}
 
-	if state.Settings != settingsFromConfig(cfg) {
-		t.Fatalf("state.Settings = %+v, want %+v", state.Settings, settingsFromConfig(cfg))
+	if state.Settings != cfg.Settings {
+		t.Fatalf("state.Settings = %+v, want %+v", state.Settings, cfg.Settings)
 	}
 	if state.LCU != wantStatus {
 		t.Fatalf("state.LCU = %+v, want %+v", state.LCU, wantStatus)
@@ -333,22 +329,22 @@ func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 
 func TestSaveSettingsPersistsTrimmedSettings(t *testing.T) {
 	cfg := testConfig()
-	cfg.LCU.Enabled = false
+	cfg.Settings.LCUEnabled = false
 
 	store := &recordingConfigStore{}
 	factoryCalls := 0
 	app := newTestApp(t, testAppOptions{
 		cfg:         cfg,
 		configStore: store,
-		serviceFactory: func(config.Config) (lolautobuild.Service, error) {
+		serviceFactory: func(RuntimeConfig) (autobuild.Service, error) {
 			factoryCalls++
 			return newStubService(), nil
 		},
-		statusChecker: func(_ context.Context, got config.Config) lcu.ConnectionStatus {
-			if got.LCU.Enabled {
-				return lcu.ConnectionStatus{State: lcu.ConnectionStateConnected, Source: "settings"}
+		lcuStatus: func(_ context.Context, got RuntimeConfig) LCUStatus {
+			if got.Settings.LCUEnabled {
+				return LCUStatus{State: LCUConnectionStateConnected, Source: "settings"}
 			}
-			return lcu.ConnectionStatus{State: lcu.ConnectionStateOff, Message: "LCU is off"}
+			return LCUStatus{State: LCUConnectionStateOff, Message: "LCU is off"}
 		},
 	})
 
@@ -356,9 +352,9 @@ func TestSaveSettingsPersistsTrimmedSettings(t *testing.T) {
 
 	settings := Settings{
 		Patch:              " 14.9 ",
-		PatchAdditionsMode: " " + lolautobuild.PatchAdditionsModeManual + " ",
-		PatchAdditions:     lolautobuild.PatchAdditionsMax,
-		LeagueTierPreset:   " " + lolautobuild.LeagueTierPresetMasterPlus + " ",
+		PatchAdditionsMode: " " + autobuild.PatchAdditionsModeManual + " ",
+		PatchAdditions:     autobuild.PatchAdditionsMax,
+		LeagueTierPreset:   " " + autobuild.LeagueTierPresetMasterPlus + " ",
 		ApplyItems:         false,
 		ApplyRunes:         true,
 		ApplySpells:        false,
@@ -379,19 +375,19 @@ func TestSaveSettingsPersistsTrimmedSettings(t *testing.T) {
 	}
 
 	wantCfg := cfg
-	applySettings(&wantCfg, settings)
+	wantCfg.Settings = normalizeSettings(settings)
 
 	if got := store.lastSaved(); got != wantCfg {
 		t.Fatalf("saved config = %+v, want %+v", got, wantCfg)
 	}
-	if state.Settings != settingsFromConfig(wantCfg) {
-		t.Fatalf("state.Settings = %+v, want %+v", state.Settings, settingsFromConfig(wantCfg))
+	if state.Settings != wantCfg.Settings {
+		t.Fatalf("state.Settings = %+v, want %+v", state.Settings, wantCfg.Settings)
 	}
 	if state.LastError != "" {
 		t.Fatalf("state.LastError = %q, want empty", state.LastError)
 	}
-	if state.LCU.State != lcu.ConnectionStateConnected {
-		t.Fatalf("state.LCU.State = %q, want %q", state.LCU.State, lcu.ConnectionStateConnected)
+	if state.LCU.State != LCUConnectionStateConnected {
+		t.Fatalf("state.LCU.State = %q, want %q", state.LCU.State, LCUConnectionStateConnected)
 	}
 }
 
@@ -404,7 +400,7 @@ func TestSaveSettingsReturnsErrorWithoutMutatingConfig(t *testing.T) {
 	app := newTestApp(t, testAppOptions{
 		cfg:         cfg,
 		configStore: store,
-		serviceFactory: func(config.Config) (lolautobuild.Service, error) {
+		serviceFactory: func(RuntimeConfig) (autobuild.Service, error) {
 			factoryCalls++
 			return newStubService(), nil
 		},
@@ -427,7 +423,7 @@ func TestSaveSettingsReturnsErrorWithoutMutatingConfig(t *testing.T) {
 	if message.Text != "save failed" {
 		t.Fatalf("SaveSettings() message = %q, want %q", message.Text, "save failed")
 	}
-	if state != (State{}) {
+	if state != (ViewState{}) {
 		t.Fatalf("SaveSettings() state = %+v, want zero value", state)
 	}
 	if factoryCalls != 0 {
@@ -438,8 +434,8 @@ func TestSaveSettingsReturnsErrorWithoutMutatingConfig(t *testing.T) {
 	}
 
 	current := app.State(context.Background())
-	if current.Settings != settingsFromConfig(cfg) {
-		t.Fatalf("current.Settings = %+v, want %+v", current.Settings, settingsFromConfig(cfg))
+	if current.Settings != cfg.Settings {
+		t.Fatalf("current.Settings = %+v, want %+v", current.Settings, cfg.Settings)
 	}
 	if !current.Watcher.Running {
 		t.Fatal("expected watcher to remain running after save failure")
@@ -451,13 +447,13 @@ func TestSaveSettingsReturnsErrorWithoutMutatingConfig(t *testing.T) {
 
 func TestSaveSettingsMarksRunningWatcherConfigStaleWithoutRestart(t *testing.T) {
 	cfg := testConfig()
-	cfg.Sync.Patch = "14.10"
+	cfg.Settings.Patch = "14.10"
 
 	store := &recordingConfigStore{}
 	firstSvc := newStubService()
 	firstStopped := make(chan struct{})
 
-	firstSvc.watchFn = func(ctx context.Context, req lolautobuild.WatchRequest) error {
+	firstSvc.watchFn = func(ctx context.Context, req autobuild.WatchRequest) error {
 		<-ctx.Done()
 		close(firstStopped)
 		return nil
@@ -465,12 +461,12 @@ func TestSaveSettingsMarksRunningWatcherConfigStaleWithoutRestart(t *testing.T) 
 
 	var (
 		factoryMu   sync.Mutex
-		factoryCfgs []config.Config
+		factoryCfgs []RuntimeConfig
 	)
 	app := newTestApp(t, testAppOptions{
 		cfg:         cfg,
 		configStore: store,
-		serviceFactory: func(got config.Config) (lolautobuild.Service, error) {
+		serviceFactory: func(got RuntimeConfig) (autobuild.Service, error) {
 			factoryMu.Lock()
 			defer factoryMu.Unlock()
 			factoryCfgs = append(factoryCfgs, got)
@@ -494,9 +490,9 @@ func TestSaveSettingsMarksRunningWatcherConfigStaleWithoutRestart(t *testing.T) 
 
 	newSettings := Settings{
 		Patch:              " 15.2 ",
-		PatchAdditionsMode: lolautobuild.PatchAdditionsModeManual,
+		PatchAdditionsMode: autobuild.PatchAdditionsModeManual,
 		PatchAdditions:     1,
-		LeagueTierPreset:   lolautobuild.LeagueTierPresetPlatinumPlus,
+		LeagueTierPreset:   autobuild.LeagueTierPresetPlatinumPlus,
 		ApplyItems:         false,
 		ApplyRunes:         true,
 		ApplySpells:        false,
@@ -506,7 +502,7 @@ func TestSaveSettingsMarksRunningWatcherConfigStaleWithoutRestart(t *testing.T) 
 	}
 
 	wantCfg := cfg
-	applySettings(&wantCfg, newSettings)
+	wantCfg.Settings = normalizeSettings(newSettings)
 
 	state, message := app.SaveSettings(context.Background(), newSettings)
 	if !message.Empty() {
@@ -521,7 +517,7 @@ func TestSaveSettingsMarksRunningWatcherConfigStaleWithoutRestart(t *testing.T) 
 	}
 
 	factoryMu.Lock()
-	gotFactoryCfgs := append([]config.Config(nil), factoryCfgs...)
+	gotFactoryCfgs := append([]RuntimeConfig(nil), factoryCfgs...)
 	factoryMu.Unlock()
 
 	if len(gotFactoryCfgs) != 1 {
@@ -543,8 +539,8 @@ func TestSaveSettingsMarksRunningWatcherConfigStaleWithoutRestart(t *testing.T) 
 	if !state.Watcher.ConfigStale {
 		t.Fatal("expected watcher config to be stale after save")
 	}
-	if state.Settings != settingsFromConfig(wantCfg) {
-		t.Fatalf("state.Settings = %+v, want %+v", state.Settings, settingsFromConfig(wantCfg))
+	if state.Settings != wantCfg.Settings {
+		t.Fatalf("state.Settings = %+v, want %+v", state.Settings, wantCfg.Settings)
 	}
 
 	stopped := app.StopWatcher(context.Background())
@@ -559,12 +555,12 @@ func TestSaveSettingsMarksRunningWatcherConfigStaleWithoutRestart(t *testing.T) 
 
 func TestSaveSettingsKeepsRunningWatcherConfigFreshForEquivalentConfig(t *testing.T) {
 	cfg := testConfig()
-	cfg.Sync.Patch = "14.10"
+	cfg.Settings.Patch = "14.10"
 
 	store := &recordingConfigStore{}
 	svc := newStubService()
 	watchStopped := make(chan struct{})
-	svc.watchFn = func(ctx context.Context, req lolautobuild.WatchRequest) error {
+	svc.watchFn = func(ctx context.Context, req autobuild.WatchRequest) error {
 		<-ctx.Done()
 		close(watchStopped)
 		return nil
@@ -573,7 +569,7 @@ func TestSaveSettingsKeepsRunningWatcherConfigFreshForEquivalentConfig(t *testin
 	app := newTestApp(t, testAppOptions{
 		cfg:         cfg,
 		configStore: store,
-		serviceFactory: func(config.Config) (lolautobuild.Service, error) {
+		serviceFactory: func(RuntimeConfig) (autobuild.Service, error) {
 			return svc, nil
 		},
 	})
@@ -583,7 +579,7 @@ func TestSaveSettingsKeepsRunningWatcherConfigFreshForEquivalentConfig(t *testin
 	}
 	waitForWatchCall(t, svc)
 
-	state, message := app.SaveSettings(context.Background(), settingsFromConfig(cfg))
+	state, message := app.SaveSettings(context.Background(), cfg.Settings)
 	if !message.Empty() {
 		t.Fatalf("SaveSettings() message = %q, want empty", message.Text)
 	}
@@ -600,32 +596,32 @@ func TestSaveSettingsKeepsRunningWatcherConfigFreshForEquivalentConfig(t *testin
 
 func TestStartWatcherUsesLatestSavedConfig(t *testing.T) {
 	cfg := testConfig()
-	cfg.Sync.Patch = "14.10"
+	cfg.Settings.Patch = "14.10"
 
 	store := &recordingConfigStore{}
 	svc := newStubService()
 	watchStopped := make(chan struct{})
-	svc.watchFn = func(ctx context.Context, req lolautobuild.WatchRequest) error {
+	svc.watchFn = func(ctx context.Context, req autobuild.WatchRequest) error {
 		<-ctx.Done()
 		close(watchStopped)
 		return nil
 	}
 
-	var gotFactoryCfg config.Config
+	var gotFactoryCfg RuntimeConfig
 	app := newTestApp(t, testAppOptions{
 		cfg:         cfg,
 		configStore: store,
-		serviceFactory: func(got config.Config) (lolautobuild.Service, error) {
+		serviceFactory: func(got RuntimeConfig) (autobuild.Service, error) {
 			gotFactoryCfg = got
 			return svc, nil
 		},
 	})
 
-	settings := settingsFromConfig(cfg)
+	settings := cfg.Settings
 	settings.Patch = "15.2"
 	settings.ApplyItems = false
 	wantCfg := cfg
-	applySettings(&wantCfg, settings)
+	wantCfg.Settings = normalizeSettings(settings)
 
 	if _, message := app.SaveSettings(context.Background(), settings); !message.Empty() {
 		t.Fatalf("SaveSettings() message = %q, want empty", message.Text)
@@ -651,35 +647,35 @@ func TestStartWatcherUsesLatestSavedConfig(t *testing.T) {
 
 func TestStartWatcherLifecycle(t *testing.T) {
 	cfg := testConfig()
-	cfg.Sync.Patch = "15.3"
-	cfg.Sync.ApplyItems = true
-	cfg.Sync.ApplyRunes = false
-	cfg.Sync.ApplySpells = true
-	cfg.Sync.KeepFlash = true
-	cfg.Sync.DryRun = false
-	cfg.Watch.DebounceMillis = 321
+	cfg.Settings.Patch = "15.3"
+	cfg.Settings.ApplyItems = true
+	cfg.Settings.ApplyRunes = false
+	cfg.Settings.ApplySpells = true
+	cfg.Settings.KeepFlash = true
+	cfg.Settings.DryRun = false
+	cfg.WatchDebounce = 321 * time.Millisecond
 
-	wantStatus := lcu.ConnectionStatus{
-		State:  lcu.ConnectionStateConnected,
+	wantStatus := LCUStatus{
+		State:  LCUConnectionStateConnected,
 		Source: "lockfile",
 	}
 
 	svc := newStubService()
 	watchStopped := make(chan struct{})
-	svc.watchFn = func(ctx context.Context, req lolautobuild.WatchRequest) error {
+	svc.watchFn = func(ctx context.Context, req autobuild.WatchRequest) error {
 		<-ctx.Done()
 		close(watchStopped)
 		return nil
 	}
 
-	var factoryCfg config.Config
+	var factoryCfg RuntimeConfig
 	app := newTestApp(t, testAppOptions{
 		cfg: cfg,
-		serviceFactory: func(got config.Config) (lolautobuild.Service, error) {
+		serviceFactory: func(got RuntimeConfig) (autobuild.Service, error) {
 			factoryCfg = got
 			return svc, nil
 		},
-		statusChecker: func(context.Context, config.Config) lcu.ConnectionStatus {
+		lcuStatus: func(context.Context, RuntimeConfig) LCUStatus {
 			return wantStatus
 		},
 	})
@@ -702,7 +698,7 @@ func TestStartWatcherLifecycle(t *testing.T) {
 	assertWatchRequestMatchesConfig(t, call.req, cfg)
 
 	beforeSuccess := time.Now().UTC()
-	wantResult := &lolautobuild.SyncResult{
+	wantResult := &autobuild.SyncResult{
 		DetectedChampionID: 240,
 		DetectedPosition:   "mid",
 		DetectedQueueID:    420,
@@ -711,7 +707,7 @@ func TestStartWatcherLifecycle(t *testing.T) {
 		SpellsApplied:      true,
 		Warnings:           []string{"manual review"},
 	}
-	call.req.OnCycle(lolautobuild.WatchCycle{Result: wantResult})
+	call.req.OnCycle(autobuild.WatchCycle{Result: wantResult})
 	afterSuccess := time.Now().UTC()
 
 	current := app.State(context.Background())
@@ -722,8 +718,8 @@ func TestStartWatcherLifecycle(t *testing.T) {
 	}
 
 	beforeNotice := time.Now().UTC()
-	call.req.OnNotice(lolautobuild.WatchNotice{
-		Kind:         lolautobuild.WatchNoticeSnapshotFinalization,
+	call.req.OnNotice(autobuild.WatchNotice{
+		Kind:         autobuild.WatchNoticeSnapshotFinalization,
 		Message:      "snapshot finalized",
 		URI:          "/lol-champ-select/v1/session",
 		Phase:        "FINALIZATION",
@@ -735,8 +731,8 @@ func TestStartWatcherLifecycle(t *testing.T) {
 	if current.Watcher.LastNotice == nil {
 		t.Fatal("expected watcher notice in state")
 	}
-	if current.Watcher.LastNotice.Kind != string(lolautobuild.WatchNoticeSnapshotFinalization) {
-		t.Fatalf("notice kind = %q, want %q", current.Watcher.LastNotice.Kind, lolautobuild.WatchNoticeSnapshotFinalization)
+	if current.Watcher.LastNotice.Kind != string(autobuild.WatchNoticeSnapshotFinalization) {
+		t.Fatalf("notice kind = %q, want %q", current.Watcher.LastNotice.Kind, autobuild.WatchNoticeSnapshotFinalization)
 	}
 	if current.Watcher.LastNotice.Phase != "FINALIZATION" || current.Watcher.LastNotice.ConnectionID != 2 {
 		t.Fatalf("unexpected watcher notice: %+v", current.Watcher.LastNotice)
@@ -744,7 +740,7 @@ func TestStartWatcherLifecycle(t *testing.T) {
 	assertTimeBetween(t, &current.Watcher.LastNotice.At, beforeNotice, afterNotice)
 	assertSyncResultEqual(t, current.LastSync, wantResult)
 
-	call.req.OnCycle(lolautobuild.WatchCycle{Err: errors.New("watch cycle failed")})
+	call.req.OnCycle(autobuild.WatchCycle{Err: errors.New("watch cycle failed")})
 	current = app.State(context.Background())
 	if current.LastError != "watch cycle failed" {
 		t.Fatalf("current.LastError = %q, want %q", current.LastError, "watch cycle failed")
@@ -763,7 +759,7 @@ func TestStartWatcherRejectsSecondStart(t *testing.T) {
 
 	svc := newStubService()
 	watchStopped := make(chan struct{})
-	svc.watchFn = func(ctx context.Context, req lolautobuild.WatchRequest) error {
+	svc.watchFn = func(ctx context.Context, req autobuild.WatchRequest) error {
 		<-ctx.Done()
 		close(watchStopped)
 		return nil
@@ -772,7 +768,7 @@ func TestStartWatcherRejectsSecondStart(t *testing.T) {
 	factoryCalls := 0
 	app := newTestApp(t, testAppOptions{
 		cfg: cfg,
-		serviceFactory: func(config.Config) (lolautobuild.Service, error) {
+		serviceFactory: func(RuntimeConfig) (autobuild.Service, error) {
 			factoryCalls++
 			return svc, nil
 		},
@@ -810,7 +806,7 @@ func TestStartWatcherReleasesReservationOnFactoryError(t *testing.T) {
 
 	svc := newStubService()
 	watchStopped := make(chan struct{})
-	svc.watchFn = func(ctx context.Context, req lolautobuild.WatchRequest) error {
+	svc.watchFn = func(ctx context.Context, req autobuild.WatchRequest) error {
 		<-ctx.Done()
 		close(watchStopped)
 		return nil
@@ -819,7 +815,7 @@ func TestStartWatcherReleasesReservationOnFactoryError(t *testing.T) {
 	factoryCalls := 0
 	app := newTestApp(t, testAppOptions{
 		cfg: cfg,
-		serviceFactory: func(config.Config) (lolautobuild.Service, error) {
+		serviceFactory: func(RuntimeConfig) (autobuild.Service, error) {
 			factoryCalls++
 			if factoryCalls == 1 {
 				return nil, factoryErr
@@ -832,7 +828,7 @@ func TestStartWatcherReleasesReservationOnFactoryError(t *testing.T) {
 	if message.Text != "factory failed" {
 		t.Fatalf("StartWatcher() message = %q, want %q", message.Text, "factory failed")
 	}
-	if state != (State{}) {
+	if state != (ViewState{}) {
 		t.Fatalf("StartWatcher() state = %+v, want zero value", state)
 	}
 
@@ -859,13 +855,13 @@ func TestStartWatcherReleasesReservationOnFactoryError(t *testing.T) {
 
 func TestRunSyncSuccess(t *testing.T) {
 	cfg := testConfig()
-	cfg.Sync.Patch = "15.4"
-	cfg.Sync.ApplyItems = true
-	cfg.Sync.ApplyRunes = false
-	cfg.Sync.ApplySpells = false
-	cfg.Sync.DryRun = false
+	cfg.Settings.Patch = "15.4"
+	cfg.Settings.ApplyItems = true
+	cfg.Settings.ApplyRunes = false
+	cfg.Settings.ApplySpells = false
+	cfg.Settings.DryRun = false
 
-	wantResult := lolautobuild.SyncResult{
+	wantResult := autobuild.SyncResult{
 		DetectedChampionID: 84,
 		DetectedPosition:   "support",
 		DetectedQueueID:    420,
@@ -876,14 +872,14 @@ func TestRunSyncSuccess(t *testing.T) {
 	}
 
 	svc := newStubService()
-	svc.syncFn = func(context.Context, lolautobuild.SyncRequest) (lolautobuild.SyncResult, error) {
+	svc.syncFn = func(context.Context, autobuild.SyncRequest) (autobuild.SyncResult, error) {
 		return wantResult, nil
 	}
 
-	var factoryCfg config.Config
+	var factoryCfg RuntimeConfig
 	app := newTestApp(t, testAppOptions{
 		cfg: cfg,
-		serviceFactory: func(got config.Config) (lolautobuild.Service, error) {
+		serviceFactory: func(got RuntimeConfig) (autobuild.Service, error) {
 			factoryCfg = got
 			return svc, nil
 		},
@@ -938,33 +934,33 @@ func TestRunSyncFailureCases(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := testConfig()
 			oldSyncAt := time.Date(2026, time.April, 25, 8, 0, 0, 0, time.UTC)
-			oldSync := &lolautobuild.SyncResult{
+			oldSync := &autobuild.SyncResult{
 				DetectedChampionID: 55,
 				Warnings:           []string{"keep me"},
 			}
 
 			svc := newStubService()
-			svc.syncFn = func(context.Context, lolautobuild.SyncRequest) (lolautobuild.SyncResult, error) {
-				return lolautobuild.SyncResult{DetectedChampionID: 999}, tt.syncErr
+			svc.syncFn = func(context.Context, autobuild.SyncRequest) (autobuild.SyncResult, error) {
+				return autobuild.SyncResult{DetectedChampionID: 999}, tt.syncErr
 			}
 
 			app := newTestApp(t, testAppOptions{
 				cfg: cfg,
-				serviceFactory: func(config.Config) (lolautobuild.Service, error) {
+				serviceFactory: func(RuntimeConfig) (autobuild.Service, error) {
 					if tt.factoryErr != nil {
 						return nil, tt.factoryErr
 					}
 					return svc, nil
 				},
 			})
-			app.lastSync = cloneSyncResult(oldSync)
+			app.lastSync = syncSummaryFromResult(*oldSync)
 			app.lastSyncAt = oldSyncAt
 
 			state, message := app.RunSync(context.Background())
 			if message.Text != tt.wantMessage {
 				t.Fatalf("RunSync() message = %q, want %q", message.Text, tt.wantMessage)
 			}
-			if state != (State{}) {
+			if state != (ViewState{}) {
 				t.Fatalf("RunSync() state = %+v, want zero value", state)
 			}
 			if svc.syncCallCount() != tt.wantSyncCalls {
@@ -993,21 +989,21 @@ func TestRunSyncRejectsConcurrentCalls(t *testing.T) {
 	startedSync := make(chan struct{})
 
 	svc := newStubService()
-	svc.syncFn = func(context.Context, lolautobuild.SyncRequest) (lolautobuild.SyncResult, error) {
+	svc.syncFn = func(context.Context, autobuild.SyncRequest) (autobuild.SyncResult, error) {
 		close(startedSync)
 		<-blockSync
-		return lolautobuild.SyncResult{DetectedChampionID: 99}, nil
+		return autobuild.SyncResult{DetectedChampionID: 99}, nil
 	}
 
 	app := newTestApp(t, testAppOptions{
 		cfg: cfg,
-		serviceFactory: func(config.Config) (lolautobuild.Service, error) {
+		serviceFactory: func(RuntimeConfig) (autobuild.Service, error) {
 			return svc, nil
 		},
 	})
 
 	type runSyncResult struct {
-		state   State
+		state   ViewState
 		message UserMessage
 	}
 
@@ -1026,7 +1022,7 @@ func TestRunSyncRejectsConcurrentCalls(t *testing.T) {
 	if message.Code != MessageCodeSyncAlreadyRunning {
 		t.Fatalf("second RunSync() code = %q, want %q", message.Code, MessageCodeSyncAlreadyRunning)
 	}
-	if state != (State{}) {
+	if state != (ViewState{}) {
 		t.Fatalf("second RunSync() state = %+v, want zero value", state)
 	}
 
@@ -1049,16 +1045,23 @@ func TestRunSyncRejectsConcurrentCalls(t *testing.T) {
 
 func TestRunSyncFailureSetsLastErrorCode(t *testing.T) {
 	cfg := testConfig()
+	championNotSelectedErr := errors.New("champion not selected")
 
 	svc := newStubService()
-	svc.syncFn = func(context.Context, lolautobuild.SyncRequest) (lolautobuild.SyncResult, error) {
-		return lolautobuild.SyncResult{}, fmt.Errorf("sync: %w", lcu.ErrChampionNotSelected)
+	svc.syncFn = func(context.Context, autobuild.SyncRequest) (autobuild.SyncResult, error) {
+		return autobuild.SyncResult{}, fmt.Errorf("sync: %w", championNotSelectedErr)
 	}
 
 	app := newTestApp(t, testAppOptions{
 		cfg: cfg,
-		serviceFactory: func(config.Config) (lolautobuild.Service, error) {
+		serviceFactory: func(RuntimeConfig) (autobuild.Service, error) {
 			return svc, nil
+		},
+		messageFromErr: func(err error) UserMessage {
+			if errors.Is(err, championNotSelectedErr) {
+				return UserMessage{Code: MessageCodeLCUChampionNotSelected, Text: "Select a champion first."}
+			}
+			return userMessageFromErr(err)
 		},
 	})
 
@@ -1069,7 +1072,7 @@ func TestRunSyncFailureSetsLastErrorCode(t *testing.T) {
 	if message.Code != MessageCodeLCUChampionNotSelected {
 		t.Fatalf("RunSync() code = %q, want %q", message.Code, MessageCodeLCUChampionNotSelected)
 	}
-	if state != (State{}) {
+	if state != (ViewState{}) {
 		t.Fatalf("RunSync() state = %+v, want zero value", state)
 	}
 
@@ -1085,8 +1088,8 @@ func TestRunSyncFailureSetsLastErrorCode(t *testing.T) {
 func TestCheckUpdatesAvailable(t *testing.T) {
 	checker := &stubUpdateChecker{
 		currentVersion: "0.1.0",
-		checkFn: func(context.Context) (update.Result, error) {
-			return update.Result{
+		checkFn: func(context.Context) (UpdateCheckResult, error) {
+			return UpdateCheckResult{
 				CurrentVersion: "0.1.0",
 				LatestVersion:  "v0.2.0",
 				DownloadURL:    "https://github.com/controlado/lol-autobuild/releases/tag/v0.2.0",
@@ -1124,8 +1127,8 @@ func TestCheckUpdatesAvailable(t *testing.T) {
 func TestCheckUpdatesCurrent(t *testing.T) {
 	checker := &stubUpdateChecker{
 		currentVersion: "0.2.0",
-		checkFn: func(context.Context) (update.Result, error) {
-			return update.Result{
+		checkFn: func(context.Context) (UpdateCheckResult, error) {
+			return UpdateCheckResult{
 				CurrentVersion: "0.2.0",
 				LatestVersion:  "v0.2.0",
 				DownloadURL:    "https://example.test/latest",
@@ -1150,8 +1153,8 @@ func TestCheckUpdatesCurrent(t *testing.T) {
 func TestCheckUpdatesUnavailableDoesNotSetLastError(t *testing.T) {
 	checker := &stubUpdateChecker{
 		currentVersion: "dev",
-		checkFn: func(context.Context) (update.Result, error) {
-			return update.Result{CurrentVersion: "dev"}, update.ErrUnavailable
+		checkFn: func(context.Context) (UpdateCheckResult, error) {
+			return UpdateCheckResult{CurrentVersion: "dev"}, ErrUpdateUnavailable
 		},
 	}
 	app := newTestApp(t, testAppOptions{updateChecker: checker})
@@ -1172,8 +1175,8 @@ func TestCheckUpdatesUnavailableDoesNotSetLastError(t *testing.T) {
 func TestCheckUpdatesErrorDoesNotSetLastError(t *testing.T) {
 	checker := &stubUpdateChecker{
 		currentVersion: "0.1.0",
-		checkFn: func(context.Context) (update.Result, error) {
-			return update.Result{CurrentVersion: "0.1.0"}, errors.New("github failed")
+		checkFn: func(context.Context) (UpdateCheckResult, error) {
+			return UpdateCheckResult{CurrentVersion: "0.1.0"}, errors.New("github failed")
 		},
 	}
 	app := newTestApp(t, testAppOptions{updateChecker: checker})
@@ -1199,16 +1202,16 @@ func TestCheckUpdatesRejectsConcurrentChecks(t *testing.T) {
 	startedCheck := make(chan struct{})
 	checker := &stubUpdateChecker{
 		currentVersion: "0.1.0",
-		checkFn: func(context.Context) (update.Result, error) {
+		checkFn: func(context.Context) (UpdateCheckResult, error) {
 			close(startedCheck)
 			<-blockCheck
-			return update.Result{CurrentVersion: "0.1.0", LatestVersion: "0.1.0"}, nil
+			return UpdateCheckResult{CurrentVersion: "0.1.0", LatestVersion: "0.1.0"}, nil
 		},
 	}
 	app := newTestApp(t, testAppOptions{updateChecker: checker})
 
 	type updateResult struct {
-		state   State
+		state   ViewState
 		message UserMessage
 	}
 
@@ -1250,16 +1253,22 @@ func TestCheckUpdatesRejectsConcurrentChecks(t *testing.T) {
 	}
 }
 
-func testConfig() config.Config {
-	cfg := config.Defaults()
-	cfg.Sync.Patch = "14.7"
-	cfg.Sync.ApplyItems = true
-	cfg.Sync.ApplyRunes = true
-	cfg.Sync.ApplySpells = true
-	cfg.Sync.KeepFlash = true
-	cfg.Sync.DryRun = true
-	cfg.Watch.DebounceMillis = 250
-	return cfg
+func testConfig() RuntimeConfig {
+	return RuntimeConfig{
+		Settings: Settings{
+			Patch:              "14.7",
+			PatchAdditionsMode: autobuild.PatchAdditionsModeAuto,
+			PatchAdditions:     autobuild.PatchAdditionsDefault,
+			LeagueTierPreset:   autobuild.LeagueTierPresetDefault,
+			ApplyItems:         true,
+			ApplyRunes:         true,
+			ApplySpells:        true,
+			KeepFlash:          true,
+			DryRun:             true,
+			LCUEnabled:         false,
+		},
+		WatchDebounce: 250 * time.Millisecond,
+	}
 }
 
 func waitForSyncCall(t *testing.T, svc *stubService) syncCall {
@@ -1296,69 +1305,69 @@ func waitForSignal(t *testing.T, ch <-chan struct{}, label string) {
 	}
 }
 
-func assertSyncRequestMatchesConfig(t *testing.T, got lolautobuild.SyncRequest, cfg config.Config) {
+func assertSyncRequestMatchesConfig(t *testing.T, got autobuild.SyncRequest, cfg RuntimeConfig) {
 	t.Helper()
 
-	if got.Patch != cfg.Sync.Patch {
-		t.Fatalf("sync patch = %q, want %q", got.Patch, cfg.Sync.Patch)
+	if got.Patch != cfg.Settings.Patch {
+		t.Fatalf("sync patch = %q, want %q", got.Patch, cfg.Settings.Patch)
 	}
-	if got.PatchAdditionsMode != cfg.Sync.PatchAdditionsMode {
-		t.Fatalf("sync PatchAdditionsMode = %q, want %q", got.PatchAdditionsMode, cfg.Sync.PatchAdditionsMode)
+	if got.PatchAdditionsMode != cfg.Settings.PatchAdditionsMode {
+		t.Fatalf("sync PatchAdditionsMode = %q, want %q", got.PatchAdditionsMode, cfg.Settings.PatchAdditionsMode)
 	}
-	if got.PatchAdditions != cfg.Sync.PatchAdditions {
-		t.Fatalf("sync PatchAdditions = %d, want %d", got.PatchAdditions, cfg.Sync.PatchAdditions)
+	if got.PatchAdditions != cfg.Settings.PatchAdditions {
+		t.Fatalf("sync PatchAdditions = %d, want %d", got.PatchAdditions, cfg.Settings.PatchAdditions)
 	}
-	if got.LeagueTierPreset != cfg.Sync.LeagueTierPreset {
-		t.Fatalf("sync LeagueTierPreset = %q, want %q", got.LeagueTierPreset, cfg.Sync.LeagueTierPreset)
+	if got.LeagueTierPreset != cfg.Settings.LeagueTierPreset {
+		t.Fatalf("sync LeagueTierPreset = %q, want %q", got.LeagueTierPreset, cfg.Settings.LeagueTierPreset)
 	}
-	if got.ApplyItems != cfg.Sync.ApplyItems {
-		t.Fatalf("sync ApplyItems = %t, want %t", got.ApplyItems, cfg.Sync.ApplyItems)
+	if got.ApplyItems != cfg.Settings.ApplyItems {
+		t.Fatalf("sync ApplyItems = %t, want %t", got.ApplyItems, cfg.Settings.ApplyItems)
 	}
-	if got.ApplyRunes != cfg.Sync.ApplyRunes {
-		t.Fatalf("sync ApplyRunes = %t, want %t", got.ApplyRunes, cfg.Sync.ApplyRunes)
+	if got.ApplyRunes != cfg.Settings.ApplyRunes {
+		t.Fatalf("sync ApplyRunes = %t, want %t", got.ApplyRunes, cfg.Settings.ApplyRunes)
 	}
-	if got.ApplySpells != cfg.Sync.ApplySpells {
-		t.Fatalf("sync ApplySpells = %t, want %t", got.ApplySpells, cfg.Sync.ApplySpells)
+	if got.ApplySpells != cfg.Settings.ApplySpells {
+		t.Fatalf("sync ApplySpells = %t, want %t", got.ApplySpells, cfg.Settings.ApplySpells)
 	}
-	if got.KeepFlash != cfg.Sync.KeepFlash {
-		t.Fatalf("sync KeepFlash = %t, want %t", got.KeepFlash, cfg.Sync.KeepFlash)
+	if got.KeepFlash != cfg.Settings.KeepFlash {
+		t.Fatalf("sync KeepFlash = %t, want %t", got.KeepFlash, cfg.Settings.KeepFlash)
 	}
-	if got.DryRun != cfg.Sync.DryRun {
-		t.Fatalf("sync DryRun = %t, want %t", got.DryRun, cfg.Sync.DryRun)
+	if got.DryRun != cfg.Settings.DryRun {
+		t.Fatalf("sync DryRun = %t, want %t", got.DryRun, cfg.Settings.DryRun)
 	}
 }
 
-func assertWatchRequestMatchesConfig(t *testing.T, got lolautobuild.WatchRequest, cfg config.Config) {
+func assertWatchRequestMatchesConfig(t *testing.T, got autobuild.WatchRequest, cfg RuntimeConfig) {
 	t.Helper()
 
-	if got.Patch != cfg.Sync.Patch {
-		t.Fatalf("watch patch = %q, want %q", got.Patch, cfg.Sync.Patch)
+	if got.Patch != cfg.Settings.Patch {
+		t.Fatalf("watch patch = %q, want %q", got.Patch, cfg.Settings.Patch)
 	}
-	if got.PatchAdditionsMode != cfg.Sync.PatchAdditionsMode {
-		t.Fatalf("watch PatchAdditionsMode = %q, want %q", got.PatchAdditionsMode, cfg.Sync.PatchAdditionsMode)
+	if got.PatchAdditionsMode != cfg.Settings.PatchAdditionsMode {
+		t.Fatalf("watch PatchAdditionsMode = %q, want %q", got.PatchAdditionsMode, cfg.Settings.PatchAdditionsMode)
 	}
-	if got.PatchAdditions != cfg.Sync.PatchAdditions {
-		t.Fatalf("watch PatchAdditions = %d, want %d", got.PatchAdditions, cfg.Sync.PatchAdditions)
+	if got.PatchAdditions != cfg.Settings.PatchAdditions {
+		t.Fatalf("watch PatchAdditions = %d, want %d", got.PatchAdditions, cfg.Settings.PatchAdditions)
 	}
-	if got.LeagueTierPreset != cfg.Sync.LeagueTierPreset {
-		t.Fatalf("watch LeagueTierPreset = %q, want %q", got.LeagueTierPreset, cfg.Sync.LeagueTierPreset)
+	if got.LeagueTierPreset != cfg.Settings.LeagueTierPreset {
+		t.Fatalf("watch LeagueTierPreset = %q, want %q", got.LeagueTierPreset, cfg.Settings.LeagueTierPreset)
 	}
-	if got.ApplyItems != cfg.Sync.ApplyItems {
-		t.Fatalf("watch ApplyItems = %t, want %t", got.ApplyItems, cfg.Sync.ApplyItems)
+	if got.ApplyItems != cfg.Settings.ApplyItems {
+		t.Fatalf("watch ApplyItems = %t, want %t", got.ApplyItems, cfg.Settings.ApplyItems)
 	}
-	if got.ApplyRunes != cfg.Sync.ApplyRunes {
-		t.Fatalf("watch ApplyRunes = %t, want %t", got.ApplyRunes, cfg.Sync.ApplyRunes)
+	if got.ApplyRunes != cfg.Settings.ApplyRunes {
+		t.Fatalf("watch ApplyRunes = %t, want %t", got.ApplyRunes, cfg.Settings.ApplyRunes)
 	}
-	if got.ApplySpells != cfg.Sync.ApplySpells {
-		t.Fatalf("watch ApplySpells = %t, want %t", got.ApplySpells, cfg.Sync.ApplySpells)
+	if got.ApplySpells != cfg.Settings.ApplySpells {
+		t.Fatalf("watch ApplySpells = %t, want %t", got.ApplySpells, cfg.Settings.ApplySpells)
 	}
-	if got.KeepFlash != cfg.Sync.KeepFlash {
-		t.Fatalf("watch KeepFlash = %t, want %t", got.KeepFlash, cfg.Sync.KeepFlash)
+	if got.KeepFlash != cfg.Settings.KeepFlash {
+		t.Fatalf("watch KeepFlash = %t, want %t", got.KeepFlash, cfg.Settings.KeepFlash)
 	}
-	if got.DryRun != cfg.Sync.DryRun {
-		t.Fatalf("watch DryRun = %t, want %t", got.DryRun, cfg.Sync.DryRun)
+	if got.DryRun != cfg.Settings.DryRun {
+		t.Fatalf("watch DryRun = %t, want %t", got.DryRun, cfg.Settings.DryRun)
 	}
-	wantDebounce := time.Duration(cfg.Watch.DebounceMillis) * time.Millisecond
+	wantDebounce := cfg.WatchDebounce
 	if got.Debounce != wantDebounce {
 		t.Fatalf("watch Debounce = %v, want %v", got.Debounce, wantDebounce)
 	}
@@ -1370,10 +1379,10 @@ func assertWatchRequestMatchesConfig(t *testing.T, got lolautobuild.WatchRequest
 	}
 }
 
-func assertSyncResultEqual(t *testing.T, got, want *lolautobuild.SyncResult) {
+func assertSyncResultEqual(t *testing.T, got *SyncSummary, want *autobuild.SyncResult) {
 	t.Helper()
 
-	if !reflect.DeepEqual(got, want) {
+	if !reflect.DeepEqual(got, syncSummaryFromResult(*want)) {
 		t.Fatalf("sync result = %+v, want %+v", got, want)
 	}
 }

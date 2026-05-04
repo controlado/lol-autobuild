@@ -13,17 +13,17 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 )
 
-var ErrNotImplemented = errors.New("not implemented")
+var ErrAccessTokenUnavailable = errors.New("unable to acquire valid access token")
 
 type AutoSource interface {
-	Acquire(ctx context.Context) (ports.TokenPair, error)
+	Acquire(ctx context.Context) (domain.TokenPair, error)
 }
 
 type ManualSource interface {
-	Acquire(ctx context.Context) (ports.TokenPair, error)
+	Acquire(ctx context.Context) (domain.TokenPair, error)
 }
 
 type BrowserSource struct {
@@ -31,7 +31,7 @@ type BrowserSource struct {
 	AcquireTimeout time.Duration
 }
 
-func (s BrowserSource) Acquire(ctx context.Context) (ports.TokenPair, error) {
+func (s BrowserSource) Acquire(ctx context.Context) (domain.TokenPair, error) {
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", false),
 		chromedp.Flag("disable-gpu", false),
@@ -47,7 +47,7 @@ func (s BrowserSource) Acquire(ctx context.Context) (ports.TokenPair, error) {
 	ctx, cancel := context.WithTimeout(browserCtx, s.AcquireTimeout)
 	defer cancel()
 
-	tokenPairChannel := make(chan ports.TokenPair, 1)
+	tokenPairChannel := make(chan domain.TokenPair, 1)
 	onAuthResponse := func(e *network.EventResponseReceived) {
 		var (
 			body          []byte
@@ -87,20 +87,20 @@ func (s BrowserSource) Acquire(ctx context.Context) (ports.TokenPair, error) {
 		network.Enable(),
 		chromedp.Navigate(s.LoginURL),
 	); err != nil {
-		return ports.TokenPair{}, fmt.Errorf("running browser: %w", err)
+		return domain.TokenPair{}, fmt.Errorf("running browser: %w", err)
 	}
 
 	select {
 	case pair := <-tokenPairChannel:
 		return pair, nil
 	case <-ctx.Done():
-		return ports.TokenPair{}, ctx.Err()
+		return domain.TokenPair{}, ctx.Err()
 	}
 }
 
-func (s BrowserSource) tokenPairFromRawBody(raw []byte) (ports.TokenPair, bool) {
+func (s BrowserSource) tokenPairFromRawBody(raw []byte) (domain.TokenPair, bool) {
 	if len(raw) < 1 {
-		return ports.TokenPair{}, false
+		return domain.TokenPair{}, false
 	}
 
 	var dto = struct {
@@ -109,14 +109,14 @@ func (s BrowserSource) tokenPairFromRawBody(raw []byte) (ports.TokenPair, bool) 
 		RefreshToken string `json:"refreshToken"`
 	}{}
 	if err := json.Unmarshal(raw, &dto); err != nil {
-		return ports.TokenPair{}, false
+		return domain.TokenPair{}, false
 	}
 
 	if dto.AccessToken == "" || dto.RefreshToken == "" {
-		return ports.TokenPair{}, false
+		return domain.TokenPair{}, false
 	}
 
-	return ports.TokenPair{
+	return domain.TokenPair{
 		AccessToken:  dto.AccessToken,
 		RefreshToken: dto.RefreshToken,
 	}, true
@@ -124,7 +124,7 @@ func (s BrowserSource) tokenPairFromRawBody(raw []byte) (ports.TokenPair, bool) 
 
 type EnvManualSource struct{}
 
-func (EnvManualSource) Acquire(_ context.Context) (ports.TokenPair, error) {
+func (EnvManualSource) Acquire(_ context.Context) (domain.TokenPair, error) {
 	var (
 		access  = strings.TrimSpace(os.Getenv("COACHLESS_ACCESS_TOKEN"))
 		refresh = strings.TrimSpace(os.Getenv("COACHLESS_REFRESH_TOKEN"))
@@ -132,20 +132,20 @@ func (EnvManualSource) Acquire(_ context.Context) (ports.TokenPair, error) {
 	)
 
 	if access == "" {
-		return ports.TokenPair{}, errors.New("manual source: COACHLESS_ACCESS_TOKEN is required")
+		return domain.TokenPair{}, errors.New("manual source: COACHLESS_ACCESS_TOKEN is required")
 	}
 
 	var exp = time.Now().Add(15 * time.Minute) // default
 	if expRaw != "" {
 		unix, err := strconv.ParseInt(expRaw, 10, 64)
 		if err != nil {
-			return ports.TokenPair{}, fmt.Errorf("manual source: invalid COACHLESS_ACCESS_TOKEN_EXP: %w", err)
+			return domain.TokenPair{}, fmt.Errorf("manual source: invalid COACHLESS_ACCESS_TOKEN_EXP: %w", err)
 		}
 
 		exp = time.Unix(unix, 0).UTC()
 	}
 
-	return ports.TokenPair{
+	return domain.TokenPair{
 		AccessToken:  access,
 		RefreshToken: refresh,
 		ExpiresAt:    exp,

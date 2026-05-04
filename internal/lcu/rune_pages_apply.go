@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
-	"github.com/controlado/lol-autobuild/internal/runes"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
+	"github.com/controlado/lol-autobuild/internal/autobuild/runes"
 )
 
 const (
@@ -15,7 +15,7 @@ const (
 	runePageRestoreTimeout = 3 * time.Second
 )
 
-func (c *Client) ApplyRunePage(ctx context.Context, req ports.ApplyRunePageRequest) error {
+func (c *Client) ApplyRunePage(ctx context.Context, req domain.ApplyRunePageRequest) error {
 	if !c.Enabled {
 		return ErrNotConfigured
 	}
@@ -132,7 +132,7 @@ func reusableManagedRunePage(pages []runePage, currentPageID int) (runePage, boo
 	return runePage{}, false
 }
 
-func validateRunePageApplyRequest(req ports.ApplyRunePageRequest) (runePageCreateRequest, error) {
+func validateRunePageApplyRequest(req domain.ApplyRunePageRequest) (runePageCreateRequest, error) {
 	if req.ChampionID <= 0 {
 		return runePageCreateRequest{}, fmt.Errorf("%w: championID must be > 0", ErrInvalidRunePageRequest)
 	}
@@ -179,7 +179,7 @@ func runePageCreateRequestFromPage(page runePage) runePageCreateRequest {
 	}
 }
 
-func managedRunePageTitle(req ports.ApplyRunePageRequest) string {
+func managedRunePageTitle(req domain.ApplyRunePageRequest) string {
 	parts := []string{"AutoBuild", fmt.Sprint(req.ChampionID)}
 	if position := strings.TrimSpace(req.Position.String()); position != "" {
 		parts = append(parts, position)

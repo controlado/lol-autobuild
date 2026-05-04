@@ -1,10 +1,10 @@
-package lolautobuild
+package autobuild
 
 import (
 	"context"
 	"errors"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
+	"github.com/controlado/lol-autobuild/internal/autobuild/ports"
 )
 
 type RecommendationPolicy struct {

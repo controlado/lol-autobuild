@@ -1,4 +1,4 @@
-package lolautobuild
+package autobuild
 
 import (
 	"context"
@@ -8,9 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
-	"github.com/controlado/lol-autobuild/internal/position"
-	"github.com/controlado/lol-autobuild/internal/recommend"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
+	"github.com/controlado/lol-autobuild/internal/autobuild/recommend"
 )
 
 func TestSyncDryRunDetectsChampionButDoesNotApplyLCU(t *testing.T) {
@@ -18,9 +17,9 @@ func TestSyncDryRunDetectsChampionButDoesNotApplyLCU(t *testing.T) {
 
 	coachless := &coachlessStub{}
 	lcu := &lcuStub{
-		detectedSelection: ports.DetectedSelection{
+		detectedSelection: domain.DetectedSelection{
 			ChampionID:   240,
-			Position:     position.Top,
+			Position:     domain.Top,
 			QueueID:      420,
 			IsAutofilled: false,
 		},
@@ -49,7 +48,7 @@ func TestSyncDryRunDetectsChampionButDoesNotApplyLCU(t *testing.T) {
 	if got.DetectedChampionID != 240 {
 		t.Fatalf("unexpected detected champion id: %d", got.DetectedChampionID)
 	}
-	if got.DetectedPosition != position.Top.String() {
+	if got.DetectedPosition != domain.Top.String() {
 		t.Fatalf("unexpected detected position: %q", got.DetectedPosition)
 	}
 	if got.DetectedQueueID != 420 {
@@ -87,9 +86,9 @@ func TestSyncUsesDetectedChampionIDInApplyRequests(t *testing.T) {
 
 	coachless := &coachlessStub{}
 	lcu := &lcuStub{
-		detectedSelection: ports.DetectedSelection{
+		detectedSelection: domain.DetectedSelection{
 			ChampionID:   777,
-			Position:     position.Support,
+			Position:     domain.Support,
 			QueueID:      440,
 			IsAutofilled: true,
 		},
@@ -105,7 +104,7 @@ func TestSyncUsesDetectedChampionIDInApplyRequests(t *testing.T) {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	wantPosition := position.Support
+	wantPosition := domain.Support
 	got, err := svc.Sync(context.Background(), SyncRequest{
 		ApplyItems:  true,
 		ApplyRunes:  true,
@@ -143,9 +142,9 @@ func TestSyncUsesDetectedChampionIDInApplyRequests(t *testing.T) {
 	if !lcu.spellCalls[0].KeepFlash {
 		t.Fatalf("summoner spell apply should keep flash")
 	}
-	wantPage := ports.RunePage{
-		PrimaryStyleID:  ports.RuneStyleResolve,
-		SubStyleID:      ports.RuneStyleSorcery,
+	wantPage := domain.RunePage{
+		PrimaryStyleID:  domain.RuneStyleResolve,
+		SubStyleID:      domain.RuneStyleSorcery,
 		SelectedPerkIDs: []int{8437, 8446, 8444, 8451, 8233, 8224, 5008, 5008, 5002},
 	}
 	if !reflect.DeepEqual(lcu.runePageCalls[0].Page, wantPage) {
@@ -170,12 +169,12 @@ func TestSyncTranslatesRunePageLimitWarning(t *testing.T) {
 
 	coachless := &coachlessStub{}
 	lcu := &lcuStub{
-		detectedSelection: ports.DetectedSelection{
+		detectedSelection: domain.DetectedSelection{
 			ChampionID: 240,
-			Position:   position.Top,
+			Position:   domain.Top,
 			QueueID:    420,
 		},
-		runePageErr: fmt.Errorf(`apply rune page failed: {"errorCode":"RPC_ERROR","message":"Max pages reached"}: %w`, ports.ErrRunePageLimitReached),
+		runePageErr: fmt.Errorf(`apply rune page failed: {"errorCode":"RPC_ERROR","message":"Max pages reached"}: %w`, domain.ErrRunePageLimitReached),
 	}
 	svc, err := NewService(ServiceDeps{
 		Coachless:   coachless,
@@ -220,15 +219,15 @@ func TestSyncTranslatesRunePageLimitWarning(t *testing.T) {
 func TestSyncDoesNotApplyIncompleteRunePage(t *testing.T) {
 	t.Parallel()
 
-	emptyPrimaryRunes := ports.RuneStatsByRow{
-		RowTwos:   []ports.RuneStat{{Rune: 8444, WPAOverall: 0.8, Occurrence: 1000}},
-		RowThrees: []ports.RuneStat{{Rune: 8451, WPAOverall: 0.7, Occurrence: 1000}},
+	emptyPrimaryRunes := domain.RuneStatsByRow{
+		RowTwos:   []domain.RuneStat{{Rune: 8444, WPAOverall: 0.8, Occurrence: 1000}},
+		RowThrees: []domain.RuneStat{{Rune: 8451, WPAOverall: 0.7, Occurrence: 1000}},
 	}
 	coachless := &coachlessStub{primaryRunes: &emptyPrimaryRunes}
 	lcu := &lcuStub{
-		detectedSelection: ports.DetectedSelection{
+		detectedSelection: domain.DetectedSelection{
 			ChampionID: 240,
-			Position:   position.Top,
+			Position:   domain.Top,
 			QueueID:    420,
 		},
 	}
@@ -277,22 +276,22 @@ func TestSyncUsesAdvancedCoachlessFilters(t *testing.T) {
 	t.Parallel()
 
 	coachless := &coachlessStub{
-		patches: []ports.PatchInfo{
+		patches: []domain.PatchInfo{
 			{Label: "16.6", Major: 16, Patch: 6},
 			{Label: "16.7", Major: 16, Patch: 7},
 			{Label: "16.8", Major: 16, Patch: 8},
 		},
 	}
 	lcu := &lcuStub{
-		detectedSelection: ports.DetectedSelection{
+		detectedSelection: domain.DetectedSelection{
 			ChampionID: 240,
-			Position:   position.Top,
+			Position:   domain.Top,
 			QueueID:    420,
 		},
 	}
 	svc, err := NewService(ServiceDeps{
 		Coachless:   coachless,
-		Tokens:      tokenProviderStub{token: "t", claims: ports.TokenClaims{IsSubscribedRaw: "1"}},
+		Tokens:      tokenProviderStub{token: "t", claims: domain.TokenClaims{Subscribed: true}},
 		LCU:         lcu,
 		Recommender: recommend.NewEngine(),
 		Policy:      RecommendationPolicy{MinOccurrence: 100, TopItems: 6, TopSpells: 2},
@@ -373,9 +372,9 @@ func TestSyncReturnsErrorWhenRecommendationQueryFails(t *testing.T) {
 	queryErr := errors.New("spell endpoint failed")
 	coachless := &coachlessStub{spellErr: queryErr}
 	lcu := &lcuStub{
-		detectedSelection: ports.DetectedSelection{
+		detectedSelection: domain.DetectedSelection{
 			ChampionID:   240,
-			Position:     position.Top,
+			Position:     domain.Top,
 			QueueID:      420,
 			IsAutofilled: false,
 		},
@@ -415,9 +414,9 @@ func TestSyncBuildsCoachlessStyleItemBlocks(t *testing.T) {
 
 	coachless := &coachlessStub{}
 	lcu := &lcuStub{
-		detectedSelection: ports.DetectedSelection{
+		detectedSelection: domain.DetectedSelection{
 			ChampionID:   777,
-			Position:     position.Support,
+			Position:     domain.Support,
 			QueueID:      440,
 			IsAutofilled: false,
 		},
@@ -491,7 +490,7 @@ func TestSyncAllowsUnlimitedItemsPerBlock(t *testing.T) {
 	t.Parallel()
 
 	coachless := &coachlessStub{
-		itemStats: []ports.ItemStat{
+		itemStats: []domain.ItemStat{
 			{ItemID: 1055, WPAOverall: 0.9, Occurrence: 2000},
 			{ItemID: 3006, WPAOverall: 0.8, Occurrence: 2000},
 			{ItemID: 3031, WPAOverall: 0.7, Occurrence: 2000},
@@ -502,9 +501,9 @@ func TestSyncAllowsUnlimitedItemsPerBlock(t *testing.T) {
 		},
 	}
 	lcu := &lcuStub{
-		detectedSelection: ports.DetectedSelection{
+		detectedSelection: domain.DetectedSelection{
 			ChampionID:   235,
-			Position:     position.ADC,
+			Position:     domain.ADC,
 			QueueID:      420,
 			IsAutofilled: false,
 		},
@@ -546,15 +545,15 @@ func TestSyncFallsBackToRawItemsWhenOccurrenceFilterWouldEmptyBlock(t *testing.T
 	t.Parallel()
 
 	coachless := &coachlessStub{
-		itemStats: []ports.ItemStat{
+		itemStats: []domain.ItemStat{
 			{ItemID: 3142, WPAOverall: 1.2, Occurrence: 100},
 			{ItemID: 3087, WPAOverall: 0.9, Occurrence: 200},
 		},
 	}
 	lcu := &lcuStub{
-		detectedSelection: ports.DetectedSelection{
+		detectedSelection: domain.DetectedSelection{
 			ChampionID:   235,
-			Position:     position.ADC,
+			Position:     domain.ADC,
 			QueueID:      420,
 			IsAutofilled: false,
 		},
@@ -592,7 +591,7 @@ func TestSyncFallsBackToRawItemsWhenOccurrenceFilterWouldEmptyBlock(t *testing.T
 func TestResolvePatch(t *testing.T) {
 	t.Parallel()
 
-	defaultPatches := []ports.PatchInfo{
+	defaultPatches := []domain.PatchInfo{
 		{Label: "16.4", Major: 16, Patch: 4},
 		{Label: "16.5", Major: 16, Patch: 5},
 		{Label: "16.6", Major: 16, Patch: 6},
@@ -605,7 +604,7 @@ func TestResolvePatch(t *testing.T) {
 		rawPatch         string
 		mode             string
 		additions        int
-		patches          []ports.PatchInfo
+		patches          []domain.PatchInfo
 		subscribed       bool
 		wantLabel        string
 		wantPatch        int
@@ -691,7 +690,7 @@ func TestResolveLeagueTierPreset(t *testing.T) {
 	}
 }
 
-func hasItemCall(calls []ports.ItemStatsRequest, itemType int, itemSlots []int, includeSupportItems bool) bool {
+func hasItemCall(calls []domain.ItemStatsRequest, itemType int, itemSlots []int, includeSupportItems bool) bool {
 	for _, call := range calls {
 		if call.ItemType == itemType &&
 			reflect.DeepEqual(call.ItemSlots, itemSlots) &&

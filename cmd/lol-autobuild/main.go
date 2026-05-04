@@ -15,20 +15,20 @@ import (
 
 	"github.com/controlado/lol-autobuild/internal/app"
 	"github.com/controlado/lol-autobuild/internal/auth"
+	"github.com/controlado/lol-autobuild/internal/autobuild"
+	"github.com/controlado/lol-autobuild/internal/autobuild/recommend"
 	"github.com/controlado/lol-autobuild/internal/buildinfo"
 	"github.com/controlado/lol-autobuild/internal/coachless"
 	"github.com/controlado/lol-autobuild/internal/config"
 	"github.com/controlado/lol-autobuild/internal/lcu"
-	"github.com/controlado/lol-autobuild/internal/recommend"
 	"github.com/controlado/lol-autobuild/internal/secrets"
 	"github.com/controlado/lol-autobuild/internal/ui"
 	"github.com/controlado/lol-autobuild/internal/update"
-	"github.com/controlado/lol-autobuild/pkg/lolautobuild"
 )
 
 const defaultConfigPath = "config.yaml"
 
-type runFlags struct {
+type executionFlags struct {
 	ConfigPath  string
 	Patch       string
 	ApplyItems  bool
@@ -68,6 +68,7 @@ func uiCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ui",
 		Short: "Open the local settings UI",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runUI(cmd.Context(), configPath)
 		},
@@ -78,11 +79,12 @@ func uiCmd() *cobra.Command {
 }
 
 func syncCmd() *cobra.Command {
-	flags := runFlags{}
+	flags := executionFlags{}
 
 	cmd := &cobra.Command{
 		Use:   "sync",
 		Short: "Run one synchronization cycle",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfigAndLogging(flags.ConfigPath)
 			if err != nil {
@@ -94,13 +96,7 @@ func syncCmd() *cobra.Command {
 				return err
 			}
 
-			result, err := svc.Sync(cmd.Context(), lolautobuild.SyncRequest{
-				Patch:       flags.Patch,
-				ApplyItems:  flags.ApplyItems,
-				ApplyRunes:  flags.ApplyRunes,
-				ApplySpells: flags.ApplySpells,
-				DryRun:      flags.DryRun,
-			})
+			result, err := svc.Sync(cmd.Context(), syncRequestFromConfigAndFlags(cfg, flags, executionFlagChangesFromCommand(cmd)))
 			if err != nil {
 				warnIfLCUNotConfigured(err)
 				return err
@@ -121,11 +117,12 @@ func syncCmd() *cobra.Command {
 }
 
 func watchCmd() *cobra.Command {
-	flags := runFlags{}
+	flags := executionFlags{}
 
 	cmd := &cobra.Command{
 		Use:   "watch",
 		Short: "Watch LCU events and run synchronization continuously",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfigAndLogging(flags.ConfigPath)
 			if err != nil {
@@ -145,16 +142,10 @@ func watchCmd() *cobra.Command {
 				Dur("reconnect_delay", time.Duration(cfg.Watch.ReconnectDelayMillis)*time.Millisecond).
 				Msg("watch started; press CTRL+C to stop")
 
-			err = svc.Watch(ctx, lolautobuild.WatchRequest{
-				Patch:       flags.Patch,
-				ApplyItems:  flags.ApplyItems,
-				ApplyRunes:  flags.ApplyRunes,
-				ApplySpells: flags.ApplySpells,
-				DryRun:      flags.DryRun,
-				Debounce:    time.Duration(cfg.Watch.DebounceMillis) * time.Millisecond,
-				OnCycle:     logWatchCycle,
-				OnNotice:    logWatchNotice,
-			})
+			req := watchRequestFromConfigAndFlags(cfg, flags, executionFlagChangesFromCommand(cmd))
+			req.OnCycle = logWatchCycle
+			req.OnNotice = logWatchNotice
+			err = svc.Watch(ctx, req)
 			if err != nil {
 				warnIfLCUNotConfigured(err)
 				return err
@@ -175,15 +166,26 @@ func runUI(ctx context.Context, configPath string) error {
 		return err
 	}
 
-	configStore, err := config.NewConfigStore(configPath)
+	fileConfigStore, err := config.NewConfigStore(configPath)
 	if err != nil {
 		return err
 	}
+	appConfigStore := newAppConfigStore(fileConfigStore, cfg)
 
-	updateChecker := update.NewGitHubChecker(update.Options{
-		CurrentVersion: buildinfo.Version,
+	application, err := app.New(app.Options{
+		ServiceFactory: func(appCfg app.RuntimeConfig) (autobuild.Service, error) {
+			return buildService(appConfigStore.configFor(appCfg))
+		},
+		LCUStatus: func(ctx context.Context, appCfg app.RuntimeConfig) app.LCUStatus {
+			return appLCUStatusFromLCU(checkLCUStatus(ctx, appConfigStore.configFor(appCfg)))
+		},
+		UpdateChecker: appUpdateChecker{
+			source: update.NewGitHubChecker(update.Options{CurrentVersion: buildinfo.Version}),
+		},
+		ConfigStore:      appConfigStore,
+		RuntimeConfig:    runtimeConfigFromConfig(cfg),
+		MessageFromError: appMessageFromErr,
 	})
-	application, err := app.New(buildService, checkLCUStatus, updateChecker, configStore, cfg)
 	if err != nil {
 		return err
 	}
@@ -203,13 +205,78 @@ func runUI(ctx context.Context, configPath string) error {
 	return server.Run(ctx)
 }
 
-func bindRunFlags(cmd *cobra.Command, flags *runFlags) {
+func bindRunFlags(cmd *cobra.Command, flags *executionFlags) {
 	cmd.Flags().StringVar(&flags.ConfigPath, "config", defaultConfigPath, "Path to YAML configuration file")
 	cmd.Flags().StringVar(&flags.Patch, "patch", "", "Patch label (e.g. 16.7). Empty = latest")
 	cmd.Flags().BoolVar(&flags.ApplyItems, "apply-items", true, "Apply item set")
 	cmd.Flags().BoolVar(&flags.ApplyRunes, "apply-runes", true, "Apply rune page")
 	cmd.Flags().BoolVar(&flags.ApplySpells, "apply-spells", true, "Apply summoner spells")
-	cmd.Flags().BoolVar(&flags.DryRun, "dry-run", true, "Do not apply changes to LCU")
+	cmd.Flags().BoolVar(&flags.DryRun, "dry-run", config.Defaults().Sync.DryRun, "Do not apply changes to LCU")
+}
+
+type executionFlagChanges struct {
+	Patch       bool
+	ApplyItems  bool
+	ApplyRunes  bool
+	ApplySpells bool
+	DryRun      bool
+}
+
+func executionFlagChangesFromCommand(cmd *cobra.Command) executionFlagChanges {
+	flags := cmd.Flags()
+	return executionFlagChanges{
+		Patch:       flags.Changed("patch"),
+		ApplyItems:  flags.Changed("apply-items"),
+		ApplyRunes:  flags.Changed("apply-runes"),
+		ApplySpells: flags.Changed("apply-spells"),
+		DryRun:      flags.Changed("dry-run"),
+	}
+}
+
+func syncRequestFromConfigAndFlags(cfg config.Config, flags executionFlags, changed executionFlagChanges) autobuild.SyncRequest {
+	req := autobuild.SyncRequest{
+		Patch:              cfg.Sync.Patch,
+		PatchAdditionsMode: cfg.Sync.PatchAdditionsMode,
+		PatchAdditions:     cfg.Sync.PatchAdditions,
+		LeagueTierPreset:   cfg.Sync.LeagueTierPreset,
+		ApplyItems:         cfg.Sync.ApplyItems,
+		ApplyRunes:         cfg.Sync.ApplyRunes,
+		ApplySpells:        cfg.Sync.ApplySpells,
+		KeepFlash:          cfg.Sync.KeepFlash,
+		DryRun:             cfg.Sync.DryRun,
+	}
+	if changed.Patch {
+		req.Patch = flags.Patch
+	}
+	if changed.ApplyItems {
+		req.ApplyItems = flags.ApplyItems
+	}
+	if changed.ApplyRunes {
+		req.ApplyRunes = flags.ApplyRunes
+	}
+	if changed.ApplySpells {
+		req.ApplySpells = flags.ApplySpells
+	}
+	if changed.DryRun {
+		req.DryRun = flags.DryRun
+	}
+	return req
+}
+
+func watchRequestFromConfigAndFlags(cfg config.Config, flags executionFlags, changed executionFlagChanges) autobuild.WatchRequest {
+	syncReq := syncRequestFromConfigAndFlags(cfg, flags, changed)
+	return autobuild.WatchRequest{
+		Patch:              syncReq.Patch,
+		PatchAdditionsMode: syncReq.PatchAdditionsMode,
+		PatchAdditions:     syncReq.PatchAdditions,
+		LeagueTierPreset:   syncReq.LeagueTierPreset,
+		ApplyItems:         syncReq.ApplyItems,
+		ApplyRunes:         syncReq.ApplyRunes,
+		ApplySpells:        syncReq.ApplySpells,
+		KeepFlash:          syncReq.KeepFlash,
+		DryRun:             syncReq.DryRun,
+		Debounce:           time.Duration(cfg.Watch.DebounceMillis) * time.Millisecond,
+	}
 }
 
 func loadConfigAndLogging(configPath string) (config.Config, error) {
@@ -256,7 +323,7 @@ func configureLogging(rawLevel string) {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
 }
 
-func buildService(cfg config.Config) (lolautobuild.Service, error) {
+func buildService(cfg config.Config) (autobuild.Service, error) {
 	coachlessClient := coachless.NewClient(cfg.Coachless.APIBaseURL, time.Duration(cfg.Coachless.TimeoutSeconds)*time.Second)
 	secretStore := secrets.NewKeyringStore(cfg.Secrets.ServiceName)
 	lcuClient := lcu.NewClient(cfg.LCU.Enabled, cfg.LCU.LockfilePath)
@@ -277,12 +344,12 @@ func buildService(cfg config.Config) (lolautobuild.Service, error) {
 		},
 	)
 
-	return lolautobuild.NewService(lolautobuild.ServiceDeps{
+	return autobuild.NewService(autobuild.ServiceDeps{
 		Coachless:   coachlessClient,
 		Tokens:      provider,
 		LCU:         lcuClient,
 		Recommender: recommend.NewEngine(),
-		Policy: lolautobuild.RecommendationPolicy{
+		Policy: autobuild.RecommendationPolicy{
 			MinOccurrence: cfg.Recommendation.MinOccurrence,
 			TopItems:      cfg.Recommendation.TopItems,
 			TopSpells:     cfg.Recommendation.TopSpells,
@@ -300,7 +367,7 @@ func warnIfLCUNotConfigured(err error) {
 	}
 }
 
-func logWatchCycle(cycle lolautobuild.WatchCycle) {
+func logWatchCycle(cycle autobuild.WatchCycle) {
 	logger := log.Info()
 	if cycle.Err != nil {
 		logger = log.Warn().Err(cycle.Err)
@@ -339,7 +406,7 @@ func logWatchCycle(cycle lolautobuild.WatchCycle) {
 	logger.Msg("watch cycle completed")
 }
 
-func logWatchNotice(notice lolautobuild.WatchNotice) {
+func logWatchNotice(notice autobuild.WatchNotice) {
 	logger := log.Info()
 	if notice.Err != nil {
 		logger = log.Warn().Err(notice.Err)

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/controlado/lol-autobuild/pkg/lolautobuild"
+	"github.com/controlado/lol-autobuild/internal/autobuild"
 )
 
 func TestLoadAndValidate(t *testing.T) {
@@ -76,7 +76,7 @@ env_file:
 	if cfg.Sync.Patch != "16.7" {
 		t.Fatalf("unexpected sync patch: %s", cfg.Sync.Patch)
 	}
-	if cfg.Sync.PatchAdditionsMode != lolautobuild.PatchAdditionsModeManual || cfg.Sync.PatchAdditions != 3 || cfg.Sync.LeagueTierPreset != lolautobuild.LeagueTierPresetDiamondPlus {
+	if cfg.Sync.PatchAdditionsMode != autobuild.PatchAdditionsModeManual || cfg.Sync.PatchAdditions != 3 || cfg.Sync.LeagueTierPreset != autobuild.LeagueTierPresetDiamondPlus {
 		t.Fatalf("unexpected advanced sync filters: %#v", cfg.Sync)
 	}
 
@@ -128,11 +128,20 @@ lcu:
 	if cfg.Sync.Patch != "" {
 		t.Fatalf("expected empty default patch, got %q", cfg.Sync.Patch)
 	}
-	if cfg.Sync.PatchAdditionsMode != lolautobuild.PatchAdditionsModeAuto || cfg.Sync.PatchAdditions != lolautobuild.PatchAdditionsDefault || cfg.Sync.LeagueTierPreset != lolautobuild.LeagueTierPresetDefault {
+	if cfg.Sync.PatchAdditionsMode != autobuild.PatchAdditionsModeAuto || cfg.Sync.PatchAdditions != autobuild.PatchAdditionsDefault || cfg.Sync.LeagueTierPreset != autobuild.LeagueTierPresetDefault {
 		t.Fatalf("unexpected sync filter defaults: %#v", cfg.Sync)
 	}
 	if !cfg.Sync.ApplyItems || !cfg.Sync.ApplyRunes || !cfg.Sync.ApplySpells || !cfg.Sync.KeepFlash || cfg.Sync.DryRun {
 		t.Fatalf("unexpected sync defaults: %#v", cfg.Sync)
+	}
+}
+
+func TestDefaultsUseTenTopItems(t *testing.T) {
+	t.Parallel()
+
+	cfg := Defaults()
+	if cfg.Recommendation.TopItems != 10 {
+		t.Fatalf("recommendation.top_items default = %d, want 10", cfg.Recommendation.TopItems)
 	}
 }
 
@@ -143,9 +152,9 @@ func TestSaveWritesConfig(t *testing.T) {
 	cfg := Defaults()
 	cfg.LCU.Enabled = true
 	cfg.Sync.Patch = "16.8"
-	cfg.Sync.PatchAdditionsMode = lolautobuild.PatchAdditionsModeManual
-	cfg.Sync.PatchAdditions = lolautobuild.PatchAdditionsMax
-	cfg.Sync.LeagueTierPreset = lolautobuild.LeagueTierPresetMasterPlus
+	cfg.Sync.PatchAdditionsMode = autobuild.PatchAdditionsModeManual
+	cfg.Sync.PatchAdditions = autobuild.PatchAdditionsMax
+	cfg.Sync.LeagueTierPreset = autobuild.LeagueTierPresetMasterPlus
 	cfg.Sync.ApplyRunes = false
 	cfg.Sync.KeepFlash = false
 	cfg.Sync.DryRun = false
@@ -167,7 +176,7 @@ func TestSaveWritesConfig(t *testing.T) {
 	if !reloaded.LCU.Enabled {
 		t.Fatalf("expected lcu.enabled to persist")
 	}
-	if reloaded.Sync.Patch != "16.8" || reloaded.Sync.PatchAdditionsMode != lolautobuild.PatchAdditionsModeManual || reloaded.Sync.PatchAdditions != lolautobuild.PatchAdditionsMax || reloaded.Sync.LeagueTierPreset != lolautobuild.LeagueTierPresetMasterPlus || reloaded.Sync.ApplyRunes || reloaded.Sync.KeepFlash || reloaded.Sync.DryRun {
+	if reloaded.Sync.Patch != "16.8" || reloaded.Sync.PatchAdditionsMode != autobuild.PatchAdditionsModeManual || reloaded.Sync.PatchAdditions != autobuild.PatchAdditionsMax || reloaded.Sync.LeagueTierPreset != autobuild.LeagueTierPresetMasterPlus || reloaded.Sync.ApplyRunes || reloaded.Sync.KeepFlash || reloaded.Sync.DryRun {
 		t.Fatalf("unexpected saved sync config: %#v", reloaded.Sync)
 	}
 }

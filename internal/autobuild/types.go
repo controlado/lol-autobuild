@@ -1,4 +1,4 @@
-package lolautobuild
+package autobuild
 
 import (
 	"context"

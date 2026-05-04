@@ -24,7 +24,7 @@ Escolha o ZIP do seu sistema, extraia os arquivos e rode `lol-autobuild`.
 
 ## Sobre o Coachless
 
-[Coachless](https://coachless.gg/) é um destaque entre os sites de análise para League of Legends. Ele usa Win Probability Added (WPA) para comparar itens com mais contexto que o win rate puro. Jogadores ganham um jeito mais inteligente de avaliar builds. [xPetu](https://x.com/xPetu) lidera o projeto; jogadores conhecem o trabalho dele pelo Shen em alto nível e pelas análises matemáticas sobre o jogo.
+[xPetu](https://x.com/xPetu) lidera o [Coachless](https://coachless.gg/), um site de análise para League of Legends. Ele usa Win Probability Added (WPA) para comparar itens com mais contexto que o win rate puro. `lol-autobuild` usa esses dados de runas, itens e spells durante a seleção de campeões.
 
 ## Primeiro uso
 
@@ -56,7 +56,7 @@ Observar a seleção de campeões em modo de preview pela CLI:
 lol-autobuild watch --dry-run
 ```
 
-Comandos da CLI usam dry-run por padrão. Passe `--dry-run=false` para aplicar mudanças no client.
+Comandos da CLI leem `sync.dry_run` da configuração. Passe `--dry-run` para simular ou `--dry-run=false` para aplicar mudanças no client.
 
 Comandos avançados, configuração e limites ficam em [USAGE.md](USAGE.md).
 

@@ -1,4 +1,4 @@
-package lolautobuild
+package autobuild
 
 import (
 	"context"
@@ -8,9 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
-	"github.com/controlado/lol-autobuild/internal/position"
-	"github.com/controlado/lol-autobuild/internal/runes"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
+	"github.com/controlado/lol-autobuild/internal/autobuild/runes"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -52,7 +51,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 	}
 
 	var (
-		filters = ports.CommonFilters{
+		filters = domain.CommonFilters{
 			Patch:       patchFilter,
 			ChampionIDs: []int{selection.ChampionID},
 			LeagueTiers: leagueTiers,
@@ -61,9 +60,9 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 
 		stageSpecs = itemStageSpecsForPosition(selection.Position)
 
-		keystoneStats []ports.KeystoneStat
-		spellStats    []ports.SummonerSpellStat
-		stageStats    = make([][]ports.ItemStat, len(stageSpecs))
+		keystoneStats []domain.KeystoneStat
+		spellStats    []domain.SummonerSpellStat
+		stageStats    = make([][]domain.ItemStat, len(stageSpecs))
 	)
 
 	g, gctx := errgroup.WithContext(ctx)
@@ -71,7 +70,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 
 	g.Go(func() error {
 		var err error
-		keystoneStats, err = s.deps.Coachless.GetKeystoneData(gctx, accessToken, ports.KeystoneRequest{CommonFilters: filters})
+		keystoneStats, err = s.deps.Coachless.GetKeystoneData(gctx, accessToken, domain.KeystoneRequest{CommonFilters: filters})
 		if err != nil {
 			return fmt.Errorf("get keystone data: %w", err)
 		}
@@ -80,7 +79,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 
 	g.Go(func() error {
 		var err error
-		spellStats, err = s.deps.Coachless.GetSummonerSpellStats(gctx, accessToken, ports.SummonerSpellStatsRequest{
+		spellStats, err = s.deps.Coachless.GetSummonerSpellStats(gctx, accessToken, domain.SummonerSpellStatsRequest{
 			CommonFilters: filters,
 			PairedSpell:   nil,
 		})
@@ -92,7 +91,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 
 	for idx, stage := range stageSpecs {
 		g.Go(func() error {
-			stats, err := s.deps.Coachless.GetItemStats(gctx, accessToken, ports.ItemStatsRequest{
+			stats, err := s.deps.Coachless.GetItemStats(gctx, accessToken, domain.ItemStatsRequest{
 				CommonFilters:         filters,
 				ItemSlots:             stage.ItemSlots,
 				ItemType:              stage.ItemType,
@@ -112,7 +111,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 		return SyncResult{}, err
 	}
 
-	rec := s.deps.Recommender.Recommend(ports.RecommendationInput{
+	rec := s.deps.Recommender.Recommend(domain.RecommendationInput{
 		KeystoneStats: keystoneStats,
 		SpellStats:    spellStats,
 		ItemStats:     slices.Concat(stageStats...),
@@ -154,7 +153,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 					if len(runeRec.Warnings) == 0 {
 						result.Warnings = append(result.Warnings, "apply runes requested but no complete rune page recommendation was available")
 					}
-				} else if err := s.deps.LCU.ApplyRunePage(ctx, ports.ApplyRunePageRequest{
+				} else if err := s.deps.LCU.ApplyRunePage(ctx, domain.ApplyRunePageRequest{
 					ChampionID: selection.ChampionID,
 					Position:   selection.Position,
 					Page:       *runeRec.Page,
@@ -176,7 +175,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 
 		if len(spellIDs) == 0 {
 			result.Warnings = append(result.Warnings, "apply spells requested but no spell recommendation was available")
-		} else if err := s.deps.LCU.ApplySummonerSpells(ctx, ports.ApplySummonerSpellsRequest{
+		} else if err := s.deps.LCU.ApplySummonerSpells(ctx, domain.ApplySummonerSpellsRequest{
 			ChampionID: selection.ChampionID,
 			Position:   selection.Position,
 			SpellIDs:   spellIDs,
@@ -190,7 +189,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 	}
 
 	if req.ApplyItems {
-		blocks := make([]ports.ApplyItemSetBlock, 0, len(stageSpecs))
+		blocks := make([]domain.ApplyItemSetBlock, 0, len(stageSpecs))
 		hasAnyItems := false
 		for idx, stage := range stageSpecs {
 			filtered := filterAndLimitItemStats(stageStats[idx], s.deps.Policy.MinOccurrence, s.deps.Policy.TopItems)
@@ -202,7 +201,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 				hasAnyItems = true
 			}
 
-			blocks = append(blocks, ports.ApplyItemSetBlock{
+			blocks = append(blocks, domain.ApplyItemSetBlock{
 				Type:    stage.Type,
 				ItemIDs: blockItemIDs,
 			})
@@ -210,7 +209,7 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 
 		if !hasAnyItems {
 			result.Warnings = append(result.Warnings, "apply items requested but no item recommendation was available")
-		} else if err := s.deps.LCU.ApplyItemSet(ctx, ports.ApplyItemSetRequest{
+		} else if err := s.deps.LCU.ApplyItemSet(ctx, domain.ApplyItemSetRequest{
 			ChampionID: selection.ChampionID,
 			Position:   selection.Position,
 			Patch:      patchLabel,
@@ -226,27 +225,27 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 	return result, nil
 }
 
-func (s *syncService) recommendRunePage(ctx context.Context, accessToken string, filters ports.CommonFilters, keystone ports.KeystoneStat) (ports.RunePageRecommendation, error) {
+func (s *syncService) recommendRunePage(ctx context.Context, accessToken string, filters domain.CommonFilters, keystone domain.KeystoneStat) (domain.RunePageRecommendation, error) {
 	primaryStyleID, ok := runes.StyleForKeystone(keystone.Rune)
 	if !ok {
-		return s.deps.Recommender.RecommendRunePage(ports.RunePageRecommendationInput{
+		return s.deps.Recommender.RecommendRunePage(domain.RunePageRecommendationInput{
 			Keystone:      keystone,
 			MinOccurrence: s.deps.Policy.MinOccurrence,
 		}), nil
 	}
 
-	secondaryTreePlaycount, err := s.deps.Coachless.GetSecondaryTreePlaycount(ctx, accessToken, ports.SecondaryTreePlaycountRequest{
+	secondaryTreePlaycount, err := s.deps.Coachless.GetSecondaryTreePlaycount(ctx, accessToken, domain.SecondaryTreePlaycountRequest{
 		CommonFilters: filters,
 		Tree:          primaryStyleID,
 		Keystone:      keystone.Rune,
 	})
 	if err != nil {
-		return ports.RunePageRecommendation{}, fmt.Errorf("get secondary rune tree playcount: %w", err)
+		return domain.RunePageRecommendation{}, fmt.Errorf("get secondary rune tree playcount: %w", err)
 	}
 
 	secondaryStyleID, ok := runes.RecommendedSecondaryStyle(secondaryTreePlaycount, primaryStyleID)
 	if !ok {
-		return s.deps.Recommender.RecommendRunePage(ports.RunePageRecommendationInput{
+		return s.deps.Recommender.RecommendRunePage(domain.RunePageRecommendationInput{
 			Keystone:               keystone,
 			SecondaryTreePlaycount: secondaryTreePlaycount,
 			MinOccurrence:          s.deps.Policy.MinOccurrence,
@@ -254,9 +253,9 @@ func (s *syncService) recommendRunePage(ctx context.Context, accessToken string,
 	}
 
 	var (
-		primaryRunes   ports.RuneStatsByRow
-		secondaryRunes ports.RuneStatsByRow
-		shards         ports.ShardStats
+		primaryRunes   domain.RuneStatsByRow
+		secondaryRunes domain.RuneStatsByRow
+		shards         domain.ShardStats
 	)
 
 	g, gctx := errgroup.WithContext(ctx)
@@ -264,7 +263,7 @@ func (s *syncService) recommendRunePage(ctx context.Context, accessToken string,
 
 	g.Go(func() error {
 		var err error
-		primaryRunes, err = s.deps.Coachless.GetRuneStatsForKeystoneAndTree(gctx, accessToken, ports.RuneStatsRequest{
+		primaryRunes, err = s.deps.Coachless.GetRuneStatsForKeystoneAndTree(gctx, accessToken, domain.RuneStatsRequest{
 			CommonFilters: filters,
 			Keystone:      keystone.Rune,
 			MainTree:      primaryStyleID,
@@ -278,7 +277,7 @@ func (s *syncService) recommendRunePage(ctx context.Context, accessToken string,
 
 	g.Go(func() error {
 		var err error
-		secondaryRunes, err = s.deps.Coachless.GetRuneStatsForKeystoneAndTree(gctx, accessToken, ports.RuneStatsRequest{
+		secondaryRunes, err = s.deps.Coachless.GetRuneStatsForKeystoneAndTree(gctx, accessToken, domain.RuneStatsRequest{
 			CommonFilters: filters,
 			Keystone:      keystone.Rune,
 			MainTree:      primaryStyleID,
@@ -292,7 +291,7 @@ func (s *syncService) recommendRunePage(ctx context.Context, accessToken string,
 
 	g.Go(func() error {
 		var err error
-		shards, err = s.deps.Coachless.GetShardStatsForKeystoneAndTree(gctx, accessToken, ports.ShardStatsRequest{
+		shards, err = s.deps.Coachless.GetShardStatsForKeystoneAndTree(gctx, accessToken, domain.ShardStatsRequest{
 			CommonFilters: filters,
 			Keystone:      keystone.Rune,
 		})
@@ -303,10 +302,10 @@ func (s *syncService) recommendRunePage(ctx context.Context, accessToken string,
 	})
 
 	if err := g.Wait(); err != nil {
-		return ports.RunePageRecommendation{}, err
+		return domain.RunePageRecommendation{}, err
 	}
 
-	return s.deps.Recommender.RecommendRunePage(ports.RunePageRecommendationInput{
+	return s.deps.Recommender.RecommendRunePage(domain.RunePageRecommendationInput{
 		Keystone:               keystone,
 		SecondaryTreePlaycount: secondaryTreePlaycount,
 		PrimaryRunes:           primaryRunes,
@@ -330,7 +329,7 @@ type itemStageSpec struct {
 	IncludeSupportItems bool
 }
 
-func itemStageSpecsForPosition(p position.Position) []itemStageSpec {
+func itemStageSpecsForPosition(p domain.Position) []itemStageSpec {
 	firstItemType := itemTypeLegendaries
 	if p.IsSupport() {
 		firstItemType = itemTypeSupport
@@ -369,7 +368,7 @@ func itemStageSpecsForPosition(p position.Position) []itemStageSpec {
 	}
 }
 
-func filterAndLimitItemStats(in []ports.ItemStat, minOccurrence, topItems int) []ports.ItemStat {
+func filterAndLimitItemStats(in []domain.ItemStat, minOccurrence, topItems int) []domain.ItemStat {
 	out := itemStatsPassingOccurrenceFilter(in, minOccurrence)
 
 	sort.Slice(out, func(i, j int) bool {
@@ -386,8 +385,8 @@ func filterAndLimitItemStats(in []ports.ItemStat, minOccurrence, topItems int) [
 	return out
 }
 
-func itemStatsPassingOccurrenceFilter(in []ports.ItemStat, minOccurrence int) []ports.ItemStat {
-	filtered := make([]ports.ItemStat, 0, len(in))
+func itemStatsPassingOccurrenceFilter(in []domain.ItemStat, minOccurrence int) []domain.ItemStat {
+	filtered := make([]domain.ItemStat, 0, len(in))
 	for _, stat := range in {
 		if stat.Occurrence >= minOccurrence {
 			filtered = append(filtered, stat)
@@ -398,12 +397,12 @@ func itemStatsPassingOccurrenceFilter(in []ports.ItemStat, minOccurrence int) []
 		return filtered
 	}
 
-	return append([]ports.ItemStat{}, in...)
+	return append([]domain.ItemStat{}, in...)
 }
 
-func resolvePatch(rawPatch string, rawPatchAdditionsMode string, requestedPatchAdditions int, patches []ports.PatchInfo, subscribed bool) (ports.PatchFilter, string, []string, error) {
+func resolvePatch(rawPatch string, rawPatchAdditionsMode string, requestedPatchAdditions int, patches []domain.PatchInfo, subscribed bool) (domain.PatchFilter, string, []string, error) {
 	if len(patches) == 0 {
-		return ports.PatchFilter{}, "", nil, errors.New("no patch data available")
+		return domain.PatchFilter{}, "", nil, errors.New("no patch data available")
 	}
 
 	patchAdditionsMode := strings.TrimSpace(rawPatchAdditionsMode)
@@ -411,10 +410,10 @@ func resolvePatch(rawPatch string, rawPatchAdditionsMode string, requestedPatchA
 		patchAdditionsMode = PatchAdditionsModeAuto
 	}
 	if patchAdditionsMode != PatchAdditionsModeAuto && patchAdditionsMode != PatchAdditionsModeManual {
-		return ports.PatchFilter{}, "", nil, fmt.Errorf("patch additions mode %q is invalid", rawPatchAdditionsMode)
+		return domain.PatchFilter{}, "", nil, fmt.Errorf("patch additions mode %q is invalid", rawPatchAdditionsMode)
 	}
 	if requestedPatchAdditions < 0 || requestedPatchAdditions > PatchAdditionsMax {
-		return ports.PatchFilter{}, "", nil, fmt.Errorf("patch additions %d must be between 0 and %d", requestedPatchAdditions, PatchAdditionsMax)
+		return domain.PatchFilter{}, "", nil, fmt.Errorf("patch additions %d must be between 0 and %d", requestedPatchAdditions, PatchAdditionsMax)
 	}
 
 	selectedIndex := len(patches) - 1
@@ -429,23 +428,23 @@ func resolvePatch(rawPatch string, rawPatchAdditionsMode string, requestedPatchA
 			}
 		}
 		if !found {
-			return ports.PatchFilter{}, "", nil, fmt.Errorf("requested patch %q not found", rawPatch)
+			return domain.PatchFilter{}, "", nil, fmt.Errorf("requested patch %q not found", rawPatch)
 		}
 	} else if !subscribed && len(patches) > 1 {
 		selectedIndex = len(patches) - 2
 	}
 
 	if !subscribed && selectedIndex == len(patches)-1 && len(patches) > 1 {
-		return ports.PatchFilter{}, "", nil, fmt.Errorf("requested patch %q requires Coachless Premium", patches[selectedIndex].Label)
+		return domain.PatchFilter{}, "", nil, fmt.Errorf("requested patch %q requires Coachless Premium", patches[selectedIndex].Label)
 	}
 
 	selected := patches[selectedIndex]
 	patchAdditions, warnings, err := resolvePatchAdditions(patchAdditionsMode, requestedPatchAdditions, selectedIndex, subscribed)
 	if err != nil {
-		return ports.PatchFilter{}, "", nil, err
+		return domain.PatchFilter{}, "", nil, err
 	}
 
-	return ports.PatchFilter{
+	return domain.PatchFilter{
 		Major:          selected.Major,
 		Patch:          selected.Patch,
 		PatchAdditions: patchAdditions,

@@ -1,14 +1,13 @@
-package lolautobuild
+package autobuild
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 )
 
 const (
@@ -24,12 +23,12 @@ func (s *syncService) Watch(ctx context.Context, req WatchRequest) error {
 
 	var (
 		watchErrCh = make(chan error, 1)
-		eventsCh   = make(chan ports.LCUEvent, 64)
-		noticesCh  chan ports.LCUWatchNotice
+		eventsCh   = make(chan domain.LCUEvent, 64)
+		noticesCh  chan domain.LCUWatchNotice
 	)
 
 	if req.OnNotice != nil {
-		noticesCh = make(chan ports.LCUWatchNotice, 64)
+		noticesCh = make(chan domain.LCUWatchNotice, 64)
 	}
 
 	go func() {
@@ -88,7 +87,7 @@ func (s *syncService) Watch(ctx context.Context, req WatchRequest) error {
 	}
 }
 
-func (s *syncService) runWatchCycle(ctx context.Context, req WatchRequest, trigger WatchTrigger, event *ports.LCUEvent) error {
+func (s *syncService) runWatchCycle(ctx context.Context, req WatchRequest, trigger WatchTrigger, event *domain.LCUEvent) error {
 	result, err := s.Sync(ctx, req.syncRequest())
 
 	cycle := WatchCycle{
@@ -114,7 +113,7 @@ func (s *syncService) runWatchCycle(ctx context.Context, req WatchRequest, trigg
 type watchPendingCycle struct {
 	timer      *time.Timer
 	timerCh    <-chan time.Time
-	event      ports.LCUEvent
+	event      domain.LCUEvent
 	sessionKey string
 	scheduled  bool
 }
@@ -123,7 +122,7 @@ func (p *watchPendingCycle) timerC() <-chan time.Time {
 	return p.timerCh
 }
 
-func (p *watchPendingCycle) schedule(event ports.LCUEvent, sessionKey string, debounce time.Duration) {
+func (p *watchPendingCycle) schedule(event domain.LCUEvent, sessionKey string, debounce time.Duration) {
 	p.event = event
 	p.sessionKey = sessionKey
 	p.scheduled = true
@@ -136,22 +135,22 @@ func (p *watchPendingCycle) promoteSessionKey(from string, to string) {
 	}
 }
 
-func (p *watchPendingCycle) consume() (ports.LCUEvent, string, bool) {
+func (p *watchPendingCycle) consume() (domain.LCUEvent, string, bool) {
 	p.timerCh = nil
 	if !p.scheduled {
-		return ports.LCUEvent{}, "", false
+		return domain.LCUEvent{}, "", false
 	}
 
 	event := p.event
 	sessionKey := p.sessionKey
-	p.event = ports.LCUEvent{}
+	p.event = domain.LCUEvent{}
 	p.sessionKey = ""
 	p.scheduled = false
 	return event, sessionKey, true
 }
 
 func (p *watchPendingCycle) clear() {
-	p.event = ports.LCUEvent{}
+	p.event = domain.LCUEvent{}
 	p.sessionKey = ""
 	p.scheduled = false
 	p.stop()
@@ -178,7 +177,7 @@ func newWatchSessionGate() *watchSessionGate {
 	}
 }
 
-func (g *watchSessionGate) reset(event ports.LCUEvent) {
+func (g *watchSessionGate) reset(event domain.LCUEvent) {
 	g.pending = make(map[string]struct{})
 
 	if event.ConnectionID > 0 && event.ConnectionID != g.activeConnectionID {
@@ -218,7 +217,7 @@ func (g *watchSessionGate) markSynced(sessionKey string) {
 	g.synced[sessionKey] = struct{}{}
 }
 
-func (g *watchSessionGate) trackFinalizationSession(event ports.LCUEvent, eventType string) (sessionKey string, promotedFrom string) {
+func (g *watchSessionGate) trackFinalizationSession(event domain.LCUEvent, eventType string) (sessionKey string, promotedFrom string) {
 	connectionChanged := event.ConnectionID > 0 && event.ConnectionID != g.activeConnectionID
 	if connectionChanged {
 		g.activeConnectionID = event.ConnectionID
@@ -266,15 +265,15 @@ func (g *watchSessionGate) promoteActiveSession(gameKey string) string {
 	return previousKey
 }
 
-func watchTriggerForEvent(event ports.LCUEvent) WatchTrigger {
-	if event.Source == ports.LCUEventSourceSnapshot {
+func watchTriggerForEvent(event domain.LCUEvent) WatchTrigger {
+	if event.Source == domain.LCUEventSourceSnapshot {
 		return WatchTriggerSnapshot
 	}
 
 	return WatchTriggerEvent
 }
 
-func watchNoticeFromLCU(notice ports.LCUWatchNotice) WatchNotice {
+func watchNoticeFromLCU(notice domain.LCUWatchNotice) WatchNotice {
 	return WatchNotice{
 		Kind:         WatchNoticeKind(notice.Kind),
 		Message:      notice.Message,
@@ -300,7 +299,7 @@ func (r WatchRequest) syncRequest() SyncRequest {
 	}
 }
 
-func classifyChampSelectSessionEvent(event ports.LCUEvent) (eventType string, isSessionEvent bool, isFinalizationEvent bool) {
+func classifyChampSelectSessionEvent(event domain.LCUEvent) (eventType string, isSessionEvent bool, isFinalizationEvent bool) {
 	eventType = strings.ToLower(strings.TrimSpace(event.EventType))
 	if strings.TrimSpace(event.URI) != champSelectSessionURI {
 		return eventType, false, false
@@ -312,49 +311,15 @@ func classifyChampSelectSessionEvent(event ports.LCUEvent) (eventType string, is
 		return eventType, true, false
 	}
 
-	var payload struct {
-		Timer struct {
-			Phase string `json:"phase"`
-		} `json:"timer"`
-	}
-	if len(event.Data) == 0 {
-		return eventType, true, false
-	}
-	if err := json.Unmarshal(event.Data, &payload); err != nil {
-		return eventType, true, false
-	}
-
-	return eventType, true, strings.EqualFold(strings.TrimSpace(payload.Timer.Phase), "FINALIZATION")
+	return eventType, true, strings.EqualFold(strings.TrimSpace(event.ChampSelectPhase), "FINALIZATION")
 }
 
-func gameIDFromEvent(event ports.LCUEvent) string {
-	var payload struct {
-		GameID json.RawMessage `json:"gameId"`
-	}
-	if len(event.Data) == 0 {
+func gameIDFromEvent(event domain.LCUEvent) string {
+	value := strings.TrimSpace(event.GameID)
+	if value == "" || value == "0" {
 		return ""
 	}
-	if err := json.Unmarshal(event.Data, &payload); err != nil || len(payload.GameID) == 0 {
-		return ""
-	}
-
-	var numeric json.Number
-	if err := json.Unmarshal(payload.GameID, &numeric); err == nil {
-		value := strings.TrimSpace(numeric.String())
-		if value != "" && value != "0" {
-			return value
-		}
-	}
-
-	var text string
-	if err := json.Unmarshal(payload.GameID, &text); err == nil {
-		value := strings.TrimSpace(text)
-		if value != "" && value != "0" {
-			return value
-		}
-	}
-
-	return ""
+	return value
 }
 
 func resetWatchTimer(timer *time.Timer, delay time.Duration) (*time.Timer, <-chan time.Time) {

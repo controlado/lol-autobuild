@@ -11,17 +11,16 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
-	"github.com/controlado/lol-autobuild/internal/position"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 )
 
 func TestApplyItemSetReturnsNotConfiguredWhenDisabled(t *testing.T) {
 	t.Parallel()
 
 	client := NewClient(false, "")
-	err := client.ApplyItemSet(context.Background(), ports.ApplyItemSetRequest{
+	err := client.ApplyItemSet(context.Background(), domain.ApplyItemSetRequest{
 		ChampionID: 240,
-		Blocks: []ports.ApplyItemSetBlock{
+		Blocks: []domain.ApplyItemSetBlock{
 			{Type: "Starter", ItemIDs: []int{1055, 3006}},
 		},
 	})
@@ -36,9 +35,9 @@ func TestApplyItemSetDryRunSkipsIO(t *testing.T) {
 	client := NewClient(true, filepath.Join(t.TempDir(), "missing-lockfile"))
 	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 
-	err := client.ApplyItemSet(context.Background(), ports.ApplyItemSetRequest{
+	err := client.ApplyItemSet(context.Background(), domain.ApplyItemSetRequest{
 		ChampionID: 240,
-		Blocks: []ports.ApplyItemSetBlock{
+		Blocks: []domain.ApplyItemSetBlock{
 			{Type: "Starter", ItemIDs: []int{1055, 3006}},
 		},
 		DryRun: true,
@@ -53,62 +52,62 @@ func TestApplyItemSetInvalidRequest(t *testing.T) {
 
 	tests := []struct {
 		name string
-		req  ports.ApplyItemSetRequest
+		req  domain.ApplyItemSetRequest
 	}{
 		{
 			name: "champion must be > 0",
-			req: ports.ApplyItemSetRequest{
-				Position:   position.Top,
+			req: domain.ApplyItemSetRequest{
+				Position:   domain.Top,
 				ChampionID: 0,
-				Blocks: []ports.ApplyItemSetBlock{
+				Blocks: []domain.ApplyItemSetBlock{
 					{Type: "Starter", ItemIDs: []int{1055, 3006}},
 				},
 			},
 		},
 		{
 			name: "position must be valid",
-			req: ports.ApplyItemSetRequest{
+			req: domain.ApplyItemSetRequest{
 				Position:   "invalid",
 				ChampionID: 240,
-				Blocks: []ports.ApplyItemSetBlock{
+				Blocks: []domain.ApplyItemSetBlock{
 					{Type: "Starter", ItemIDs: []int{1055, 3006}},
 				},
 			},
 		},
 		{
 			name: "requires at least one block",
-			req: ports.ApplyItemSetRequest{
-				Position:   position.Top,
+			req: domain.ApplyItemSetRequest{
+				Position:   domain.Top,
 				ChampionID: 240,
-				Blocks:     []ports.ApplyItemSetBlock{},
+				Blocks:     []domain.ApplyItemSetBlock{},
 			},
 		},
 		{
 			name: "requires at least one item id",
-			req: ports.ApplyItemSetRequest{
-				Position:   position.Top,
+			req: domain.ApplyItemSetRequest{
+				Position:   domain.Top,
 				ChampionID: 240,
-				Blocks: []ports.ApplyItemSetBlock{
+				Blocks: []domain.ApplyItemSetBlock{
 					{Type: "Starter", ItemIDs: []int{}},
 				},
 			},
 		},
 		{
 			name: "block type is required",
-			req: ports.ApplyItemSetRequest{
-				Position:   position.Top,
+			req: domain.ApplyItemSetRequest{
+				Position:   domain.Top,
 				ChampionID: 240,
-				Blocks: []ports.ApplyItemSetBlock{
+				Blocks: []domain.ApplyItemSetBlock{
 					{Type: "", ItemIDs: []int{1055, 3006}},
 				},
 			},
 		},
 		{
 			name: "item ids must be > 0",
-			req: ports.ApplyItemSetRequest{
-				Position:   position.Top,
+			req: domain.ApplyItemSetRequest{
+				Position:   domain.Top,
 				ChampionID: 240,
-				Blocks: []ports.ApplyItemSetBlock{
+				Blocks: []domain.ApplyItemSetBlock{
 					{Type: "Starter", ItemIDs: []int{1055, 0}},
 				},
 			},
@@ -123,7 +122,6 @@ func TestApplyItemSetInvalidRequest(t *testing.T) {
 			client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 
 			err := client.ApplyItemSet(context.Background(), tt.req)
-			fmt.Println(err)
 			if !errors.Is(err, ErrInvalidItemSetRequest) {
 				t.Fatalf("expected ErrInvalidItemSetRequest, got %v", err)
 			}
@@ -182,11 +180,11 @@ func TestApplyItemSetSuccessUpsertsManagedSet(t *testing.T) {
 	client := NewClient(true, lockfilePath)
 	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 
-	err := client.ApplyItemSet(context.Background(), ports.ApplyItemSetRequest{
+	err := client.ApplyItemSet(context.Background(), domain.ApplyItemSetRequest{
 		ChampionID: 240,
-		Position:   position.Support,
+		Position:   domain.Support,
 		Patch:      "16.7",
-		Blocks: []ports.ApplyItemSetBlock{
+		Blocks: []domain.ApplyItemSetBlock{
 			{Type: "Starter", ItemIDs: []int{1055, 3006, 1055}},
 		},
 	})
@@ -286,11 +284,11 @@ func TestApplyItemSetPreservesOrderedBlocksAndEmptyBlocks(t *testing.T) {
 	client := NewClient(true, lockfilePath)
 	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 
-	err := client.ApplyItemSet(context.Background(), ports.ApplyItemSetRequest{
+	err := client.ApplyItemSet(context.Background(), domain.ApplyItemSetRequest{
 		ChampionID: 240,
-		Position:   position.Support,
+		Position:   domain.Support,
 		Patch:      "16.7",
-		Blocks: []ports.ApplyItemSetBlock{
+		Blocks: []domain.ApplyItemSetBlock{
 			{Type: "Starter", ItemIDs: []int{1055, 3006, 1055}},
 			{Type: "1st Item", ItemIDs: []int{}},
 			{Type: "Boots", ItemIDs: []int{3006}},
@@ -372,11 +370,11 @@ func TestApplyItemSetFallsBackWhenProcessCandidateFails(t *testing.T) {
 		})}
 	}
 
-	err := client.ApplyItemSet(context.Background(), ports.ApplyItemSetRequest{
+	err := client.ApplyItemSet(context.Background(), domain.ApplyItemSetRequest{
 		ChampionID: 240,
-		Position:   position.Support,
+		Position:   domain.Support,
 		Patch:      "16.7",
-		Blocks: []ports.ApplyItemSetBlock{
+		Blocks: []domain.ApplyItemSetBlock{
 			{Type: "Starter", ItemIDs: []int{1055, 3006}},
 		},
 	})
@@ -414,11 +412,11 @@ func TestApplyItemSetAllCandidatesFailRespectsPriority(t *testing.T) {
 		})}
 	}
 
-	err := client.ApplyItemSet(context.Background(), ports.ApplyItemSetRequest{
+	err := client.ApplyItemSet(context.Background(), domain.ApplyItemSetRequest{
 		ChampionID: 240,
-		Position:   position.Support,
+		Position:   domain.Support,
 		Patch:      "16.7",
-		Blocks: []ports.ApplyItemSetBlock{
+		Blocks: []domain.ApplyItemSetBlock{
 			{Type: "Starter", ItemIDs: []int{1055, 3006}},
 		},
 	})
@@ -443,11 +441,11 @@ func TestApplyItemSetFailsWhenChampionIsNotSelected(t *testing.T) {
 		})}
 	}
 
-	err := client.ApplyItemSet(context.Background(), ports.ApplyItemSetRequest{
+	err := client.ApplyItemSet(context.Background(), domain.ApplyItemSetRequest{
 		ChampionID: 240,
-		Position:   position.Support,
+		Position:   domain.Support,
 		Patch:      "16.7",
-		Blocks: []ports.ApplyItemSetBlock{
+		Blocks: []domain.ApplyItemSetBlock{
 			{Type: "Starter", ItemIDs: []int{1055, 3006}},
 		},
 	})

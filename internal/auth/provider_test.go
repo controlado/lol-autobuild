@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 )
 
 func TestAccessTokenRefreshesExpiredToken(t *testing.T) {
@@ -15,15 +15,15 @@ func TestAccessTokenRefreshesExpiredToken(t *testing.T) {
 
 	var (
 		store = &fakeStore{
-			pair: ports.TokenPair{
+			pair: domain.TokenPair{
 				AccessToken:  "expired",
 				RefreshToken: "refresh",
 				ExpiresAt:    time.Now().Add(-1 * time.Minute),
 			},
 		}
 		p = NewProvider(
-			fakeCoachless{
-				refreshed: ports.TokenPair{
+			fakeTokenRefresher{
+				refreshed: domain.TokenPair{
 					AccessToken:  "new-access",
 					RefreshToken: "new-refresh",
 					ExpiresAt:    time.Now().Add(30 * time.Minute),
@@ -50,16 +50,127 @@ func TestAccessTokenRefreshesExpiredToken(t *testing.T) {
 	}
 }
 
+func TestAccessTokenDoesNotPersistInvalidRefresh(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		refreshed domain.TokenPair
+	}{
+		{
+			name:      "missing access token",
+			refreshed: domain.TokenPair{RefreshToken: "new-refresh"},
+		},
+		{
+			name:      "missing refresh token",
+			refreshed: domain.TokenPair{AccessToken: "new-access"},
+		},
+		{
+			name: "blank tokens",
+			refreshed: domain.TokenPair{
+				AccessToken:  " ",
+				RefreshToken: "\t",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			stored := domain.TokenPair{
+				AccessToken:  "expired",
+				RefreshToken: "refresh",
+				ExpiresAt:    time.Now().Add(-1 * time.Minute),
+			}
+			store := &fakeStore{pair: stored}
+			p := NewProvider(
+				fakeTokenRefresher{refreshed: tt.refreshed},
+				store,
+				nil,
+				nil,
+				ProviderOptions{TokenSkew: 30 * time.Second},
+			)
+
+			_, err := p.AccessToken(context.Background())
+			if !errors.Is(err, ErrAccessTokenUnavailable) {
+				t.Fatalf("AccessToken() error = %v, want %v", err, ErrAccessTokenUnavailable)
+			}
+			if store.writeCalls != 0 {
+				t.Fatalf("WriteTokens calls = %d, want 0", store.writeCalls)
+			}
+			if store.pair != stored {
+				t.Fatalf("stored pair changed to %#v, want %#v", store.pair, stored)
+			}
+		})
+	}
+}
+
+func TestRefreshDoesNotPersistInvalidTokenPair(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		refreshed domain.TokenPair
+	}{
+		{
+			name:      "missing access token",
+			refreshed: domain.TokenPair{RefreshToken: "new-refresh"},
+		},
+		{
+			name:      "missing refresh token",
+			refreshed: domain.TokenPair{AccessToken: "new-access"},
+		},
+		{
+			name: "blank tokens",
+			refreshed: domain.TokenPair{
+				AccessToken:  " ",
+				RefreshToken: "\t",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			stored := domain.TokenPair{
+				AccessToken:  "expired",
+				RefreshToken: "refresh",
+				ExpiresAt:    time.Now().Add(-1 * time.Minute),
+			}
+			store := &fakeStore{pair: stored}
+			p := NewProvider(
+				fakeTokenRefresher{refreshed: tt.refreshed},
+				store,
+				nil,
+				nil,
+				ProviderOptions{TokenSkew: 30 * time.Second},
+			)
+
+			if _, err := p.Refresh(context.Background()); err == nil {
+				t.Fatal("expected Refresh() error")
+			}
+			if store.writeCalls != 0 {
+				t.Fatalf("WriteTokens calls = %d, want 0", store.writeCalls)
+			}
+			if store.pair != stored {
+				t.Fatalf("stored pair changed to %#v, want %#v", store.pair, stored)
+			}
+		})
+	}
+}
+
 func TestAccessTokenFallsBackToManual(t *testing.T) {
 	t.Parallel()
 
 	var (
 		p = NewProvider(
-			fakeCoachless{},
+			fakeTokenRefresher{},
 			&fakeStore{readErr: errors.New("not found")},
 			fakeAutoSource{err: errors.New("auto fail")},
 			fakeManualSource{
-				pair: ports.TokenPair{
+				pair: domain.TokenPair{
 					AccessToken: "manual-access",
 					ExpiresAt:   time.Now().Add(15 * time.Minute),
 				},
@@ -87,7 +198,7 @@ func TestAccessTokenFailsWhenNoSourceWorks(t *testing.T) {
 
 	var (
 		p = NewProvider(
-			fakeCoachless{},
+			fakeTokenRefresher{},
 			&fakeStore{readErr: errors.New("not found")},
 			fakeAutoSource{err: errors.New("auto")},
 			fakeManualSource{err: errors.New("manual")},
@@ -110,8 +221,8 @@ func TestClaimsReadsAccessTokenClaims(t *testing.T) {
 
 	const exp = int64(1777253137)
 	p := NewProvider(
-		fakeCoachless{},
-		&fakeStore{pair: ports.TokenPair{
+		fakeTokenRefresher{},
+		&fakeStore{pair: domain.TokenPair{
 			AccessToken: testJWT(`{"exp":1777253137,"isSubscribed":"1"}`),
 			ExpiresAt:   time.Now().Add(15 * time.Minute),
 		}},
@@ -124,8 +235,8 @@ func TestClaimsReadsAccessTokenClaims(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Claims() error = %v", err)
 	}
-	if claims.Exp != exp {
-		t.Fatalf("claims exp = %d, want %d", claims.Exp, exp)
+	if got := claims.ExpiresAt.Unix(); got != exp {
+		t.Fatalf("claims exp = %d, want %d", got, exp)
 	}
 	if isSubscribed := claims.IsSubscribed(); !isSubscribed {
 		t.Fatalf("claims isSubscribed = %t, want true", isSubscribed)

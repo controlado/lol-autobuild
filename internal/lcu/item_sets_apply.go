@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 )
 
-func (c *Client) ApplyItemSet(ctx context.Context, req ports.ApplyItemSetRequest) error {
+func (c *Client) ApplyItemSet(ctx context.Context, req domain.ApplyItemSetRequest) error {
 	if !c.Enabled {
 		return ErrNotConfigured
 	}
@@ -75,7 +75,7 @@ func (c *Client) ApplyItemSet(ctx context.Context, req ports.ApplyItemSetRequest
 	)
 }
 
-func validateItemSetApplyRequest(req ports.ApplyItemSetRequest) ([]itemSetBlock, error) {
+func validateItemSetApplyRequest(req domain.ApplyItemSetRequest) ([]itemSetBlock, error) {
 	if req.ChampionID <= 0 {
 		return nil, fmt.Errorf("%w: championID must be > 0", ErrInvalidItemSetRequest)
 	}
@@ -172,7 +172,7 @@ func upsertManagedItemSet(existing itemSetsPayload, fallbackAccountID int64, man
 	}, nil
 }
 
-func newManagedItemSet(req ports.ApplyItemSetRequest, blocks []itemSetBlock) itemSet {
+func newManagedItemSet(req domain.ApplyItemSetRequest, blocks []itemSetBlock) itemSet {
 	return itemSet{
 		UID:               managedItemSetUID(req),
 		Title:             managedItemSetTitle(req),
@@ -188,11 +188,11 @@ func newManagedItemSet(req ports.ApplyItemSetRequest, blocks []itemSetBlock) ite
 	}
 }
 
-func managedItemSetUID(req ports.ApplyItemSetRequest) string {
+func managedItemSetUID(req domain.ApplyItemSetRequest) string {
 	return fmt.Sprintf("lol-autobuild:%d:%s", req.ChampionID, req.Position.String())
 }
 
-func managedItemSetTitle(req ports.ApplyItemSetRequest) string {
+func managedItemSetTitle(req domain.ApplyItemSetRequest) string {
 	title := fmt.Sprintf("AutoBuild %d %s", req.ChampionID, req.Position.String())
 
 	patch := strings.TrimSpace(req.Patch)
