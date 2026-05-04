@@ -60,6 +60,12 @@ Comandos da CLI leem `sync.dry_run` da configuração. Passe `--dry-run` para si
 
 Comandos avançados, configuração e limites ficam em [USAGE.md](USAGE.md).
 
+## Agradecimentos
+
+Obrigado à Riot Games por manter a API local do League Client acessível o suficiente para ferramentas como esta existirem.
+
+Obrigado ao [xPetu](https://x.com/xPetu) por criar o Coachless e manter sua API não oficial disponível para a comunidade.
+
 ## Aviso
 
 `lol-autobuild` é um projeto open source independente. Ele não tem afiliação com `coachless.gg`; ele apenas lê dados do Coachless e APIs locais do client do League. A Riot Games não endossa nem patrocina este repositório, e ele não tem conexão oficial com League of Legends. `League of Legends` e `Riot Games` são marcas comerciais ou marcas registradas da Riot Games, Inc.
