@@ -8,7 +8,7 @@
 
 Configure runas, itens e spells do League of Legends com dados do Coachless.
 
-<video width="1300" controls muted playsinline src="docs/assets/demo/lol-autobuild-demo.mp4"></video>
+https://github.com/user-attachments/assets/de2f0f5b-5535-4d4f-b53e-b0a1abefd087
 
 [Assistir ao vídeo de demonstração](docs/assets/demo/lol-autobuild-demo.mp4)
 
