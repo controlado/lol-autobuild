@@ -174,8 +174,3 @@ LCU connection discovery tries League process args first (`--app-port`, `--remot
 - Free Coachless tokens use the latest non-Premium patch when the patch setting is blank. Requesting the newest Premium patch or manual patch additions returns an error.
 - Rune page apply reuses a deletable `AutoBuild` page or creates one without deleting user pages. If replacing a managed page fails after delete, the app attempts to restore that page and reports the failure context.
 - Browser-assisted auth capture watches the Coachless login response and stores the token pair.
-
-## Next work
-
-- Expand queue coverage for position detection.
-- Add clearer diagnostics around auth and LCU failures.

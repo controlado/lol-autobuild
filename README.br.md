@@ -24,7 +24,7 @@ Escolha o ZIP do seu sistema, extraia os arquivos e rode `lol-autobuild`.
 
 ## Sobre o Coachless
 
-[Coachless](https://coachless.gg/) é um destaque entre os sites de análise para League of Legends. Ele usa Win Probability Added (WPA) para comparar itens com mais contexto que o win rate puro. Jogadores ganham um jeito mais inteligente de avaliar builds. [xPetu](https://x.com/xPetu) lidera o projeto; jogadores conhecem o trabalho dele pelo Shen em alto nível e pelas análises matemáticas sobre o jogo.
+[xPetu](https://x.com/xPetu) lidera o [Coachless](https://coachless.gg/), um site de análise para League of Legends. Ele usa Win Probability Added (WPA) para comparar itens com mais contexto que o win rate puro. `lol-autobuild` usa esses dados de runas, itens e spells durante a seleção de campeões.
 
 ## Primeiro uso
 
