@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
-	"github.com/controlado/lol-autobuild/internal/autobuild/ports"
 )
 
 func TestApplyRunePageReturnsNotConfiguredWhenDisabled(t *testing.T) {
@@ -618,7 +617,7 @@ func TestApplyRunePageReturnsCreateErrorForUserPage(t *testing.T) {
 	if !strings.Contains(err.Error(), "create rune page failed LCU validation") {
 		t.Fatalf("expected create validation context, got %v", err)
 	}
-	if errors.Is(err, ports.ErrRunePageLimitReached) {
+	if errors.Is(err, domain.ErrRunePageLimitReached) {
 		t.Fatalf("unexpected ErrRunePageLimitReached for generic create failure")
 	}
 }
@@ -655,7 +654,7 @@ func TestApplyRunePageReturnsLimitReachedWhenCreateHitsPageCap(t *testing.T) {
 	if !errors.Is(err, ErrRunePageApplyFailed) {
 		t.Fatalf("expected ErrRunePageApplyFailed, got %v", err)
 	}
-	if !errors.Is(err, ports.ErrRunePageLimitReached) {
+	if !errors.Is(err, domain.ErrRunePageLimitReached) {
 		t.Fatalf("expected ErrRunePageLimitReached, got %v", err)
 	}
 	if !postCalled {

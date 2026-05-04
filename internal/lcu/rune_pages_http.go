@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/controlado/lol-autobuild/internal/autobuild/ports"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 )
 
 func (c *Client) fetchCurrentRunePage(ctx context.Context, info connectionInfo) (runePage, bool, error) {
@@ -40,7 +40,7 @@ func (c *Client) deleteRunePage(ctx context.Context, info connectionInfo, pageID
 func (c *Client) createRunePage(ctx context.Context, info connectionInfo, payload runePageCreateRequest) error {
 	if err := doRequest(ctx, c, info, http.MethodPost, "/lol-perks/v1/pages", payload); err != nil {
 		if isRunePageLimitReached(err) {
-			return fmt.Errorf("%w: create rune page failed LCU validation: %w: %v", ErrRunePageApplyFailed, ports.ErrRunePageLimitReached, err)
+			return fmt.Errorf("%w: create rune page failed LCU validation: %w: %v", ErrRunePageApplyFailed, domain.ErrRunePageLimitReached, err)
 		}
 		return fmt.Errorf("%w: create rune page failed LCU validation: %v", ErrRunePageApplyFailed, err)
 	}

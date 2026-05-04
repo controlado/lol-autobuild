@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
-	"github.com/controlado/lol-autobuild/internal/autobuild/ports"
 	"github.com/controlado/lol-autobuild/internal/autobuild/recommend"
 )
 
@@ -175,7 +174,7 @@ func TestSyncTranslatesRunePageLimitWarning(t *testing.T) {
 			Position:   domain.Top,
 			QueueID:    420,
 		},
-		runePageErr: fmt.Errorf(`apply rune page failed: {"errorCode":"RPC_ERROR","message":"Max pages reached"}: %w`, ports.ErrRunePageLimitReached),
+		runePageErr: fmt.Errorf(`apply rune page failed: {"errorCode":"RPC_ERROR","message":"Max pages reached"}: %w`, domain.ErrRunePageLimitReached),
 	}
 	svc, err := NewService(ServiceDeps{
 		Coachless:   coachless,

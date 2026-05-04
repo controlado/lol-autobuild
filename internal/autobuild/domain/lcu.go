@@ -1,5 +1,9 @@
 package domain
 
+import "errors"
+
+var ErrRunePageLimitReached = errors.New("rune page limit reached")
+
 type ApplyItemSetRequest struct {
 	ChampionID int
 	Position   Position
