@@ -5,12 +5,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 )
 
 const flashSpellID = 4
 
-func (c *Client) ApplySummonerSpells(ctx context.Context, req ports.ApplySummonerSpellsRequest) error {
+func (c *Client) ApplySummonerSpells(ctx context.Context, req domain.ApplySummonerSpellsRequest) error {
 	if !c.Enabled {
 		return ErrNotConfigured
 	}
@@ -60,7 +60,7 @@ func (c *Client) ApplySummonerSpells(ctx context.Context, req ports.ApplySummone
 	)
 }
 
-func validateSpellApplyRequest(req ports.ApplySummonerSpellsRequest) error {
+func validateSpellApplyRequest(req domain.ApplySummonerSpellsRequest) error {
 	if req.ChampionID <= 0 {
 		return fmt.Errorf("%w: championID must be > 0", ErrInvalidSummonerSpellsRequest)
 	}

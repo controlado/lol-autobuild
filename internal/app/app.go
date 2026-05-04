@@ -8,66 +8,87 @@ import (
 	"sync"
 	"time"
 
-	"github.com/controlado/lol-autobuild/internal/config"
-	"github.com/controlado/lol-autobuild/internal/lcu"
-	"github.com/controlado/lol-autobuild/internal/update"
-	"github.com/controlado/lol-autobuild/pkg/lolautobuild"
+	"github.com/controlado/lol-autobuild/internal/autobuild"
 )
 
+var ErrUpdateUnavailable = errors.New("update check unavailable")
+
 type (
-	ServiceFactory func(config.Config) (lolautobuild.Service, error)
-	StatusChecker  func(context.Context, config.Config) lcu.ConnectionStatus
-	UpdateChecker  interface {
+	ServiceFactory    func(RuntimeConfig) (autobuild.Service, error)
+	LCUStatusProvider func(context.Context, RuntimeConfig) LCUStatus
+	MessageMapper     func(error) UserMessage
+	UpdateChecker     interface {
 		CurrentVersion() string
-		Check(context.Context) (update.Result, error)
+		Check(context.Context) (UpdateCheckResult, error)
 	}
 )
+
+type UpdateCheckResult struct {
+	CurrentVersion string
+	LatestVersion  string
+	DownloadURL    string
+	Available      bool
+}
+
+type Options struct {
+	ServiceFactory   ServiceFactory
+	LCUStatus        LCUStatusProvider
+	UpdateChecker    UpdateChecker
+	ConfigStore      ConfigStore
+	RuntimeConfig    RuntimeConfig
+	MessageFromError MessageMapper
+}
 
 type App struct {
 	saveMu sync.Mutex // SaveSettings()
 	mu     sync.Mutex // App memory
 
 	serviceFactory ServiceFactory
-	lcuStatus      StatusChecker
+	lcuStatus      LCUStatusProvider
 	updateChecker  UpdateChecker
 	configStore    ConfigStore
-	cfg            config.Config
+	messageFromErr MessageMapper
+	cfg            RuntimeConfig
 
 	syncRunning      bool
 	watcherStarting  bool
 	watcherRunning   bool
 	watcherID        int
 	cancelWatcher    context.CancelFunc
-	watcherConfig    config.Config
+	watcherConfig    RuntimeConfig
 	watcherConfigSet bool
 	updateState      UpdateState
 
 	lastErrorMessage string
 	lastErrorCode    string
 	lastWatchNotice  *WatcherNoticeState
-	lastSync         *lolautobuild.SyncResult
+	lastSync         *SyncSummary
 	lastSyncAt       time.Time
 }
 
-func New(serviceFactory ServiceFactory, statusChecker StatusChecker, updateChecker UpdateChecker, configStore ConfigStore, cfg config.Config) (*App, error) {
-	if serviceFactory == nil || statusChecker == nil || updateChecker == nil || configStore == nil {
-		return nil, fmt.Errorf("serviceFactory, statusChecker, updateChecker, configStore cannot be nil")
+func New(opts Options) (*App, error) {
+	if opts.ServiceFactory == nil || opts.LCUStatus == nil || opts.UpdateChecker == nil || opts.ConfigStore == nil {
+		return nil, fmt.Errorf("serviceFactory, lcuStatus, updateChecker, configStore cannot be nil")
+	}
+	if opts.MessageFromError == nil {
+		opts.MessageFromError = userMessageFromErr
 	}
 
 	return &App{
-		serviceFactory: serviceFactory,
-		lcuStatus:      statusChecker,
-		updateChecker:  updateChecker,
-		configStore:    configStore,
-		cfg:            cfg,
+		serviceFactory: opts.ServiceFactory,
+		lcuStatus:      opts.LCUStatus,
+		updateChecker:  opts.UpdateChecker,
+		configStore:    opts.ConfigStore,
+		messageFromErr: opts.MessageFromError,
+		cfg:            normalizeConfig(opts.RuntimeConfig),
 		updateState: UpdateState{
 			Status:         UpdateStatusIdle,
-			CurrentVersion: updateChecker.CurrentVersion(),
+			CurrentVersion: opts.UpdateChecker.CurrentVersion(),
 		},
 	}, nil
 }
 
-func (a *App) State(ctx context.Context) State {
+func (a *App) State(ctx context.Context) ViewState {
 	var (
 		cfg        = a.configSnapshot()
 		lastSyncAt = a.lastSyncAtSnapshot()
@@ -77,8 +98,8 @@ func (a *App) State(ctx context.Context) State {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	return State{
-		Settings: settingsFromConfig(cfg),
+	return ViewState{
+		Settings: cfg.Settings,
 		LCU:      status,
 		Watcher: WatcherState{
 			Running:     a.watcherRunning,
@@ -87,22 +108,22 @@ func (a *App) State(ctx context.Context) State {
 		},
 		Update:        cloneUpdateState(a.updateState),
 		SyncRunning:   a.syncRunning,
-		LastSync:      cloneSyncResult(a.lastSync),
+		LastSync:      cloneSyncSummary(a.lastSync),
 		LastSyncAt:    lastSyncAt,
 		LastError:     a.lastErrorMessage,
 		LastErrorCode: a.lastErrorCode,
 	}
 }
 
-func (a *App) SaveSettings(ctx context.Context, settings Settings) (State, UserMessage) {
+func (a *App) SaveSettings(ctx context.Context, settings Settings) (ViewState, UserMessage) {
 	a.saveMu.Lock()
 	defer a.saveMu.Unlock()
 
 	cfg := a.configSnapshot()
-	applySettings(&cfg, settings)
+	cfg.Settings = normalizeSettings(settings)
 
 	if err := a.configStore.Save(cfg); err != nil {
-		return State{}, userMessageFromErr(err)
+		return ViewState{}, a.messageFromErr(err)
 	}
 
 	a.mu.Lock()
@@ -113,7 +134,7 @@ func (a *App) SaveSettings(ctx context.Context, settings Settings) (State, UserM
 	return a.State(ctx), UserMessage{}
 }
 
-func (a *App) watcherConfigStaleLocked(cfg config.Config) bool {
+func (a *App) watcherConfigStaleLocked(cfg RuntimeConfig) bool {
 	return a.watcherRunning && a.watcherConfigSet && cfg != a.watcherConfig
 }
 
@@ -129,7 +150,7 @@ func (a *App) lastSyncAtSnapshot() *time.Time {
 	return &lastSyncAtCopy
 }
 
-func (a *App) configSnapshot() config.Config {
+func (a *App) configSnapshot() RuntimeConfig {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.cfg
@@ -140,36 +161,28 @@ func (a *App) setLastErrorMessage(msg UserMessage) {
 	a.lastErrorCode = msg.Code
 }
 
-func settingsFromConfig(cfg config.Config) Settings {
-	return Settings{
-		Patch:              cfg.Sync.Patch,
-		PatchAdditionsMode: cfg.Sync.PatchAdditionsMode,
-		PatchAdditions:     cfg.Sync.PatchAdditions,
-		LeagueTierPreset:   cfg.Sync.LeagueTierPreset,
-		ApplyItems:         cfg.Sync.ApplyItems,
-		ApplyRunes:         cfg.Sync.ApplyRunes,
-		ApplySpells:        cfg.Sync.ApplySpells,
-		KeepFlash:          cfg.Sync.KeepFlash,
-		DryRun:             cfg.Sync.DryRun,
-		LCUEnabled:         cfg.LCU.Enabled,
-	}
+func normalizeConfig(cfg RuntimeConfig) RuntimeConfig {
+	cfg.Settings = normalizeSettings(cfg.Settings)
+	return cfg
 }
 
-func applySettings(cfg *config.Config, settings Settings) {
+func normalizeSettings(settings Settings) Settings {
 	patchAdditionsMode := strings.TrimSpace(settings.PatchAdditionsMode)
 	if patchAdditionsMode == "" {
-		patchAdditionsMode = lolautobuild.PatchAdditionsModeAuto
-	}
-	patchAdditions := settings.PatchAdditions
-	if patchAdditionsMode == lolautobuild.PatchAdditionsModeAuto && patchAdditions == 0 {
-		patchAdditions = lolautobuild.PatchAdditionsDefault
-	}
-	leagueTierPreset := strings.TrimSpace(settings.LeagueTierPreset)
-	if leagueTierPreset == "" {
-		leagueTierPreset = lolautobuild.LeagueTierPresetDefault
+		patchAdditionsMode = autobuild.PatchAdditionsModeAuto
 	}
 
-	cfg.Sync = config.SyncConfig{
+	patchAdditions := settings.PatchAdditions
+	if patchAdditionsMode == autobuild.PatchAdditionsModeAuto && patchAdditions == 0 {
+		patchAdditions = autobuild.PatchAdditionsDefault
+	}
+
+	leagueTierPreset := strings.TrimSpace(settings.LeagueTierPreset)
+	if leagueTierPreset == "" {
+		leagueTierPreset = autobuild.LeagueTierPresetDefault
+	}
+
+	return Settings{
 		Patch:              strings.TrimSpace(settings.Patch),
 		PatchAdditionsMode: patchAdditionsMode,
 		PatchAdditions:     patchAdditions,
@@ -179,11 +192,11 @@ func applySettings(cfg *config.Config, settings Settings) {
 		ApplySpells:        settings.ApplySpells,
 		KeepFlash:          settings.KeepFlash,
 		DryRun:             settings.DryRun,
+		LCUEnabled:         settings.LCUEnabled,
 	}
-	cfg.LCU.Enabled = settings.LCUEnabled
 }
 
-func (a *App) StartWatcher(ctx context.Context) (State, UserMessage) {
+func (a *App) StartWatcher(ctx context.Context) (ViewState, UserMessage) {
 	cfg, watcherID, ok := a.reserveWatcherStart()
 	if !ok {
 		return a.State(ctx), watcherPreStartFailedMessage()
@@ -192,12 +205,12 @@ func (a *App) StartWatcher(ctx context.Context) (State, UserMessage) {
 	svc, err := a.serviceFactory(cfg)
 	if err != nil {
 		a.releaseWatcher(watcherID, err)
-		return State{}, userMessageFromErr(err)
+		return ViewState{}, a.messageFromErr(err)
 	}
 
 	if err := svc.EnsureCoachlessAuth(ctx); err != nil {
 		a.releaseWatcher(watcherID, err)
-		return State{}, coachlessLoginMissingMessage()
+		return ViewState{}, a.messageFromErr(err)
 	}
 
 	watcherCtx, ok := a.startReservedWatcher(watcherID, cfg)
@@ -211,21 +224,12 @@ func (a *App) StartWatcher(ctx context.Context) (State, UserMessage) {
 	return a.State(ctx), UserMessage{}
 }
 
-func (a *App) runWatcher(ctx context.Context, watcherID int, svc lolautobuild.Service, cfg config.Config) {
-	err := svc.Watch(ctx, lolautobuild.WatchRequest{
-		Patch:              cfg.Sync.Patch,
-		PatchAdditionsMode: cfg.Sync.PatchAdditionsMode,
-		PatchAdditions:     cfg.Sync.PatchAdditions,
-		LeagueTierPreset:   cfg.Sync.LeagueTierPreset,
-		ApplyItems:         cfg.Sync.ApplyItems,
-		ApplyRunes:         cfg.Sync.ApplyRunes,
-		ApplySpells:        cfg.Sync.ApplySpells,
-		KeepFlash:          cfg.Sync.KeepFlash,
-		DryRun:             cfg.Sync.DryRun,
-		Debounce:           time.Duration(cfg.Watch.DebounceMillis) * time.Millisecond,
-		OnCycle:            func(c lolautobuild.WatchCycle) { a.observeWatchCycle(watcherID, c) },
-		OnNotice:           func(n lolautobuild.WatchNotice) { a.observeWatchNotice(watcherID, n) },
-	})
+func (a *App) runWatcher(ctx context.Context, watcherID int, svc autobuild.Service, cfg RuntimeConfig) {
+	req := watchRequestFromConfig(cfg)
+	req.OnCycle = func(c autobuild.WatchCycle) { a.observeWatchCycle(watcherID, c) }
+	req.OnNotice = func(n autobuild.WatchNotice) { a.observeWatchNotice(watcherID, n) }
+
+	err := svc.Watch(ctx, req)
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -236,20 +240,20 @@ func (a *App) runWatcher(ctx context.Context, watcherID int, svc lolautobuild.Se
 
 	a.cancelWatcher = nil
 	a.watcherRunning = false
-	a.watcherConfig = config.Config{}
+	a.watcherConfig = RuntimeConfig{}
 	a.watcherConfigSet = false
 
 	if err != nil && ctx.Err() == nil {
-		a.setLastErrorMessage(userMessageFromErr(err))
+		a.setLastErrorMessage(a.messageFromErr(err))
 	}
 }
 
-func (a *App) reserveWatcherStart() (cfg config.Config, watcherID int, ok bool) {
+func (a *App) reserveWatcherStart() (cfg RuntimeConfig, watcherID int, ok bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	if a.watcherStarting || a.watcherRunning {
-		return config.Config{}, 0, false
+		return RuntimeConfig{}, 0, false
 	}
 
 	a.watcherID++
@@ -259,7 +263,7 @@ func (a *App) reserveWatcherStart() (cfg config.Config, watcherID int, ok bool) 
 	return a.cfg, a.watcherID, true
 }
 
-func (a *App) startReservedWatcher(watcherID int, cfg config.Config) (watcherCtx context.Context, ok bool) {
+func (a *App) startReservedWatcher(watcherID int, cfg RuntimeConfig) (watcherCtx context.Context, ok bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -276,7 +280,7 @@ func (a *App) startReservedWatcher(watcherID int, cfg config.Config) (watcherCtx
 	return watcherCtx, true
 }
 
-func (a *App) observeWatchCycle(watchID int, c lolautobuild.WatchCycle) {
+func (a *App) observeWatchCycle(watchID int, c autobuild.WatchCycle) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -285,19 +289,19 @@ func (a *App) observeWatchCycle(watchID int, c lolautobuild.WatchCycle) {
 	}
 
 	if c.Err != nil {
-		a.setLastErrorMessage(userMessageFromErr(c.Err))
+		a.setLastErrorMessage(a.messageFromErr(c.Err))
 		return
 	}
 
 	if c.Result != nil {
-		a.lastSync = cloneSyncResult(c.Result)
+		a.lastSync = syncSummaryFromResult(*c.Result)
 		a.lastSyncAt = time.Now().UTC()
 	}
 
 	a.setLastErrorMessage(UserMessage{})
 }
 
-func (a *App) observeWatchNotice(watchID int, notice lolautobuild.WatchNotice) {
+func (a *App) observeWatchNotice(watchID int, notice autobuild.WatchNotice) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -309,7 +313,7 @@ func (a *App) observeWatchNotice(watchID int, notice lolautobuild.WatchNotice) {
 	a.lastWatchNotice = &noticeState
 }
 
-func watcherNoticeStateFromNotice(notice lolautobuild.WatchNotice, at time.Time) WatcherNoticeState {
+func watcherNoticeStateFromNotice(notice autobuild.WatchNotice, at time.Time) WatcherNoticeState {
 	state := WatcherNoticeState{
 		Kind:         string(notice.Kind),
 		Message:      notice.Message,
@@ -333,13 +337,13 @@ func cloneWatcherNotice(notice *WatcherNoticeState) *WatcherNoticeState {
 	return &out
 }
 
-func (a *App) StopWatcher(ctx context.Context) State {
+func (a *App) StopWatcher(ctx context.Context) ViewState {
 	a.mu.Lock()
 	cancel := a.cancelWatcher
 	a.cancelWatcher = nil
 	a.watcherStarting = false
 	a.watcherRunning = false
-	a.watcherConfig = config.Config{}
+	a.watcherConfig = RuntimeConfig{}
 	a.watcherConfigSet = false
 	a.mu.Unlock()
 
@@ -365,51 +369,41 @@ func (a *App) releaseWatcher(watcherID int, err error) {
 	a.cancelWatcher = nil
 	a.watcherStarting = false
 	a.watcherRunning = false
-	a.watcherConfig = config.Config{}
+	a.watcherConfig = RuntimeConfig{}
 	a.watcherConfigSet = false
 
 	if err != nil {
-		a.setLastErrorMessage(userMessageFromErr(err))
+		a.setLastErrorMessage(a.messageFromErr(err))
 	}
 }
 
-func (a *App) RunSync(ctx context.Context) (State, UserMessage) {
+func (a *App) RunSync(ctx context.Context) (ViewState, UserMessage) {
 	cfg, alreadySyncing := a.beginSync()
 	if alreadySyncing {
-		return State{}, syncAlreadyRunningMessage()
+		return ViewState{}, syncAlreadyRunningMessage()
 	}
 
 	svc, err := a.serviceFactory(cfg)
 	if err != nil {
 		a.finishSync(nil, err)
-		return State{}, userMessageFromErr(err)
+		return ViewState{}, a.messageFromErr(err)
 	}
 
-	result, err := svc.Sync(ctx, lolautobuild.SyncRequest{
-		Patch:              cfg.Sync.Patch,
-		PatchAdditionsMode: cfg.Sync.PatchAdditionsMode,
-		PatchAdditions:     cfg.Sync.PatchAdditions,
-		LeagueTierPreset:   cfg.Sync.LeagueTierPreset,
-		ApplyItems:         cfg.Sync.ApplyItems,
-		ApplyRunes:         cfg.Sync.ApplyRunes,
-		ApplySpells:        cfg.Sync.ApplySpells,
-		KeepFlash:          cfg.Sync.KeepFlash,
-		DryRun:             cfg.Sync.DryRun,
-	})
+	result, err := svc.Sync(ctx, syncRequestFromSettings(cfg.Settings))
 	a.finishSync(&result, err)
 	if err != nil {
-		return State{}, userMessageFromErr(err)
+		return ViewState{}, a.messageFromErr(err)
 	}
 
 	return a.State(ctx), UserMessage{}
 }
 
-func (a *App) beginSync() (configSnapshot config.Config, alreadySyncing bool) {
+func (a *App) beginSync() (configSnapshot RuntimeConfig, alreadySyncing bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	if a.syncRunning {
-		return config.Config{}, true
+		return RuntimeConfig{}, true
 	}
 
 	a.syncRunning = true
@@ -417,23 +411,27 @@ func (a *App) beginSync() (configSnapshot config.Config, alreadySyncing bool) {
 	return a.cfg, false
 }
 
-func (a *App) finishSync(res *lolautobuild.SyncResult, err error) {
+func (a *App) finishSync(res *autobuild.SyncResult, err error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	a.syncRunning = false
 
 	if err != nil {
-		a.setLastErrorMessage(userMessageFromErr(err))
+		a.setLastErrorMessage(a.messageFromErr(err))
 		return
 	}
 
-	a.lastSync = cloneSyncResult(res)
+	if res == nil {
+		a.lastSync = nil
+	} else {
+		a.lastSync = syncSummaryFromResult(*res)
+	}
 	a.lastSyncAt = time.Now().UTC()
 	a.setLastErrorMessage(UserMessage{})
 }
 
-func cloneSyncResult(res *lolautobuild.SyncResult) *lolautobuild.SyncResult {
+func cloneSyncSummary(res *SyncSummary) *SyncSummary {
 	if res == nil {
 		return nil
 	}
@@ -443,7 +441,49 @@ func cloneSyncResult(res *lolautobuild.SyncResult) *lolautobuild.SyncResult {
 	return &out
 }
 
-func (a *App) CheckUpdates(ctx context.Context) (State, UserMessage) {
+func syncSummaryFromResult(res autobuild.SyncResult) *SyncSummary {
+	return &SyncSummary{
+		DetectedChampionID: res.DetectedChampionID,
+		DetectedPosition:   res.DetectedPosition,
+		DetectedQueueID:    res.DetectedQueueID,
+		ItemSetApplied:     res.ItemSetApplied,
+		RunePageApplied:    res.RunePageApplied,
+		SpellsApplied:      res.SpellsApplied,
+		Warnings:           append([]string{}, res.Warnings...),
+	}
+}
+
+func syncRequestFromSettings(settings Settings) autobuild.SyncRequest {
+	return autobuild.SyncRequest{
+		Patch:              settings.Patch,
+		PatchAdditionsMode: settings.PatchAdditionsMode,
+		PatchAdditions:     settings.PatchAdditions,
+		LeagueTierPreset:   settings.LeagueTierPreset,
+		ApplyItems:         settings.ApplyItems,
+		ApplyRunes:         settings.ApplyRunes,
+		ApplySpells:        settings.ApplySpells,
+		KeepFlash:          settings.KeepFlash,
+		DryRun:             settings.DryRun,
+	}
+}
+
+func watchRequestFromConfig(cfg RuntimeConfig) autobuild.WatchRequest {
+	req := syncRequestFromSettings(cfg.Settings)
+	return autobuild.WatchRequest{
+		Patch:              req.Patch,
+		PatchAdditionsMode: req.PatchAdditionsMode,
+		PatchAdditions:     req.PatchAdditions,
+		LeagueTierPreset:   req.LeagueTierPreset,
+		ApplyItems:         req.ApplyItems,
+		ApplyRunes:         req.ApplyRunes,
+		ApplySpells:        req.ApplySpells,
+		KeepFlash:          req.KeepFlash,
+		DryRun:             req.DryRun,
+		Debounce:           cfg.WatchDebounce,
+	}
+}
+
+func (a *App) CheckUpdates(ctx context.Context) (ViewState, UserMessage) {
 	if !a.beginUpdateCheck() {
 		return a.State(ctx), UserMessage{}
 	}
@@ -475,7 +515,7 @@ func (a *App) beginUpdateCheck() bool {
 	return true
 }
 
-func (a *App) finishUpdateCheck(result update.Result, err error) {
+func (a *App) finishUpdateCheck(result UpdateCheckResult, err error) {
 	checkedAt := time.Now().UTC()
 
 	currentVersion := strings.TrimSpace(result.CurrentVersion)
@@ -501,7 +541,7 @@ func (a *App) finishUpdateCheck(result update.Result, err error) {
 	case err == nil:
 		newState.Status = UpdateStatusCurrent
 		newState.Message = "You have the latest version."
-	case errors.Is(err, update.ErrUnavailable):
+	case errors.Is(err, ErrUpdateUnavailable):
 		newState.Status = UpdateStatusUnavailable
 		newState.Message = "This build cannot check updates."
 	default:

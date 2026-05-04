@@ -17,15 +17,15 @@ import (
 )
 
 type stubApp struct {
-	state     app.State
-	saveState *app.State
+	state     app.ViewState
+	saveState *app.ViewState
 	saved     app.Settings
 }
 
-func (sa *stubApp) State(context.Context) (s app.State) {
+func (sa *stubApp) State(context.Context) (s app.ViewState) {
 	return sa.state
 }
-func (sa *stubApp) SaveSettings(_ context.Context, settings app.Settings) (s app.State, msg app.UserMessage) {
+func (sa *stubApp) SaveSettings(_ context.Context, settings app.Settings) (s app.ViewState, msg app.UserMessage) {
 	sa.saved = settings
 	if sa.saveState != nil {
 		s = *sa.saveState
@@ -34,19 +34,19 @@ func (sa *stubApp) SaveSettings(_ context.Context, settings app.Settings) (s app
 		}
 		return s, app.UserMessage{}
 	}
-	s = app.State{Settings: settings}
+	s = app.ViewState{Settings: settings}
 	return
 }
-func (sa *stubApp) RunSync(context.Context) (s app.State, msg app.UserMessage) {
+func (sa *stubApp) RunSync(context.Context) (s app.ViewState, msg app.UserMessage) {
 	return
 }
-func (sa *stubApp) StartWatcher(context.Context) (s app.State, msg app.UserMessage) {
+func (sa *stubApp) StartWatcher(context.Context) (s app.ViewState, msg app.UserMessage) {
 	return
 }
-func (sa *stubApp) StopWatcher(context.Context) (s app.State) {
+func (sa *stubApp) StopWatcher(context.Context) (s app.ViewState) {
 	return
 }
-func (sa *stubApp) CheckUpdates(context.Context) (s app.State, msg app.UserMessage) {
+func (sa *stubApp) CheckUpdates(context.Context) (s app.ViewState, msg app.UserMessage) {
 	return
 }
 
@@ -461,7 +461,7 @@ func TestAPIErrorIncludesCode(t *testing.T) {
 }
 
 func TestSaveConfigAcceptsAdvancedFilters(t *testing.T) {
-	saveState := app.State{Watcher: app.WatcherState{Running: true, ConfigStale: true}}
+	saveState := app.ViewState{Watcher: app.WatcherState{Running: true, ConfigStale: true}}
 	recApp := &stubApp{saveState: &saveState}
 	server, err := NewServer(Options{
 		App:         recApp,
@@ -499,7 +499,7 @@ func TestSaveConfigAcceptsAdvancedFilters(t *testing.T) {
 		t.Fatalf("saved apply_runes = false, want true")
 	}
 
-	var state app.State
+	var state app.ViewState
 	if err := json.Unmarshal(rec.Body.Bytes(), &state); err != nil {
 		t.Fatalf("decode state: %v", err)
 	}

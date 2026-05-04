@@ -23,12 +23,12 @@ import (
 var staticFiles embed.FS
 
 type App interface {
-	State(ctx context.Context) app.State
-	SaveSettings(ctx context.Context, settings app.Settings) (app.State, app.UserMessage)
-	RunSync(ctx context.Context) (app.State, app.UserMessage)
-	StartWatcher(ctx context.Context) (app.State, app.UserMessage)
-	StopWatcher(ctx context.Context) app.State
-	CheckUpdates(ctx context.Context) (app.State, app.UserMessage)
+	State(ctx context.Context) app.ViewState
+	SaveSettings(ctx context.Context, settings app.Settings) (app.ViewState, app.UserMessage)
+	RunSync(ctx context.Context) (app.ViewState, app.UserMessage)
+	StartWatcher(ctx context.Context) (app.ViewState, app.UserMessage)
+	StopWatcher(ctx context.Context) app.ViewState
+	CheckUpdates(ctx context.Context) (app.ViewState, app.UserMessage)
 }
 
 var (

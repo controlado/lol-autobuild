@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 )
 
 func TestGetPatchesParsesResponse(t *testing.T) {
@@ -23,7 +23,7 @@ func TestGetPatchesParsesResponse(t *testing.T) {
 			t.Fatalf("missing authorization header")
 		}
 
-		_ = json.NewEncoder(w).Encode([]ports.PatchInfo{{
+		_ = json.NewEncoder(w).Encode([]apiPatchInfo{{
 			Label:      "16.7",
 			Major:      16,
 			Patch:      7,
@@ -53,7 +53,7 @@ func TestGetKeystoneDataSendsBody(t *testing.T) {
 			t.Fatalf("expected POST, got %s", r.Method)
 		}
 
-		var body ports.KeystoneRequest
+		var body apiKeystoneRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Fatalf("decode body: %v", err)
 		}
@@ -62,7 +62,7 @@ func TestGetKeystoneDataSendsBody(t *testing.T) {
 			t.Fatalf("unexpected body: %#v", body)
 		}
 
-		_ = json.NewEncoder(w).Encode([]ports.KeystoneStat{{
+		_ = json.NewEncoder(w).Encode([]apiKeystoneStat{{
 			Rune:       8010,
 			WPAOverall: 1.2,
 			Occurrence: 1000,
@@ -72,11 +72,11 @@ func TestGetKeystoneDataSendsBody(t *testing.T) {
 
 	var (
 		client = NewClient(srv.URL, 2*time.Second)
-		req    = ports.KeystoneRequest{
-			CommonFilters: ports.CommonFilters{
+		req    = domain.KeystoneRequest{
+			CommonFilters: domain.CommonFilters{
 				ChampionIDs: []int{240},
 				Role:        0,
-				Patch: ports.PatchFilter{
+				Patch: domain.PatchFilter{
 					Major:          16,
 					Patch:          7,
 					PatchAdditions: 2,
@@ -111,30 +111,30 @@ func TestGetSecondaryTreePlaycountSendsBody(t *testing.T) {
 			t.Fatalf("expected POST, got %s", r.Method)
 		}
 
-		var body ports.SecondaryTreePlaycountRequest
+		var body apiSecondaryTreePlaycountRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Fatalf("decode body: %v", err)
 		}
-		if body.Tree != ports.RuneStylePrecision || body.Keystone != 8005 || body.CommonFilters.Role != 3 {
+		if body.Tree != domain.RuneStylePrecision || body.Keystone != 8005 || body.CommonFilters.Role != 3 {
 			t.Fatalf("unexpected body: %#v", body)
 		}
 
-		_ = json.NewEncoder(w).Encode([]ports.RuneTreePlaycount{
-			{Tree: ports.RuneStyleSorcery, Occurrence: 1234},
+		_ = json.NewEncoder(w).Encode([]apiRuneTreePlaycount{
+			{Tree: domain.RuneStyleSorcery, Occurrence: 1234},
 		})
 	}))
 	defer srv.Close()
 
 	client := NewClient(srv.URL, 2*time.Second)
-	stats, err := client.GetSecondaryTreePlaycount(context.Background(), "token", ports.SecondaryTreePlaycountRequest{
-		CommonFilters: ports.CommonFilters{Role: 3},
-		Tree:          ports.RuneStylePrecision,
+	stats, err := client.GetSecondaryTreePlaycount(context.Background(), "token", domain.SecondaryTreePlaycountRequest{
+		CommonFilters: domain.CommonFilters{Role: 3},
+		Tree:          domain.RuneStylePrecision,
 		Keystone:      8005,
 	})
 	if err != nil {
 		t.Fatalf("GetSecondaryTreePlaycount() error = %v", err)
 	}
-	if len(stats) != 1 || stats[0].Tree != ports.RuneStyleSorcery || stats[0].Occurrence != 1234 {
+	if len(stats) != 1 || stats[0].Tree != domain.RuneStyleSorcery || stats[0].Occurrence != 1234 {
 		t.Fatalf("unexpected stats: %#v", stats)
 	}
 }
@@ -150,27 +150,27 @@ func TestGetRuneStatsForKeystoneAndTreeSendsBody(t *testing.T) {
 			t.Fatalf("expected POST, got %s", r.Method)
 		}
 
-		var body ports.RuneStatsRequest
+		var body apiRuneStatsRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Fatalf("decode body: %v", err)
 		}
-		if body.Keystone != 8437 || body.MainTree != ports.RuneStyleResolve || body.TreeToLoad != ports.RuneStyleSorcery {
+		if body.Keystone != 8437 || body.MainTree != domain.RuneStyleResolve || body.TreeToLoad != domain.RuneStyleSorcery {
 			t.Fatalf("unexpected body: %#v", body)
 		}
 
-		_ = json.NewEncoder(w).Encode(ports.RuneStatsByRow{
-			RowOnes:   []ports.RuneStat{{Rune: 8224, WPAOverall: 0.6, Occurrence: 100}},
-			RowTwos:   []ports.RuneStat{{Rune: 8233, WPAOverall: 0.7, Occurrence: 200}},
-			RowThrees: []ports.RuneStat{{Rune: 8237, WPAOverall: 0.8, Occurrence: 300}},
+		_ = json.NewEncoder(w).Encode(apiRuneStatsByRow{
+			RowOnes:   []apiRuneStat{{Rune: 8224, WPAOverall: 0.6, Occurrence: 100}},
+			RowTwos:   []apiRuneStat{{Rune: 8233, WPAOverall: 0.7, Occurrence: 200}},
+			RowThrees: []apiRuneStat{{Rune: 8237, WPAOverall: 0.8, Occurrence: 300}},
 		})
 	}))
 	defer srv.Close()
 
 	client := NewClient(srv.URL, 2*time.Second)
-	stats, err := client.GetRuneStatsForKeystoneAndTree(context.Background(), "token", ports.RuneStatsRequest{
+	stats, err := client.GetRuneStatsForKeystoneAndTree(context.Background(), "token", domain.RuneStatsRequest{
 		Keystone:   8437,
-		MainTree:   ports.RuneStyleResolve,
-		TreeToLoad: ports.RuneStyleSorcery,
+		MainTree:   domain.RuneStyleResolve,
+		TreeToLoad: domain.RuneStyleSorcery,
 	})
 	if err != nil {
 		t.Fatalf("GetRuneStatsForKeystoneAndTree() error = %v", err)
@@ -191,7 +191,7 @@ func TestGetShardStatsForKeystoneAndTreeSendsBody(t *testing.T) {
 			t.Fatalf("expected POST, got %s", r.Method)
 		}
 
-		var body ports.ShardStatsRequest
+		var body apiShardStatsRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Fatalf("decode body: %v", err)
 		}
@@ -199,17 +199,17 @@ func TestGetShardStatsForKeystoneAndTreeSendsBody(t *testing.T) {
 			t.Fatalf("unexpected body: %#v", body)
 		}
 
-		_ = json.NewEncoder(w).Encode(ports.ShardStats{
-			Offense: []ports.RuneStat{{Rune: 5008, WPAOverall: 0.5, Occurrence: 100}},
-			Flex:    []ports.RuneStat{{Rune: 5008, WPAOverall: 0.4, Occurrence: 100}},
-			Defense: []ports.RuneStat{{Rune: 5002, WPAOverall: 0.3, Occurrence: 100}},
+		_ = json.NewEncoder(w).Encode(apiShardStats{
+			Offense: []apiRuneStat{{Rune: 5008, WPAOverall: 0.5, Occurrence: 100}},
+			Flex:    []apiRuneStat{{Rune: 5008, WPAOverall: 0.4, Occurrence: 100}},
+			Defense: []apiRuneStat{{Rune: 5002, WPAOverall: 0.3, Occurrence: 100}},
 		})
 	}))
 	defer srv.Close()
 
 	client := NewClient(srv.URL, 2*time.Second)
-	stats, err := client.GetShardStatsForKeystoneAndTree(context.Background(), "token", ports.ShardStatsRequest{
-		CommonFilters: ports.CommonFilters{Role: 4},
+	stats, err := client.GetShardStatsForKeystoneAndTree(context.Background(), "token", domain.ShardStatsRequest{
+		CommonFilters: domain.CommonFilters{Role: 4},
 		Keystone:      8437,
 	})
 	if err != nil {
@@ -243,5 +243,54 @@ func TestRefreshParsesTokens(t *testing.T) {
 
 	if pair.AccessToken != "access" || pair.RefreshToken != "refresh" {
 		t.Fatalf("unexpected pair: %#v", pair)
+	}
+}
+
+func TestRefreshRejectsMissingTokens(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		response map[string]string
+	}{
+		{
+			name: "missing access token",
+			response: map[string]string{
+				"refreshToken": "refresh",
+			},
+		},
+		{
+			name: "missing refresh token",
+			response: map[string]string{
+				"accessToken": "access",
+			},
+		},
+		{
+			name: "blank tokens",
+			response: map[string]string{
+				"accessToken":  " ",
+				"refreshToken": "\t",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/api/Auth/refresh" {
+					t.Fatalf("unexpected path: %s", r.URL.Path)
+				}
+
+				_ = json.NewEncoder(w).Encode(tt.response)
+			}))
+			defer srv.Close()
+
+			client := NewClient(srv.URL, 2*time.Second)
+			if _, err := client.Refresh(context.Background(), "r1"); err == nil {
+				t.Fatal("expected Refresh() error")
+			}
+		})
 	}
 }

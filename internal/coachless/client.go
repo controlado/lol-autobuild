@@ -11,7 +11,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/go-resty/resty/v2"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 )
 
 type Client struct {
@@ -30,121 +30,127 @@ func NewClient(baseURL string, timeout time.Duration) *Client {
 	}
 }
 
-type refreshResponse struct {
+type apiRefreshResponse struct {
 	AccessToken  string `json:"accessToken"`
 	RefreshToken string `json:"refreshToken"`
 }
 
-func (c *Client) Refresh(ctx context.Context, refreshToken string) (ports.TokenPair, error) {
+func (c *Client) Refresh(ctx context.Context, refreshToken string) (domain.TokenPair, error) {
 	if strings.TrimSpace(refreshToken) == "" {
-		return ports.TokenPair{}, errors.New("refresh token is required")
+		return domain.TokenPair{}, errors.New("refresh token is required")
 	}
 
 	var (
 		endpoint = "/api/Auth/refresh"
 		reqBody  = map[string]string{"refreshToken": refreshToken}
-		out      refreshResponse
+		out      apiRefreshResponse
 	)
 
 	if err := c.doJSON(ctx, http.MethodPost, endpoint, "", reqBody, &out); err != nil {
-		return ports.TokenPair{}, err
+		return domain.TokenPair{}, err
 	}
 
-	return ports.TokenPair{
-		AccessToken:  out.AccessToken,
-		RefreshToken: out.RefreshToken,
+	accessToken := strings.TrimSpace(out.AccessToken)
+	nextRefreshToken := strings.TrimSpace(out.RefreshToken)
+	if accessToken == "" || nextRefreshToken == "" {
+		return domain.TokenPair{}, errors.New("refresh response missing access or refresh token")
+	}
+
+	return domain.TokenPair{
+		AccessToken:  accessToken,
+		RefreshToken: nextRefreshToken,
 	}, nil
 }
 
-func (c *Client) GetPatches(ctx context.Context, accessToken string) ([]ports.PatchInfo, error) {
+func (c *Client) GetPatches(ctx context.Context, accessToken string) ([]domain.PatchInfo, error) {
 	var (
 		endpoint = "/api/ChampionWinprob/GetPatches"
-		out      []ports.PatchInfo
+		out      []apiPatchInfo
 	)
 
 	if err := c.doJSON(ctx, http.MethodGet, endpoint, accessToken, nil, &out); err != nil {
 		return nil, err
 	}
 
-	return out, nil
+	return patchInfosFromAPI(out), nil
 }
 
-func (c *Client) GetKeystoneData(ctx context.Context, accessToken string, req ports.KeystoneRequest) ([]ports.KeystoneStat, error) {
+func (c *Client) GetKeystoneData(ctx context.Context, accessToken string, req domain.KeystoneRequest) ([]domain.KeystoneStat, error) {
 	var (
 		endpoint = "/api/Rune/GetKeystoneData"
-		out      []ports.KeystoneStat
+		out      []apiKeystoneStat
 	)
 
-	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, req, &out); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, apiKeystoneRequestFromDomain(req), &out); err != nil {
 		return nil, err
 	}
 
-	return out, nil
+	return keystoneStatsFromAPI(out), nil
 }
 
-func (c *Client) GetSecondaryTreePlaycount(ctx context.Context, accessToken string, req ports.SecondaryTreePlaycountRequest) ([]ports.RuneTreePlaycount, error) {
+func (c *Client) GetSecondaryTreePlaycount(ctx context.Context, accessToken string, req domain.SecondaryTreePlaycountRequest) ([]domain.RuneTreePlaycount, error) {
 	var (
 		endpoint = "/api/Rune/GetSecondaryTreePlaycount"
-		out      []ports.RuneTreePlaycount
+		out      []apiRuneTreePlaycount
 	)
 
-	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, req, &out); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, apiSecondaryTreePlaycountRequestFromDomain(req), &out); err != nil {
 		return nil, err
 	}
 
-	return out, nil
+	return runeTreePlaycountsFromAPI(out), nil
 }
 
-func (c *Client) GetRuneStatsForKeystoneAndTree(ctx context.Context, accessToken string, req ports.RuneStatsRequest) (ports.RuneStatsByRow, error) {
+func (c *Client) GetRuneStatsForKeystoneAndTree(ctx context.Context, accessToken string, req domain.RuneStatsRequest) (domain.RuneStatsByRow, error) {
 	var (
 		endpoint = "/api/Rune/GetRunesForKeystoneAndTree"
-		out      ports.RuneStatsByRow
+		out      apiRuneStatsByRow
 	)
 
-	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, req, &out); err != nil {
-		return ports.RuneStatsByRow{}, err
+	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, apiRuneStatsRequestFromDomain(req), &out); err != nil {
+		return domain.RuneStatsByRow{}, err
 	}
 
-	return out, nil
+	return runeStatsByRowFromAPI(out), nil
 }
 
-func (c *Client) GetShardStatsForKeystoneAndTree(ctx context.Context, accessToken string, req ports.ShardStatsRequest) (ports.ShardStats, error) {
+func (c *Client) GetShardStatsForKeystoneAndTree(ctx context.Context, accessToken string, req domain.ShardStatsRequest) (domain.ShardStats, error) {
 	var (
 		endpoint = "/api/Rune/GetShardsForKeystoneAndTree"
-		out      ports.ShardStats
+		out      apiShardStats
 	)
 
-	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, req, &out); err != nil {
-		return ports.ShardStats{}, err
+	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, apiShardStatsRequestFromDomain(req), &out); err != nil {
+		return domain.ShardStats{}, err
 	}
 
-	return out, nil
+	return shardStatsFromAPI(out), nil
 }
 
-func (c *Client) GetSummonerSpellStats(ctx context.Context, accessToken string, req ports.SummonerSpellStatsRequest) ([]ports.SummonerSpellStat, error) {
+func (c *Client) GetSummonerSpellStats(ctx context.Context, accessToken string, req domain.SummonerSpellStatsRequest) ([]domain.SummonerSpellStat, error) {
 	var (
-		out      []ports.SummonerSpellStat
+		out      []apiSummonerSpellStat
 		endpoint = "/api/ChampionWinprob/GetGlobalSummonerSpellStatistics"
 	)
 
-	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, req, &out); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, apiSummonerSpellStatsRequestFromDomain(req), &out); err != nil {
 		return nil, err
 	}
 
-	return out, nil
+	return summonerSpellStatsFromAPI(out), nil
 }
 
-func (c *Client) GetItemStats(ctx context.Context, accessToken string, req ports.ItemStatsRequest) ([]ports.ItemStat, error) {
+func (c *Client) GetItemStats(ctx context.Context, accessToken string, req domain.ItemStatsRequest) ([]domain.ItemStat, error) {
 	var (
-		out      []ports.ItemStat
+		out      []apiItemStat
 		endpoint = "/api/ChampionWinprob/GetGlobalItemStatistics"
 	)
 
-	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, req, &out); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, apiItemStatsRequestFromDomain(req), &out); err != nil {
 		return nil, err
 	}
 
-	return out, nil
+	return itemStatsFromAPI(out), nil
 }
 
 func (c *Client) doJSON(ctx context.Context, method, path, accessToken string, reqBody any, out any) error {

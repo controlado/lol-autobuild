@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
+	"github.com/controlado/lol-autobuild/internal/autobuild/ports"
 )
 
 func (c *Client) fetchCurrentRunePage(ctx context.Context, info connectionInfo) (runePage, bool, error) {

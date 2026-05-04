@@ -9,7 +9,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
+)
+
+type (
+	TokenRefresher interface {
+		Refresh(ctx context.Context, refreshToken string) (domain.TokenPair, error)
+	}
+	SecretStore interface {
+		ReadTokens(ctx context.Context) (domain.TokenPair, error)
+		WriteTokens(ctx context.Context, pair domain.TokenPair) error
+	}
 )
 
 type ProviderOptions struct {
@@ -19,20 +29,20 @@ type ProviderOptions struct {
 }
 
 type Provider struct {
-	coachless ports.CoachlessClient
-	store     ports.SecretStore
-	auto      AutoSource
-	manual    ManualSource
-	opts      ProviderOptions
+	tokenRefresher TokenRefresher
+	store          SecretStore
+	auto           AutoSource
+	manual         ManualSource
+	opts           ProviderOptions
 }
 
-func NewProvider(coachless ports.CoachlessClient, store ports.SecretStore, auto AutoSource, manual ManualSource, opts ProviderOptions) *Provider {
+func NewProvider(tokenRefresher TokenRefresher, store SecretStore, auto AutoSource, manual ManualSource, opts ProviderOptions) *Provider {
 	return &Provider{
-		coachless: coachless,
-		store:     store,
-		auto:      auto,
-		manual:    manual,
-		opts:      opts,
+		tokenRefresher: tokenRefresher,
+		store:          store,
+		auto:           auto,
+		manual:         manual,
+		opts:           opts,
 	}
 }
 
@@ -45,7 +55,10 @@ func (p *Provider) AccessToken(ctx context.Context) (string, error) {
 		}
 
 		if pair.RefreshToken != "" {
-			refreshed, refreshErr := p.coachless.Refresh(ctx, pair.RefreshToken)
+			refreshed, refreshErr := p.tokenRefresher.Refresh(ctx, pair.RefreshToken)
+			if refreshErr == nil {
+				refreshed, refreshErr = validateRefreshedTokenPair(refreshed)
+			}
 			if refreshErr == nil {
 				refreshed = ensureExpiry(refreshed)
 				if err := p.store.WriteTokens(ctx, refreshed); err != nil {
@@ -81,36 +94,40 @@ func (p *Provider) AccessToken(ctx context.Context) (string, error) {
 		}
 	}
 
-	return "", errors.New("unable to acquire valid access token")
+	return "", ErrAccessTokenUnavailable
 }
 
-func (p *Provider) Refresh(ctx context.Context) (ports.TokenPair, error) {
+func (p *Provider) Refresh(ctx context.Context) (domain.TokenPair, error) {
 	pair, err := p.store.ReadTokens(ctx)
 	if err != nil {
-		return ports.TokenPair{}, fmt.Errorf("read tokens: %w", err)
+		return domain.TokenPair{}, fmt.Errorf("read tokens: %w", err)
 	}
 
 	if strings.TrimSpace(pair.RefreshToken) == "" {
-		return ports.TokenPair{}, errors.New("no refresh token available")
+		return domain.TokenPair{}, errors.New("no refresh token available")
 	}
 
-	refreshed, err := p.coachless.Refresh(ctx, pair.RefreshToken)
+	refreshed, err := p.tokenRefresher.Refresh(ctx, pair.RefreshToken)
 	if err != nil {
-		return ports.TokenPair{}, fmt.Errorf("refresh token: %w", err)
+		return domain.TokenPair{}, fmt.Errorf("refresh token: %w", err)
+	}
+	refreshed, err = validateRefreshedTokenPair(refreshed)
+	if err != nil {
+		return domain.TokenPair{}, fmt.Errorf("refresh token: %w", err)
 	}
 	refreshed = ensureExpiry(refreshed)
 
 	if err := p.store.WriteTokens(ctx, refreshed); err != nil {
-		return ports.TokenPair{}, fmt.Errorf("persist refreshed tokens: %w", err)
+		return domain.TokenPair{}, fmt.Errorf("persist refreshed tokens: %w", err)
 	}
 
 	return refreshed, nil
 }
 
-func (p *Provider) Claims(ctx context.Context) (ports.TokenClaims, error) {
+func (p *Provider) Claims(ctx context.Context) (domain.TokenClaims, error) {
 	accessToken, err := p.AccessToken(ctx)
 	if err != nil {
-		return ports.TokenClaims{}, err
+		return domain.TokenClaims{}, err
 	}
 
 	return claimsFromJWT(accessToken)
@@ -124,7 +141,7 @@ func isTokenValid(exp time.Time, skew time.Duration) bool {
 	return time.Now().Add(skew).Before(exp)
 }
 
-func ensureExpiry(pair ports.TokenPair) ports.TokenPair {
+func ensureExpiry(pair domain.TokenPair) domain.TokenPair {
 	if !pair.ExpiresAt.IsZero() {
 		return pair
 	}
@@ -144,17 +161,27 @@ func expFromJWT(token string) (time.Time, error) {
 		return time.Time{}, err
 	}
 
-	if claims.Exp == 0 {
+	if claims.ExpiresAt.IsZero() {
 		return time.Time{}, errors.New("exp claim missing")
 	}
 
-	return time.Unix(claims.Exp, 0).UTC(), nil
+	return claims.ExpiresAt, nil
 }
 
-func claimsFromJWT(token string) (ports.TokenClaims, error) {
+func validateRefreshedTokenPair(pair domain.TokenPair) (domain.TokenPair, error) {
+	pair.AccessToken = strings.TrimSpace(pair.AccessToken)
+	pair.RefreshToken = strings.TrimSpace(pair.RefreshToken)
+	if pair.AccessToken == "" || pair.RefreshToken == "" {
+		return domain.TokenPair{}, errors.New("refreshed token pair missing access or refresh token")
+	}
+
+	return pair, nil
+}
+
+func claimsFromJWT(token string) (domain.TokenClaims, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) < 2 {
-		return ports.TokenClaims{}, errors.New("invalid jwt format")
+		return domain.TokenClaims{}, errors.New("invalid jwt format")
 	}
 
 	payload := parts[1]
@@ -169,13 +196,21 @@ func claimsFromJWT(token string) (ports.TokenClaims, error) {
 
 	decoded, err := base64.StdEncoding.DecodeString(payload)
 	if err != nil {
-		return ports.TokenClaims{}, fmt.Errorf("decode payload: %w", err)
+		return domain.TokenClaims{}, fmt.Errorf("decode payload: %w", err)
 	}
 
-	var body ports.TokenClaims
+	var body jwtClaims
 	if err := json.Unmarshal(decoded, &body); err != nil {
-		return ports.TokenClaims{}, fmt.Errorf("parse payload: %w", err)
+		return domain.TokenClaims{}, fmt.Errorf("parse payload: %w", err)
 	}
 
-	return body, nil
+	return domain.TokenClaims{
+		ExpiresAt:  time.Unix(body.Exp, 0).UTC(),
+		Subscribed: body.IsSubscribedRaw == "1",
+	}, nil
+}
+
+type jwtClaims struct {
+	Exp             int64  `json:"exp"`
+	IsSubscribedRaw string `json:"isSubscribed"`
 }

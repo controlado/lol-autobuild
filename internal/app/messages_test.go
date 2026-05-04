@@ -2,11 +2,7 @@ package app
 
 import (
 	"errors"
-	"fmt"
 	"testing"
-
-	"github.com/controlado/lol-autobuild/internal/auth"
-	"github.com/controlado/lol-autobuild/internal/lcu"
 )
 
 func TestMessageFromErr(t *testing.T) {
@@ -23,37 +19,7 @@ func TestMessageFromErr(t *testing.T) {
 			want: UserMessage{},
 		},
 		{
-			name: "lcu off",
-			err:  fmt.Errorf("sync: %w", lcu.ErrNotConfigured),
-			want: UserMessage{Code: MessageCodeLCUOff, Text: "LCU is off."},
-		},
-		{
-			name: "lockfile missing",
-			err:  fmt.Errorf("sync: %w", lcu.ErrLockfileNotFound),
-			want: UserMessage{Code: MessageCodeLCULockfileNotFound, Text: "League Client is not open."},
-		},
-		{
-			name: "champ select unavailable",
-			err:  fmt.Errorf("sync: %w", lcu.ErrChampSelectUnavailable),
-			want: UserMessage{Code: MessageCodeLCUChampSelectUnavailable, Text: "Champ select is not ready."},
-		},
-		{
-			name: "champion not selected",
-			err:  fmt.Errorf("sync: %w", lcu.ErrChampionNotSelected),
-			want: UserMessage{Code: MessageCodeLCUChampionNotSelected, Text: "Select a champion first."},
-		},
-		{
-			name: "coachless auth not implemented",
-			err:  fmt.Errorf("auth: %w", auth.ErrNotImplemented),
-			want: UserMessage{Code: MessageCodeCoachlessLoginMissing, Text: "Coachless login is missing."},
-		},
-		{
-			name: "coachless access token error message",
-			err:  errors.New("provider: unable to acquire valid access token after refresh"),
-			want: UserMessage{Code: MessageCodeCoachlessLoginMissing, Text: "Coachless login is missing."},
-		},
-		{
-			name: "fallback to raw error",
+			name: "raw error",
 			err:  errors.New("unexpected failure"),
 			want: UserMessage{Text: "unexpected failure"},
 		},

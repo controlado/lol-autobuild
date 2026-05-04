@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/controlado/lol-autobuild/internal/position"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 )
 
 func TestDetectSelectionReturnsNotConfiguredWhenDisabled(t *testing.T) {
@@ -167,8 +167,8 @@ func TestDetectSelectionReturnsPositionNotAssigned(t *testing.T) {
 	client := NewClient(true, lockfilePath)
 	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	_, err := client.DetectSelection(context.Background())
-	if !errors.Is(err, position.ErrNotAssigned) {
-		t.Fatalf("expected position.ErrNotAssigned, got %v", err)
+	if !errors.Is(err, domain.ErrPositionNotAssigned) {
+		t.Fatalf("expected domain.ErrPositionNotAssigned, got %v", err)
 	}
 }
 
@@ -188,8 +188,8 @@ func TestDetectSelectionReturnsPositionUnknown(t *testing.T) {
 	client := NewClient(true, lockfilePath)
 	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 	_, err := client.DetectSelection(context.Background())
-	if !errors.Is(err, position.ErrUnknown) {
-		t.Fatalf("expected position.ErrUnknown, got %v", err)
+	if !errors.Is(err, domain.ErrPositionUnknown) {
+		t.Fatalf("expected domain.ErrPositionUnknown, got %v", err)
 	}
 }
 

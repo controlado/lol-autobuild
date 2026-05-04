@@ -1,0 +1,152 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"sync"
+	"time"
+
+	"github.com/controlado/lol-autobuild/internal/app"
+	"github.com/controlado/lol-autobuild/internal/auth"
+	"github.com/controlado/lol-autobuild/internal/config"
+	"github.com/controlado/lol-autobuild/internal/lcu"
+	"github.com/controlado/lol-autobuild/internal/update"
+)
+
+type configSaver interface {
+	Save(config.Config) error
+}
+
+type appConfigStore struct {
+	mu    sync.Mutex
+	store configSaver
+	cfg   config.Config
+}
+
+func newAppConfigStore(store configSaver, cfg config.Config) *appConfigStore {
+	return &appConfigStore{
+		store: store,
+		cfg:   cfg,
+	}
+}
+
+func (s *appConfigStore) Save(newCfg app.RuntimeConfig) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	next := configFromRuntimeConfig(s.cfg, newCfg)
+	if err := s.store.Save(next); err != nil {
+		return err
+	}
+
+	s.cfg = next
+	return nil
+}
+
+func (s *appConfigStore) configFor(appCfg app.RuntimeConfig) config.Config {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return configFromRuntimeConfig(s.cfg, appCfg)
+}
+
+func configFromRuntimeConfig(base config.Config, appCfg app.RuntimeConfig) config.Config {
+	base.Sync = config.SyncConfig{
+		Patch:              appCfg.Settings.Patch,
+		PatchAdditionsMode: appCfg.Settings.PatchAdditionsMode,
+		PatchAdditions:     appCfg.Settings.PatchAdditions,
+		LeagueTierPreset:   appCfg.Settings.LeagueTierPreset,
+		ApplyItems:         appCfg.Settings.ApplyItems,
+		ApplyRunes:         appCfg.Settings.ApplyRunes,
+		ApplySpells:        appCfg.Settings.ApplySpells,
+		KeepFlash:          appCfg.Settings.KeepFlash,
+		DryRun:             appCfg.Settings.DryRun,
+	}
+	base.LCU.Enabled = appCfg.Settings.LCUEnabled
+	base.Watch.DebounceMillis = int(appCfg.WatchDebounce / time.Millisecond)
+	return base
+}
+
+func runtimeConfigFromConfig(cfg config.Config) app.RuntimeConfig {
+	return app.RuntimeConfig{
+		Settings: app.Settings{
+			Patch:              cfg.Sync.Patch,
+			PatchAdditionsMode: cfg.Sync.PatchAdditionsMode,
+			PatchAdditions:     cfg.Sync.PatchAdditions,
+			LeagueTierPreset:   cfg.Sync.LeagueTierPreset,
+			ApplyItems:         cfg.Sync.ApplyItems,
+			ApplyRunes:         cfg.Sync.ApplyRunes,
+			ApplySpells:        cfg.Sync.ApplySpells,
+			KeepFlash:          cfg.Sync.KeepFlash,
+			DryRun:             cfg.Sync.DryRun,
+			LCUEnabled:         cfg.LCU.Enabled,
+		},
+		WatchDebounce: time.Duration(cfg.Watch.DebounceMillis) * time.Millisecond,
+	}
+}
+
+func appLCUStatusFromLCU(status lcu.ConnectionStatus) app.LCUStatus {
+	return app.LCUStatus{
+		State:   appLCUConnectionStateFromLCU(status.State),
+		Message: status.Message,
+		Source:  status.Source,
+	}
+}
+
+func appLCUConnectionStateFromLCU(state lcu.ConnectionState) app.LCUConnectionState {
+	switch state {
+	case lcu.ConnectionStateOff:
+		return app.LCUConnectionStateOff
+	case lcu.ConnectionStateConnected:
+		return app.LCUConnectionStateConnected
+	default:
+		return app.LCUConnectionStateNotConnected
+	}
+}
+
+type updateSource interface {
+	CurrentVersion() string
+	Check(context.Context) (update.Result, error)
+}
+
+type appUpdateChecker struct {
+	source updateSource
+}
+
+func (c appUpdateChecker) CurrentVersion() string {
+	return c.source.CurrentVersion()
+}
+
+func (c appUpdateChecker) Check(ctx context.Context) (app.UpdateCheckResult, error) {
+	result, err := c.source.Check(ctx)
+	out := app.UpdateCheckResult{
+		CurrentVersion: result.CurrentVersion,
+		LatestVersion:  result.LatestVersion,
+		DownloadURL:    result.DownloadURL,
+		Available:      result.Available,
+	}
+	if errors.Is(err, update.ErrUnavailable) {
+		return out, app.ErrUpdateUnavailable
+	}
+
+	return out, err
+}
+
+func appMessageFromErr(err error) app.UserMessage {
+	switch {
+	case err == nil:
+		return app.UserMessage{}
+	case errors.Is(err, lcu.ErrNotConfigured):
+		return app.UserMessage{Code: app.MessageCodeLCUOff, Text: "LCU is off."}
+	case errors.Is(err, lcu.ErrLockfileNotFound):
+		return app.UserMessage{Code: app.MessageCodeLCULockfileNotFound, Text: "League Client is not open."}
+	case errors.Is(err, lcu.ErrChampSelectUnavailable):
+		return app.UserMessage{Code: app.MessageCodeLCUChampSelectUnavailable, Text: "Champ select is not ready."}
+	case errors.Is(err, lcu.ErrChampionNotSelected):
+		return app.UserMessage{Code: app.MessageCodeLCUChampionNotSelected, Text: "Select a champion first."}
+	case errors.Is(err, auth.ErrAccessTokenUnavailable):
+		return app.UserMessage{Code: app.MessageCodeCoachlessLoginMissing, Text: "Coachless login is missing."}
+	default:
+		return app.UserMessage{Text: err.Error()}
+	}
+}

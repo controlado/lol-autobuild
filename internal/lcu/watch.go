@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 	"github.com/gorilla/websocket"
 )
 
@@ -31,7 +31,7 @@ type eventEnvelope struct {
 	Data      json.RawMessage `json:"data"`
 }
 
-func (c *Client) WatchEventsWithNotices(ctx context.Context, out chan<- ports.LCUEvent, notices chan<- ports.LCUWatchNotice) error {
+func (c *Client) WatchEventsWithNotices(ctx context.Context, out chan<- domain.LCUEvent, notices chan<- domain.LCUWatchNotice) error {
 	if !c.Enabled {
 		return ErrNotConfigured
 	}
@@ -51,8 +51,8 @@ func (c *Client) WatchEventsWithNotices(ctx context.Context, out chan<- ports.LC
 
 		conn, info, source, err := c.dialEventStream(ctx)
 		if err != nil {
-			if !emitWatchNotice(ctx, notices, ports.LCUWatchNotice{
-				Kind:    ports.LCUWatchNoticeReconnecting,
+			if !emitWatchNotice(ctx, notices, domain.LCUWatchNotice{
+				Kind:    domain.LCUWatchNoticeReconnecting,
 				Message: "LCU websocket is unavailable; waiting before reconnect.",
 				Err:     err,
 			}) {
@@ -65,8 +65,8 @@ func (c *Client) WatchEventsWithNotices(ctx context.Context, out chan<- ports.LC
 		}
 		connectionID++
 
-		if !emitWatchNotice(ctx, notices, ports.LCUWatchNotice{
-			Kind:         ports.LCUWatchNoticeConnected,
+		if !emitWatchNotice(ctx, notices, domain.LCUWatchNotice{
+			Kind:         domain.LCUWatchNoticeConnected,
 			Message:      "LCU websocket connected.",
 			Source:       source,
 			ConnectionID: connectionID,
@@ -91,8 +91,8 @@ func (c *Client) WatchEventsWithNotices(ctx context.Context, out chan<- ports.LC
 			continue
 		}
 
-		if !emitWatchNotice(ctx, notices, ports.LCUWatchNotice{
-			Kind:         ports.LCUWatchNoticeReconnecting,
+		if !emitWatchNotice(ctx, notices, domain.LCUWatchNotice{
+			Kind:         domain.LCUWatchNoticeReconnecting,
 			Message:      "LCU websocket disconnected; waiting before reconnect.",
 			Err:          err,
 			Source:       source,
@@ -173,7 +173,7 @@ func dialWebsocket(ctx context.Context, info connectionInfo) (*websocket.Conn, e
 	return conn, nil
 }
 
-func (c *Client) consumeEventStream(ctx context.Context, conn *websocket.Conn, out chan<- ports.LCUEvent, connectionID int) error {
+func (c *Client) consumeEventStream(ctx context.Context, conn *websocket.Conn, out chan<- domain.LCUEvent, connectionID int) error {
 	done := make(chan struct{})
 	go func() {
 		select {
@@ -197,7 +197,7 @@ func (c *Client) consumeEventStream(ctx context.Context, conn *websocket.Conn, o
 		if err != nil || !ok {
 			continue
 		}
-		event.Source = ports.LCUEventSourceStream
+		event.Source = domain.LCUEventSourceStream
 		event.ConnectionID = connectionID
 
 		select {
@@ -208,11 +208,11 @@ func (c *Client) consumeEventStream(ctx context.Context, conn *websocket.Conn, o
 	}
 }
 
-func (c *Client) emitSessionSnapshot(ctx context.Context, info connectionInfo, source string, connectionID int, out chan<- ports.LCUEvent, notices chan<- ports.LCUWatchNotice) bool {
+func (c *Client) emitSessionSnapshot(ctx context.Context, info connectionInfo, source string, connectionID int, out chan<- domain.LCUEvent, notices chan<- domain.LCUWatchNotice) bool {
 	raw, err := c.fetchChampSelectSessionEventData(ctx, info)
 	if err != nil {
-		return emitWatchNotice(ctx, notices, ports.LCUWatchNotice{
-			Kind:         ports.LCUWatchNoticeSnapshotWaiting,
+		return emitWatchNotice(ctx, notices, domain.LCUWatchNotice{
+			Kind:         domain.LCUWatchNoticeSnapshotWaiting,
 			Message:      "Champ select snapshot is unavailable; waiting for websocket events.",
 			Err:          err,
 			Source:       source,
@@ -222,8 +222,8 @@ func (c *Client) emitSessionSnapshot(ctx context.Context, info connectionInfo, s
 	}
 
 	phase := champSelectPhase(raw)
-	notice := ports.LCUWatchNotice{
-		Kind:         ports.LCUWatchNoticeSnapshotWaiting,
+	notice := domain.LCUWatchNotice{
+		Kind:         domain.LCUWatchNoticeSnapshotWaiting,
 		Message:      "Champ select snapshot is not finalized; waiting for websocket events.",
 		Source:       source,
 		URI:          champSelectSessionURI,
@@ -231,24 +231,25 @@ func (c *Client) emitSessionSnapshot(ctx context.Context, info connectionInfo, s
 		ConnectionID: connectionID,
 	}
 	if strings.EqualFold(strings.TrimSpace(phase), "FINALIZATION") {
-		notice.Kind = ports.LCUWatchNoticeSnapshotFinalization
+		notice.Kind = domain.LCUWatchNoticeSnapshotFinalization
 		notice.Message = "Champ select snapshot is finalized."
 	}
 	if !emitWatchNotice(ctx, notices, notice) {
 		return false
 	}
 
-	if notice.Kind != ports.LCUWatchNoticeSnapshotFinalization {
+	if notice.Kind != domain.LCUWatchNoticeSnapshotFinalization {
 		return true
 	}
 
 	select {
-	case out <- ports.LCUEvent{
-		EventType:    snapshotEventType,
-		URI:          champSelectSessionURI,
-		Data:         raw,
-		Source:       ports.LCUEventSourceSnapshot,
-		ConnectionID: connectionID,
+	case out <- domain.LCUEvent{
+		EventType:        snapshotEventType,
+		URI:              champSelectSessionURI,
+		Source:           domain.LCUEventSourceSnapshot,
+		ConnectionID:     connectionID,
+		ChampSelectPhase: phase,
+		GameID:           champSelectGameID(raw),
 	}:
 		return true
 	case <-ctx.Done():
@@ -268,7 +269,17 @@ func champSelectPhase(raw json.RawMessage) string {
 	return strings.TrimSpace(payload.Timer.Phase)
 }
 
-func emitWatchNotice(ctx context.Context, notices chan<- ports.LCUWatchNotice, notice ports.LCUWatchNotice) bool {
+func champSelectGameID(raw json.RawMessage) string {
+	var payload struct {
+		GameID json.RawMessage `json:"gameId"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil || len(payload.GameID) == 0 {
+		return ""
+	}
+	return gameIDFromRaw(payload.GameID)
+}
+
+func emitWatchNotice(ctx context.Context, notices chan<- domain.LCUWatchNotice, notice domain.LCUWatchNotice) bool {
 	if notices == nil {
 		return true
 	}
@@ -281,27 +292,27 @@ func emitWatchNotice(ctx context.Context, notices chan<- ports.LCUWatchNotice, n
 	}
 }
 
-func decodeEvent(payload []byte) (ports.LCUEvent, bool, error) {
+func decodeEvent(payload []byte) (domain.LCUEvent, bool, error) {
 	var frame []json.RawMessage
 	if err := json.Unmarshal(payload, &frame); err != nil {
-		return ports.LCUEvent{}, false, err
+		return domain.LCUEvent{}, false, err
 	}
 
 	if len(frame) < 3 {
-		return ports.LCUEvent{}, false, nil
+		return domain.LCUEvent{}, false, nil
 	}
 
 	var topic string
 	if err := json.Unmarshal(frame[1], &topic); err != nil {
-		return ports.LCUEvent{}, false, err
+		return domain.LCUEvent{}, false, err
 	}
 	if topic != eventTopic {
-		return ports.LCUEvent{}, false, nil
+		return domain.LCUEvent{}, false, nil
 	}
 
 	var envelope eventEnvelope
 	if err := json.Unmarshal(frame[2], &envelope); err != nil {
-		return ports.LCUEvent{}, false, err
+		return domain.LCUEvent{}, false, err
 	}
 
 	data := envelope.Data
@@ -309,11 +320,32 @@ func decodeEvent(payload []byte) (ports.LCUEvent, bool, error) {
 		data = json.RawMessage("null")
 	}
 
-	return ports.LCUEvent{
-		EventType: strings.TrimSpace(envelope.EventType),
-		URI:       strings.TrimSpace(envelope.URI),
-		Data:      append(json.RawMessage(nil), data...),
+	return domain.LCUEvent{
+		EventType:        strings.TrimSpace(envelope.EventType),
+		URI:              strings.TrimSpace(envelope.URI),
+		ChampSelectPhase: champSelectPhase(data),
+		GameID:           champSelectGameID(data),
 	}, true, nil
+}
+
+func gameIDFromRaw(raw json.RawMessage) string {
+	var numeric json.Number
+	if err := json.Unmarshal(raw, &numeric); err == nil {
+		value := strings.TrimSpace(numeric.String())
+		if value != "" && value != "0" {
+			return value
+		}
+	}
+
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		value := strings.TrimSpace(text)
+		if value != "" && value != "0" {
+			return value
+		}
+	}
+
+	return ""
 }
 
 func waitReconnect(ctx context.Context, delay time.Duration) bool {

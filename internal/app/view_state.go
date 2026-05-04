@@ -2,9 +2,6 @@ package app
 
 import (
 	"time"
-
-	"github.com/controlado/lol-autobuild/internal/lcu"
-	"github.com/controlado/lol-autobuild/pkg/lolautobuild"
 )
 
 type UpdateStatus string
@@ -27,7 +24,29 @@ type UpdateState struct {
 	Message        string       `json:"message,omitempty"`
 }
 
+type LCUConnectionState string
+
+const (
+	LCUConnectionStateOff          LCUConnectionState = "off"
+	LCUConnectionStateNotConnected LCUConnectionState = "not_connected"
+	LCUConnectionStateConnected    LCUConnectionState = "connected"
+)
+
 type (
+	LCUStatus struct {
+		State   LCUConnectionState `json:"state"`
+		Message string             `json:"message,omitempty"`
+		Source  string             `json:"source,omitempty"`
+	}
+	SyncSummary struct {
+		DetectedChampionID int      `json:"DetectedChampionID"`
+		DetectedPosition   string   `json:"DetectedPosition"`
+		DetectedQueueID    int      `json:"DetectedQueueID"`
+		ItemSetApplied     bool     `json:"ItemSetApplied"`
+		RunePageApplied    bool     `json:"RunePageApplied"`
+		SpellsApplied      bool     `json:"SpellsApplied"`
+		Warnings           []string `json:"Warnings"`
+	}
 	WatcherNoticeState struct {
 		Kind         string    `json:"kind"`
 		Message      string    `json:"message,omitempty"`
@@ -43,15 +62,15 @@ type (
 		ConfigStale bool                `json:"config_stale"`
 		LastNotice  *WatcherNoticeState `json:"last_notice,omitempty"`
 	}
-	State struct {
-		Settings      Settings                 `json:"settings"`
-		LCU           lcu.ConnectionStatus     `json:"lcu"`
-		Watcher       WatcherState             `json:"watcher"`
-		Update        UpdateState              `json:"update"`
-		SyncRunning   bool                     `json:"sync_running"`
-		LastSync      *lolautobuild.SyncResult `json:"last_sync,omitempty"`
-		LastSyncAt    *time.Time               `json:"last_sync_at,omitempty"`
-		LastError     string                   `json:"last_error,omitempty"`
-		LastErrorCode string                   `json:"last_error_code,omitempty"`
+	ViewState struct {
+		Settings      Settings     `json:"settings"`
+		LCU           LCUStatus    `json:"lcu"`
+		Watcher       WatcherState `json:"watcher"`
+		Update        UpdateState  `json:"update"`
+		SyncRunning   bool         `json:"sync_running"`
+		LastSync      *SyncSummary `json:"last_sync,omitempty"`
+		LastSyncAt    *time.Time   `json:"last_sync_at,omitempty"`
+		LastError     string       `json:"last_error,omitempty"`
+		LastErrorCode string       `json:"last_error_code,omitempty"`
 	}
 )

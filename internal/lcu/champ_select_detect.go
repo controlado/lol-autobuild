@@ -5,8 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
-	"github.com/controlado/lol-autobuild/internal/position"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 )
 
 type queueID int
@@ -18,9 +17,9 @@ const (
 	queueCustomDraftPick queueID = 3110
 )
 
-func (c *Client) DetectSelection(ctx context.Context) (detectedSelection ports.DetectedSelection, err error) {
+func (c *Client) DetectSelection(ctx context.Context) (detectedSelection domain.DetectedSelection, err error) {
 	if !c.Enabled {
-		return ports.DetectedSelection{}, ErrNotConfigured
+		return domain.DetectedSelection{}, ErrNotConfigured
 	}
 
 	var (
@@ -43,16 +42,16 @@ func (c *Client) DetectSelection(ctx context.Context) (detectedSelection ports.D
 	)
 
 	if success, err := c.forEachCandidate(ctx, attempt, candidateHandler); err != nil {
-		return ports.DetectedSelection{}, err
+		return domain.DetectedSelection{}, err
 	} else if success {
 		return detectedSelection, nil
 	}
 
-	return ports.DetectedSelection{}, attempt.finish(
+	return domain.DetectedSelection{}, attempt.finish(
 		ErrChampSelectUnavailable,
 		ErrChampionNotSelected,
-		position.ErrNotAssigned,
-		position.ErrUnknown,
+		domain.ErrPositionNotAssigned,
+		domain.ErrPositionUnknown,
 		ErrPositionDetectionUnsupportedQueue,
 	)
 }
@@ -61,10 +60,10 @@ func classifyDetectSelectionError(err error) error {
 	switch {
 	case errors.Is(err, ErrChampionNotSelected):
 		return ErrChampionNotSelected
-	case errors.Is(err, position.ErrNotAssigned):
-		return position.ErrNotAssigned
-	case errors.Is(err, position.ErrUnknown):
-		return position.ErrUnknown
+	case errors.Is(err, domain.ErrPositionNotAssigned):
+		return domain.ErrPositionNotAssigned
+	case errors.Is(err, domain.ErrPositionUnknown):
+		return domain.ErrPositionUnknown
 	case errors.Is(err, ErrPositionDetectionUnsupportedQueue):
 		return ErrPositionDetectionUnsupportedQueue
 	default:
@@ -72,26 +71,26 @@ func classifyDetectSelectionError(err error) error {
 	}
 }
 
-func selectionFromSession(session champSelectSession) (ports.DetectedSelection, error) {
+func selectionFromSession(session champSelectSession) (domain.DetectedSelection, error) {
 	if !isPositionDetectionQueueSupported(session.QueueID) {
-		return ports.DetectedSelection{}, fmt.Errorf("%w: queueId %d", ErrPositionDetectionUnsupportedQueue, session.QueueID)
+		return domain.DetectedSelection{}, fmt.Errorf("%w: queueId %d", ErrPositionDetectionUnsupportedQueue, session.QueueID)
 	}
 
 	member, err := localPlayerFromSession(session)
 	if err != nil {
-		return ports.DetectedSelection{}, err
+		return domain.DetectedSelection{}, err
 	}
 
 	if member.ChampionID <= 0 {
-		return ports.DetectedSelection{}, ErrChampionNotSelected
+		return domain.DetectedSelection{}, ErrChampionNotSelected
 	}
 
-	position, err := position.FromRaw(member.AssignedPosition)
+	position, err := domain.PositionFromRaw(member.AssignedPosition)
 	if err != nil {
-		return ports.DetectedSelection{}, err
+		return domain.DetectedSelection{}, err
 	}
 
-	return ports.DetectedSelection{
+	return domain.DetectedSelection{
 		ChampionID:   member.ChampionID,
 		Position:     position,
 		QueueID:      session.QueueID,

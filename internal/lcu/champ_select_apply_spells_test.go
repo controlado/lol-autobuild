@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 )
 
 func TestApplySummonerSpellsReturnsNotConfiguredWhenDisabled(t *testing.T) {
@@ -19,7 +19,7 @@ func TestApplySummonerSpellsReturnsNotConfiguredWhenDisabled(t *testing.T) {
 
 	client := NewClient(false, "")
 
-	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
+	err := client.ApplySummonerSpells(context.Background(), domain.ApplySummonerSpellsRequest{
 		ChampionID: 240,
 		SpellIDs:   []int{4, 14},
 	})
@@ -34,7 +34,7 @@ func TestApplySummonerSpellsDryRunSkipsIO(t *testing.T) {
 	client := NewClient(true, filepath.Join(t.TempDir(), "missing-lockfile"))
 	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
 
-	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
+	err := client.ApplySummonerSpells(context.Background(), domain.ApplySummonerSpellsRequest{
 		ChampionID: 240,
 		SpellIDs:   []int{4, 14},
 		DryRun:     true,
@@ -49,32 +49,32 @@ func TestApplySummonerSpellsInvalidRequest(t *testing.T) {
 
 	tests := []struct {
 		name string
-		req  ports.ApplySummonerSpellsRequest
+		req  domain.ApplySummonerSpellsRequest
 	}{
 		{
 			name: "champion must be > 0",
-			req: ports.ApplySummonerSpellsRequest{
+			req: domain.ApplySummonerSpellsRequest{
 				ChampionID: 0,
 				SpellIDs:   []int{4, 14},
 			},
 		},
 		{
 			name: "requires exactly two spells",
-			req: ports.ApplySummonerSpellsRequest{
+			req: domain.ApplySummonerSpellsRequest{
 				ChampionID: 240,
 				SpellIDs:   []int{4},
 			},
 		},
 		{
 			name: "spell ids must be > 0",
-			req: ports.ApplySummonerSpellsRequest{
+			req: domain.ApplySummonerSpellsRequest{
 				ChampionID: 240,
 				SpellIDs:   []int{4, 0},
 			},
 		},
 		{
 			name: "spell ids must be distinct",
-			req: ports.ApplySummonerSpellsRequest{
+			req: domain.ApplySummonerSpellsRequest{
 				ChampionID: 240,
 				SpellIDs:   []int{4, 4},
 			},
@@ -140,7 +140,7 @@ func TestApplySummonerSpellsSuccess(t *testing.T) {
 
 	client := NewClient(true, lockfilePath)
 	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
-	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
+	err := client.ApplySummonerSpells(context.Background(), domain.ApplySummonerSpellsRequest{
 		ChampionID: 240,
 		SpellIDs:   []int{4, 14},
 	})
@@ -184,7 +184,7 @@ func TestApplySummonerSpellsPreservesFlashSlot(t *testing.T) {
 
 	client := NewClient(true, lockfilePath)
 	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
-	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
+	err := client.ApplySummonerSpells(context.Background(), domain.ApplySummonerSpellsRequest{
 		ChampionID: 240,
 		SpellIDs:   []int{4, 7},
 	})
@@ -280,7 +280,7 @@ func TestApplySummonerSpellsFailsWhenChampionChanges(t *testing.T) {
 
 	client := NewClient(true, lockfilePath)
 	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
-	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
+	err := client.ApplySummonerSpells(context.Background(), domain.ApplySummonerSpellsRequest{
 		ChampionID: 240,
 		SpellIDs:   []int{4, 14},
 	})
@@ -324,7 +324,7 @@ func TestApplySummonerSpellsFallsBackWhenProcessCandidateFails(t *testing.T) {
 		})}
 	}
 
-	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
+	err := client.ApplySummonerSpells(context.Background(), domain.ApplySummonerSpellsRequest{
 		ChampionID: 240,
 		SpellIDs:   []int{4, 14},
 	})
@@ -356,7 +356,7 @@ func TestApplySummonerSpellsNotFoundMapsToChampSelectUnavailable(t *testing.T) {
 
 	client := NewClient(true, lockfilePath)
 	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
-	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
+	err := client.ApplySummonerSpells(context.Background(), domain.ApplySummonerSpellsRequest{
 		ChampionID: 240,
 		SpellIDs:   []int{4, 14},
 	})
@@ -391,7 +391,7 @@ func TestApplySummonerSpellsAllCandidatesFailRespectsPriority(t *testing.T) {
 		})}
 	}
 
-	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
+	err := client.ApplySummonerSpells(context.Background(), domain.ApplySummonerSpellsRequest{
 		ChampionID: 240,
 		SpellIDs:   []int{4, 14},
 	})
@@ -417,7 +417,7 @@ func TestApplySummonerSpellsFailsWhenChampionIsNotSelected(t *testing.T) {
 		})}
 	}
 
-	err := client.ApplySummonerSpells(context.Background(), ports.ApplySummonerSpellsRequest{
+	err := client.ApplySummonerSpells(context.Background(), domain.ApplySummonerSpellsRequest{
 		ChampionID: 240,
 		SpellIDs:   []int{4, 14},
 	})

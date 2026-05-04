@@ -8,7 +8,7 @@ import (
 
 	"github.com/zalando/go-keyring"
 
-	"github.com/controlado/lol-autobuild/internal/ports"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 )
 
 const tokenUsername = "coachless_tokens"
@@ -21,25 +21,25 @@ func NewKeyringStore(service string) *KeyringStore {
 	return &KeyringStore{Service: service}
 }
 
-func (s *KeyringStore) ReadTokens(_ context.Context) (ports.TokenPair, error) {
+func (s *KeyringStore) ReadTokens(_ context.Context) (domain.TokenPair, error) {
 	raw, err := keyring.Get(s.Service, tokenUsername)
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
-			return ports.TokenPair{}, fmt.Errorf("tokens not found: %w", err)
+			return domain.TokenPair{}, fmt.Errorf("tokens not found: %w", err)
 		}
 
-		return ports.TokenPair{}, fmt.Errorf("keyring get: %w", err)
+		return domain.TokenPair{}, fmt.Errorf("keyring get: %w", err)
 	}
 
-	var pair ports.TokenPair
+	var pair domain.TokenPair
 	if err := json.Unmarshal([]byte(raw), &pair); err != nil {
-		return ports.TokenPair{}, fmt.Errorf("decode tokens: %w", err)
+		return domain.TokenPair{}, fmt.Errorf("decode tokens: %w", err)
 	}
 
 	return pair, nil
 }
 
-func (s *KeyringStore) WriteTokens(_ context.Context, pair ports.TokenPair) error {
+func (s *KeyringStore) WriteTokens(_ context.Context, pair domain.TokenPair) error {
 	raw, err := json.Marshal(pair)
 	if err != nil {
 		return fmt.Errorf("encode tokens: %w", err)
