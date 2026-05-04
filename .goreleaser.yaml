@@ -9,7 +9,7 @@ before:
 
 builds:
   - id: lol-autobuild
-    main: ./cmd/dev
+    main: ./cmd/lol-autobuild
     binary: lol-autobuild
     env:
       - CGO_ENABLED=0
