@@ -89,30 +89,34 @@ func New(opts Options) (*App, error) {
 }
 
 func (a *App) State(ctx context.Context) ViewState {
+	a.mu.Lock()
+
 	var (
-		cfg        = a.configSnapshot()
-		lastSyncAt = a.lastSyncAtSnapshot()
-		status     = a.lcuStatus(ctx, cfg)
+		configSnapshot = a.cfg
+		state          = ViewState{
+			Settings: configSnapshot.Settings,
+			Watcher: WatcherState{
+				Running:     a.watcherRunning,
+				ConfigStale: a.watcherConfigStaleLocked(configSnapshot),
+				LastNotice:  cloneWatcherNotice(a.lastWatchNotice),
+			},
+			Update:        cloneUpdateState(a.updateState),
+			SyncRunning:   a.syncRunning,
+			LastSync:      cloneSyncSummary(a.lastSync),
+			LastError:     a.lastErrorMessage,
+			LastErrorCode: a.lastErrorCode,
+		}
 	)
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	return ViewState{
-		Settings: cfg.Settings,
-		LCU:      status,
-		Watcher: WatcherState{
-			Running:     a.watcherRunning,
-			ConfigStale: a.watcherConfigStaleLocked(cfg),
-			LastNotice:  cloneWatcherNotice(a.lastWatchNotice),
-		},
-		Update:        cloneUpdateState(a.updateState),
-		SyncRunning:   a.syncRunning,
-		LastSync:      cloneSyncSummary(a.lastSync),
-		LastSyncAt:    lastSyncAt,
-		LastError:     a.lastErrorMessage,
-		LastErrorCode: a.lastErrorCode,
+	if !a.lastSyncAt.IsZero() {
+		lastSyncAtCopy := a.lastSyncAt
+		state.LastSyncAt = &lastSyncAtCopy
 	}
+
+	a.mu.Unlock()
+
+	state.LCU = a.lcuStatus(ctx, configSnapshot)
+	return state
 }
 
 func (a *App) SaveSettings(ctx context.Context, settings Settings) (ViewState, UserMessage) {
@@ -136,18 +140,6 @@ func (a *App) SaveSettings(ctx context.Context, settings Settings) (ViewState, U
 
 func (a *App) watcherConfigStaleLocked(cfg RuntimeConfig) bool {
 	return a.watcherRunning && a.watcherConfigSet && cfg != a.watcherConfig
-}
-
-func (a *App) lastSyncAtSnapshot() *time.Time {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	if a.lastSyncAt.IsZero() {
-		return nil
-	}
-
-	lastSyncAtCopy := a.lastSyncAt
-	return &lastSyncAtCopy
 }
 
 func (a *App) configSnapshot() RuntimeConfig {
