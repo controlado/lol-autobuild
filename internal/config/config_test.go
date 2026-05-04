@@ -136,6 +136,15 @@ lcu:
 	}
 }
 
+func TestDefaultsUseTenTopItems(t *testing.T) {
+	t.Parallel()
+
+	cfg := Defaults()
+	if cfg.Recommendation.TopItems != 10 {
+		t.Fatalf("recommendation.top_items default = %d, want 10", cfg.Recommendation.TopItems)
+	}
+}
+
 func TestSaveWritesConfig(t *testing.T) {
 	t.Parallel()
 

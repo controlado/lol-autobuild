@@ -84,7 +84,7 @@ func Defaults() Config {
 		},
 		Recommendation: RecommendationConfig{
 			MinOccurrence: 1000,
-			TopItems:      6,
+			TopItems:      10,
 			TopSpells:     2,
 		},
 		LCU: LCUConfig{
