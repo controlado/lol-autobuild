@@ -6,6 +6,7 @@ const (
 	MessageCodeLCUChampSelectUnavailable = "lcu.champ_select_unavailable"
 	MessageCodeLCUChampionNotSelected    = "lcu.champion_not_selected"
 	MessageCodeCoachlessLoginMissing     = "coachless.login_missing"
+	MessageCodeCoachlessAuthUnavailable  = "coachless.auth_unavailable"
 	MessageCodeSyncAlreadyRunning        = "sync.already_running"
 	MessageCodeWatcherPreStartFailed     = "watch.pre_start_failed"
 	MessageCodeWatcherStartFailed        = "watch.start_failed"
@@ -38,4 +39,8 @@ func watcherPreStartFailedMessage() UserMessage {
 
 func watcherStartFailedMessage() UserMessage {
 	return UserMessage{Code: MessageCodeWatcherStartFailed, Text: "Watcher start failed."}
+}
+
+func coachlessAuthUnavailableMessage() UserMessage {
+	return UserMessage{Code: MessageCodeCoachlessAuthUnavailable, Text: "Coachless authentication is unavailable."}
 }

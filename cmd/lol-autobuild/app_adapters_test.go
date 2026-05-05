@@ -143,6 +143,28 @@ func TestAppLCUStatusFromLCU(t *testing.T) {
 	}
 }
 
+func TestAppCoachlessAuthStateFromAuth(t *testing.T) {
+	t.Parallel()
+
+	expiresAt := time.Date(2026, time.May, 4, 12, 0, 0, 0, time.UTC)
+	got := appCoachlessAuthStateFromAuth(auth.CoachlessSessionState{
+		Status:    auth.CoachlessSessionStatusStored,
+		Plan:      auth.CoachlessPlanPremium,
+		ExpiresAt: &expiresAt,
+		Message:   "status",
+	})
+
+	if got.Status != app.CoachlessAuthStatusStored || got.Plan != app.CoachlessAuthPlanPremium {
+		t.Fatalf("converted status = %+v", got)
+	}
+	if got.ExpiresAt == nil || !got.ExpiresAt.Equal(expiresAt) {
+		t.Fatalf("converted ExpiresAt = %v, want %v", got.ExpiresAt, expiresAt)
+	}
+	if got.Message != "status" {
+		t.Fatalf("converted Message = %q, want status", got.Message)
+	}
+}
+
 type stubUpdateSource struct {
 	currentVersion string
 	result         update.Result

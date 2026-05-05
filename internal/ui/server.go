@@ -25,6 +25,8 @@ var staticFiles embed.FS
 type App interface {
 	State(ctx context.Context) app.ViewState
 	SaveSettings(ctx context.Context, settings app.Settings) (app.ViewState, app.UserMessage)
+	LoginCoachlessAuth(ctx context.Context) (app.ViewState, app.UserMessage)
+	LogoutCoachlessAuth(ctx context.Context) (app.ViewState, app.UserMessage)
 	RunSync(ctx context.Context) (app.ViewState, app.UserMessage)
 	StartWatcher(ctx context.Context) (app.ViewState, app.UserMessage)
 	StopWatcher(ctx context.Context) app.ViewState
@@ -157,6 +159,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/i18n/", s.handleI18N)
 	mux.HandleFunc("/api/state", s.handleState)
 	mux.HandleFunc("/api/config", s.handleSaveConfig)
+	mux.HandleFunc("/api/coachless/auth/login", s.handleCoachlessAuthLogin)
+	mux.HandleFunc("/api/coachless/auth/logout", s.handleCoachlessAuthLogout)
 	mux.HandleFunc("/api/sync", s.handleRunSync)
 	mux.HandleFunc("/api/watch/start", s.handleStartWatch)
 	mux.HandleFunc("/api/watch/stop", s.handleStopWatch)
@@ -260,6 +264,34 @@ func (s *Server) handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 	state, errMessage := s.app.SaveSettings(r.Context(), settings)
 	if !errMessage.Empty() {
 		writeError(w, http.StatusBadRequest, errMessage)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, state)
+}
+
+func (s *Server) handleCoachlessAuthLogin(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodPost) {
+		return
+	}
+
+	state, errMessage := s.app.LoginCoachlessAuth(r.Context())
+	if !errMessage.Empty() {
+		writeError(w, http.StatusInternalServerError, errMessage)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, state)
+}
+
+func (s *Server) handleCoachlessAuthLogout(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodPost) {
+		return
+	}
+
+	state, errMessage := s.app.LogoutCoachlessAuth(r.Context())
+	if !errMessage.Empty() {
+		writeError(w, http.StatusInternalServerError, errMessage)
 		return
 	}
 

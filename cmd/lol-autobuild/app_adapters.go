@@ -132,6 +132,62 @@ func (c appUpdateChecker) Check(ctx context.Context) (app.UpdateCheckResult, err
 	return out, err
 }
 
+type appCoachlessAuthSession struct {
+	session *auth.CoachlessSession
+}
+
+func (s appCoachlessAuthSession) Status(ctx context.Context) app.CoachlessAuthState {
+	if s.session == nil {
+		return app.CoachlessAuthState{
+			Status: app.CoachlessAuthStatusMissing,
+			Plan:   app.CoachlessAuthPlanUnknown,
+		}
+	}
+
+	return appCoachlessAuthStateFromAuth(s.session.Status(ctx))
+}
+
+func (s appCoachlessAuthSession) Login(ctx context.Context) error {
+	return s.session.Login(ctx)
+}
+
+func (s appCoachlessAuthSession) Logout(ctx context.Context) error {
+	return s.session.Logout(ctx)
+}
+
+func appCoachlessAuthStateFromAuth(status auth.CoachlessSessionState) app.CoachlessAuthState {
+	return app.CoachlessAuthState{
+		Status:    appCoachlessAuthStatusFromAuth(status.Status),
+		Plan:      appCoachlessAuthPlanFromAuth(status.Plan),
+		ExpiresAt: status.ExpiresAt,
+		Message:   status.Message,
+	}
+}
+
+func appCoachlessAuthStatusFromAuth(status auth.CoachlessSessionStatus) app.CoachlessAuthStatus {
+	switch status {
+	case auth.CoachlessSessionStatusStored:
+		return app.CoachlessAuthStatusStored
+	case auth.CoachlessSessionStatusExpired:
+		return app.CoachlessAuthStatusExpired
+	case auth.CoachlessSessionStatusError:
+		return app.CoachlessAuthStatusError
+	default:
+		return app.CoachlessAuthStatusMissing
+	}
+}
+
+func appCoachlessAuthPlanFromAuth(plan auth.CoachlessPlan) app.CoachlessAuthPlan {
+	switch plan {
+	case auth.CoachlessPlanFree:
+		return app.CoachlessAuthPlanFree
+	case auth.CoachlessPlanPremium:
+		return app.CoachlessAuthPlanPremium
+	default:
+		return app.CoachlessAuthPlanUnknown
+	}
+}
+
 func appMessageFromErr(err error) app.UserMessage {
 	switch {
 	case err == nil:

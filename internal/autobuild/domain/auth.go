@@ -1,6 +1,11 @@
 package domain
 
-import "time"
+import (
+	"errors"
+	"time"
+)
+
+var ErrTokensNotFound = errors.New("tokens not found")
 
 type TokenPair struct {
 	AccessToken  string

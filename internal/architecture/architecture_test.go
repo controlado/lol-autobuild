@@ -56,6 +56,13 @@ func TestInternalImportBoundaries(t *testing.T) {
 				modulePath + "/internal/update",
 			},
 		},
+		{
+			Name:          "secrets does not import auth",
+			PackagePrefix: modulePath + "/internal/secrets",
+			Forbidden: []string{
+				modulePath + "/internal/auth",
+			},
+		},
 	}
 
 	for _, rule := range rules {

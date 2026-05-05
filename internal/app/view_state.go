@@ -15,6 +15,23 @@ const (
 	UpdateStatusUnavailable UpdateStatus = "unavailable"
 )
 
+type CoachlessAuthStatus string
+
+const (
+	CoachlessAuthStatusMissing CoachlessAuthStatus = "missing"
+	CoachlessAuthStatusStored  CoachlessAuthStatus = "stored"
+	CoachlessAuthStatusExpired CoachlessAuthStatus = "expired"
+	CoachlessAuthStatusError   CoachlessAuthStatus = "error"
+)
+
+type CoachlessAuthPlan string
+
+const (
+	CoachlessAuthPlanUnknown CoachlessAuthPlan = "unknown"
+	CoachlessAuthPlanFree    CoachlessAuthPlan = "free"
+	CoachlessAuthPlanPremium CoachlessAuthPlan = "premium"
+)
+
 type UpdateState struct {
 	Status         UpdateStatus `json:"status"`
 	CurrentVersion string       `json:"current_version,omitempty"`
@@ -63,15 +80,22 @@ type (
 		ConfigStale bool                `json:"config_stale"`
 		LastNotice  *WatcherNoticeState `json:"last_notice,omitempty"`
 	}
+	CoachlessAuthState struct {
+		Status    CoachlessAuthStatus `json:"status"`
+		Plan      CoachlessAuthPlan   `json:"plan"`
+		ExpiresAt *time.Time          `json:"expires_at,omitempty"`
+		Message   string              `json:"message,omitempty"`
+	}
 	ViewState struct {
-		Settings      Settings     `json:"settings"`
-		LCU           LCUStatus    `json:"lcu"`
-		Watcher       WatcherState `json:"watcher"`
-		Update        UpdateState  `json:"update"`
-		SyncRunning   bool         `json:"sync_running"`
-		LastSync      *SyncSummary `json:"last_sync,omitempty"`
-		LastSyncAt    *time.Time   `json:"last_sync_at,omitempty"`
-		LastError     string       `json:"last_error,omitempty"`
-		LastErrorCode string       `json:"last_error_code,omitempty"`
+		Settings      Settings           `json:"settings"`
+		LCU           LCUStatus          `json:"lcu"`
+		CoachlessAuth CoachlessAuthState `json:"coachless_auth"`
+		Watcher       WatcherState       `json:"watcher"`
+		Update        UpdateState        `json:"update"`
+		SyncRunning   bool               `json:"sync_running"`
+		LastSync      *SyncSummary       `json:"last_sync,omitempty"`
+		LastSyncAt    *time.Time         `json:"last_sync_at,omitempty"`
+		LastError     string             `json:"last_error,omitempty"`
+		LastErrorCode string             `json:"last_error_code,omitempty"`
 	}
 )
