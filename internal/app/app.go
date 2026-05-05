@@ -21,6 +21,11 @@ type (
 		CurrentVersion() string
 		Check(context.Context) (UpdateCheckResult, error)
 	}
+	CoachlessAuthSession interface {
+		Status(context.Context) CoachlessAuthState
+		Login(context.Context) error
+		Logout(context.Context) error
+	}
 )
 
 type UpdateCheckResult struct {
@@ -34,6 +39,7 @@ type Options struct {
 	ServiceFactory   ServiceFactory
 	LCUStatus        LCUStatusProvider
 	UpdateChecker    UpdateChecker
+	CoachlessAuth    CoachlessAuthSession
 	ConfigStore      ConfigStore
 	RuntimeConfig    RuntimeConfig
 	MessageFromError MessageMapper
@@ -41,11 +47,13 @@ type Options struct {
 
 type App struct {
 	saveMu sync.Mutex // SaveSettings()
+	authMu sync.Mutex // Coachless auth actions
 	mu     sync.Mutex // App memory
 
 	serviceFactory ServiceFactory
 	lcuStatus      LCUStatusProvider
 	updateChecker  UpdateChecker
+	coachlessAuth  CoachlessAuthSession
 	configStore    ConfigStore
 	messageFromErr MessageMapper
 	cfg            RuntimeConfig
@@ -78,6 +86,7 @@ func New(opts Options) (*App, error) {
 		serviceFactory: opts.ServiceFactory,
 		lcuStatus:      opts.LCUStatus,
 		updateChecker:  opts.UpdateChecker,
+		coachlessAuth:  opts.CoachlessAuth,
 		configStore:    opts.ConfigStore,
 		messageFromErr: opts.MessageFromError,
 		cfg:            normalizeConfig(opts.RuntimeConfig),
@@ -95,6 +104,10 @@ func (a *App) State(ctx context.Context) ViewState {
 		configSnapshot = a.cfg
 		state          = ViewState{
 			Settings: configSnapshot.Settings,
+			CoachlessAuth: CoachlessAuthState{
+				Status: CoachlessAuthStatusMissing,
+				Plan:   CoachlessAuthPlanUnknown,
+			},
 			Watcher: WatcherState{
 				Running:     a.watcherRunning,
 				ConfigStale: a.watcherConfigStaleLocked(configSnapshot),
@@ -115,8 +128,21 @@ func (a *App) State(ctx context.Context) ViewState {
 
 	a.mu.Unlock()
 
+	if a.coachlessAuth != nil {
+		state.CoachlessAuth = cloneCoachlessAuthState(a.coachlessAuth.Status(ctx))
+	}
 	state.LCU = a.lcuStatus(ctx, configSnapshot)
+
 	return state
+}
+
+func cloneCoachlessAuthState(state CoachlessAuthState) CoachlessAuthState {
+	out := state
+	if state.ExpiresAt != nil {
+		expiresAt := *state.ExpiresAt
+		out.ExpiresAt = &expiresAt
+	}
+	return out
 }
 
 func (a *App) SaveSettings(ctx context.Context, settings Settings) (ViewState, UserMessage) {
@@ -138,6 +164,36 @@ func (a *App) SaveSettings(ctx context.Context, settings Settings) (ViewState, U
 	return a.State(ctx), UserMessage{}
 }
 
+func (a *App) LoginCoachlessAuth(ctx context.Context) (ViewState, UserMessage) {
+	return a.runCoachlessAuthAction(ctx, func() error { return a.coachlessAuth.Login(ctx) })
+}
+
+func (a *App) LogoutCoachlessAuth(ctx context.Context) (ViewState, UserMessage) {
+	return a.runCoachlessAuthAction(ctx, func() error { return a.coachlessAuth.Logout(ctx) })
+}
+
+func (a *App) runCoachlessAuthAction(ctx context.Context, action func() error) (ViewState, UserMessage) {
+	var msg = UserMessage{}
+
+	a.authMu.Lock()
+	defer a.authMu.Unlock()
+
+	if a.coachlessAuth == nil {
+		msg = coachlessAuthUnavailableMessage()
+		a.setLastErrorMessageSafe(msg)
+		return ViewState{}, msg
+	}
+
+	if err := action(); err != nil {
+		msg = a.messageFromErr(err)
+		a.setLastErrorMessageSafe(msg)
+		return ViewState{}, msg
+	}
+
+	a.setLastErrorMessageSafe(msg)
+	return a.State(ctx), msg
+}
+
 func (a *App) watcherConfigStaleLocked(cfg RuntimeConfig) bool {
 	return a.watcherRunning && a.watcherConfigSet && cfg != a.watcherConfig
 }
@@ -146,6 +202,12 @@ func (a *App) configSnapshot() RuntimeConfig {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.cfg
+}
+
+func (a *App) setLastErrorMessageSafe(msg UserMessage) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.setLastErrorMessage(msg)
 }
 
 func (a *App) setLastErrorMessage(msg UserMessage) {

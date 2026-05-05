@@ -10,7 +10,9 @@ type fakeStore struct {
 	pair       domain.TokenPair
 	readErr    error
 	writeErr   error
+	clearErr   error
 	writeCalls int
+	clearCalls int
 }
 
 func (s *fakeStore) ReadTokens(_ context.Context) (domain.TokenPair, error) {
@@ -28,6 +30,16 @@ func (s *fakeStore) WriteTokens(_ context.Context, pair domain.TokenPair) error 
 	}
 
 	s.pair = pair
+	return nil
+}
+
+func (s *fakeStore) ClearTokens(_ context.Context) error {
+	s.clearCalls++
+	if s.clearErr != nil {
+		return s.clearErr
+	}
+
+	s.pair = domain.TokenPair{}
 	return nil
 }
 

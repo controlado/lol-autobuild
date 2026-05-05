@@ -25,7 +25,7 @@ func (s *KeyringStore) ReadTokens(_ context.Context) (domain.TokenPair, error) {
 	raw, err := keyring.Get(s.Service, tokenUsername)
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
-			return domain.TokenPair{}, fmt.Errorf("tokens not found: %w", err)
+			return domain.TokenPair{}, fmt.Errorf("%w: %v", domain.ErrTokensNotFound, err)
 		}
 
 		return domain.TokenPair{}, fmt.Errorf("keyring get: %w", err)

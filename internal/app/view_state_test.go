@@ -10,6 +10,7 @@ func TestViewStateJSONContract(t *testing.T) {
 	t.Parallel()
 
 	checkedAt := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+	authExpiresAt := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
 	state := ViewState{
 		Settings: Settings{
 			Patch:      "15.1",
@@ -18,6 +19,11 @@ func TestViewStateJSONContract(t *testing.T) {
 		},
 		LCU:     LCUStatus{State: LCUConnectionStateConnected},
 		Watcher: WatcherState{ConfigStale: true},
+		CoachlessAuth: CoachlessAuthState{
+			Status:    CoachlessAuthStatusStored,
+			Plan:      CoachlessAuthPlanPremium,
+			ExpiresAt: &authExpiresAt,
+		},
 		Update: UpdateState{
 			DownloadURL: "https://example.test/download",
 			CheckedAt:   &checkedAt,
@@ -52,6 +58,11 @@ func TestViewStateJSONContract(t *testing.T) {
 	watcher := objectAt(t, got, "watcher")
 	if watcher["config_stale"] != true {
 		t.Fatalf("watcher.config_stale = %v, want true", watcher["config_stale"])
+	}
+
+	coachlessAuth := objectAt(t, got, "coachless_auth")
+	if coachlessAuth["status"] != string(CoachlessAuthStatusStored) || coachlessAuth["plan"] != string(CoachlessAuthPlanPremium) {
+		t.Fatalf("coachless_auth JSON = %+v", coachlessAuth)
 	}
 
 	update := objectAt(t, got, "update")

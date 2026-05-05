@@ -18,6 +18,7 @@ type testAppOptions struct {
 	cfg            RuntimeConfig
 	serviceFactory ServiceFactory
 	lcuStatus      LCUStatusProvider
+	coachlessAuth  CoachlessAuthSession
 	updateChecker  UpdateChecker
 	configStore    ConfigStore
 	messageFromErr MessageMapper
@@ -49,6 +50,7 @@ func newTestApp(t *testing.T, opts testAppOptions) *App {
 	app, err := New(Options{
 		ServiceFactory:   opts.serviceFactory,
 		LCUStatus:        opts.lcuStatus,
+		CoachlessAuth:    opts.coachlessAuth,
 		UpdateChecker:    opts.updateChecker,
 		ConfigStore:      opts.configStore,
 		RuntimeConfig:    opts.cfg,
@@ -149,6 +151,36 @@ type stubService struct {
 
 	syncCalled  chan syncCall
 	watchCalled chan watchCall
+}
+
+type stubCoachlessAuth struct {
+	mu sync.Mutex
+
+	status CoachlessAuthState
+	err    error
+
+	loginCalls  int
+	logoutCalls int
+}
+
+func (s *stubCoachlessAuth) Status(context.Context) CoachlessAuthState {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return cloneCoachlessAuthState(s.status)
+}
+
+func (s *stubCoachlessAuth) Login(context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.loginCalls++
+	return s.err
+}
+
+func (s *stubCoachlessAuth) Logout(context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.logoutCalls++
+	return s.err
 }
 
 func newStubService() *stubService {
@@ -325,6 +357,80 @@ func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 	}
 	if next.Update.CheckedAt == nil || !next.Update.CheckedAt.Equal(lastSyncAt) {
 		t.Fatalf("next.Update.CheckedAt = %v, want %v", next.Update.CheckedAt, lastSyncAt)
+	}
+}
+
+func TestStateCopiesCoachlessAuthState(t *testing.T) {
+	expiresAt := time.Date(2026, time.May, 4, 12, 0, 0, 0, time.UTC)
+	authSession := &stubCoachlessAuth{status: CoachlessAuthState{
+		Status:    CoachlessAuthStatusStored,
+		Plan:      CoachlessAuthPlanPremium,
+		ExpiresAt: &expiresAt,
+	}}
+	app := newTestApp(t, testAppOptions{coachlessAuth: authSession})
+
+	state := app.State(context.Background())
+	if state.CoachlessAuth.Status != CoachlessAuthStatusStored || state.CoachlessAuth.Plan != CoachlessAuthPlanPremium {
+		t.Fatalf("CoachlessAuth = %+v", state.CoachlessAuth)
+	}
+	if state.CoachlessAuth.ExpiresAt == nil || !state.CoachlessAuth.ExpiresAt.Equal(expiresAt) {
+		t.Fatalf("CoachlessAuth.ExpiresAt = %v, want %v", state.CoachlessAuth.ExpiresAt, expiresAt)
+	}
+
+	*state.CoachlessAuth.ExpiresAt = state.CoachlessAuth.ExpiresAt.Add(time.Hour)
+	next := app.State(context.Background())
+	if next.CoachlessAuth.ExpiresAt == nil || !next.CoachlessAuth.ExpiresAt.Equal(expiresAt) {
+		t.Fatalf("next CoachlessAuth.ExpiresAt = %v, want %v", next.CoachlessAuth.ExpiresAt, expiresAt)
+	}
+}
+
+func TestCoachlessAuthActionsUseSessionWithoutSavingConfig(t *testing.T) {
+	store := &recordingConfigStore{}
+	authSession := &stubCoachlessAuth{
+		status: CoachlessAuthState{Status: CoachlessAuthStatusStored, Plan: CoachlessAuthPlanUnknown},
+	}
+	app := newTestApp(t, testAppOptions{configStore: store, coachlessAuth: authSession})
+	app.lastErrorMessage = "old error"
+
+	state, message := app.LoginCoachlessAuth(context.Background())
+	if !message.Empty() {
+		t.Fatalf("LoginCoachlessAuth() message = %+v, want empty", message)
+	}
+	if state.CoachlessAuth.Status != CoachlessAuthStatusStored {
+		t.Fatalf("state.CoachlessAuth = %+v", state.CoachlessAuth)
+	}
+
+	state, message = app.LogoutCoachlessAuth(context.Background())
+	if !message.Empty() {
+		t.Fatalf("LogoutCoachlessAuth() message = %+v, want empty", message)
+	}
+
+	if authSession.loginCalls != 1 || authSession.logoutCalls != 1 {
+		t.Fatalf("auth calls = login:%d logout:%d", authSession.loginCalls, authSession.logoutCalls)
+	}
+	if store.saveCount() != 0 {
+		t.Fatalf("config saves = %d, want 0", store.saveCount())
+	}
+	if state.LastError != "" {
+		t.Fatalf("LastError = %q, want empty", state.LastError)
+	}
+}
+
+func TestCoachlessAuthActionErrorRecordsLastError(t *testing.T) {
+	authSession := &stubCoachlessAuth{err: errors.New("auth failed")}
+	app := newTestApp(t, testAppOptions{coachlessAuth: authSession})
+
+	state, message := app.LoginCoachlessAuth(context.Background())
+	if message.Text != "auth failed" {
+		t.Fatalf("LoginCoachlessAuth() message = %+v", message)
+	}
+	if state != (ViewState{}) {
+		t.Fatalf("LoginCoachlessAuth() state = %+v, want zero", state)
+	}
+
+	current := app.State(context.Background())
+	if current.LastError != "auth failed" {
+		t.Fatalf("LastError = %q, want auth failed", current.LastError)
 	}
 }
 

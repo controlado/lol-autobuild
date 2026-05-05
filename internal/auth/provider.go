@@ -16,9 +16,13 @@ type (
 	TokenRefresher interface {
 		Refresh(ctx context.Context, refreshToken string) (domain.TokenPair, error)
 	}
-	SecretStore interface {
+	TokenStore interface {
 		ReadTokens(ctx context.Context) (domain.TokenPair, error)
 		WriteTokens(ctx context.Context, pair domain.TokenPair) error
+	}
+	ClearableTokenStore interface {
+		TokenStore
+		ClearTokens(ctx context.Context) error
 	}
 )
 
@@ -30,13 +34,13 @@ type ProviderOptions struct {
 
 type Provider struct {
 	tokenRefresher TokenRefresher
-	store          SecretStore
+	store          TokenStore
 	auto           AutoSource
 	manual         ManualSource
 	opts           ProviderOptions
 }
 
-func NewProvider(tokenRefresher TokenRefresher, store SecretStore, auto AutoSource, manual ManualSource, opts ProviderOptions) *Provider {
+func NewProvider(tokenRefresher TokenRefresher, store TokenStore, auto AutoSource, manual ManualSource, opts ProviderOptions) *Provider {
 	return &Provider{
 		tokenRefresher: tokenRefresher,
 		store:          store,
@@ -130,7 +134,7 @@ func (p *Provider) Claims(ctx context.Context) (domain.TokenClaims, error) {
 		return domain.TokenClaims{}, err
 	}
 
-	return claimsFromJWT(accessToken)
+	return parseClaims(accessToken)
 }
 
 func isTokenValid(exp time.Time, skew time.Duration) bool {
@@ -156,7 +160,7 @@ func ensureExpiry(pair domain.TokenPair) domain.TokenPair {
 }
 
 func expFromJWT(token string) (time.Time, error) {
-	claims, err := claimsFromJWT(token)
+	claims, err := parseClaims(token)
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -178,7 +182,7 @@ func validateRefreshedTokenPair(pair domain.TokenPair) (domain.TokenPair, error)
 	return pair, nil
 }
 
-func claimsFromJWT(token string) (domain.TokenClaims, error) {
+func parseClaims(token string) (domain.TokenClaims, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) < 2 {
 		return domain.TokenClaims{}, errors.New("invalid jwt format")

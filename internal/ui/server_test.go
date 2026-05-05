@@ -17,9 +17,11 @@ import (
 )
 
 type stubApp struct {
-	state     app.ViewState
-	saveState *app.ViewState
-	saved     app.Settings
+	state                    app.ViewState
+	saveState                *app.ViewState
+	saved                    app.Settings
+	loginCoachlessAuthCalls  int
+	logoutCoachlessAuthCalls int
 }
 
 func (sa *stubApp) State(context.Context) (s app.ViewState) {
@@ -36,6 +38,14 @@ func (sa *stubApp) SaveSettings(_ context.Context, settings app.Settings) (s app
 	}
 	s = app.ViewState{Settings: settings}
 	return
+}
+func (sa *stubApp) LoginCoachlessAuth(context.Context) (s app.ViewState, msg app.UserMessage) {
+	sa.loginCoachlessAuthCalls++
+	return sa.state, app.UserMessage{}
+}
+func (sa *stubApp) LogoutCoachlessAuth(context.Context) (s app.ViewState, msg app.UserMessage) {
+	sa.logoutCoachlessAuthCalls++
+	return sa.state, app.UserMessage{}
 }
 func (sa *stubApp) RunSync(context.Context) (s app.ViewState, msg app.UserMessage) {
 	return
@@ -511,5 +521,117 @@ func TestSaveConfigAcceptsAdvancedFilters(t *testing.T) {
 	}
 	if !state.Watcher.ConfigStale {
 		t.Fatal("response watcher.config_stale = false, want true")
+	}
+}
+
+func TestCoachlessAuthEndpoints(t *testing.T) {
+	tests := []struct {
+		name            string
+		target          string
+		body            string
+		wantLoginCalls  int
+		wantLogoutCalls int
+	}{
+		{name: "login", target: "/api/coachless/auth/login?token=test-token", body: `{}`, wantLoginCalls: 1, wantLogoutCalls: 0},
+		{name: "logout", target: "/api/coachless/auth/logout?token=test-token", body: `{}`, wantLoginCalls: 0, wantLogoutCalls: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recApp := &stubApp{
+				state: app.ViewState{
+					CoachlessAuth: app.CoachlessAuthState{
+						Status: app.CoachlessAuthStatusStored,
+						Plan:   app.CoachlessAuthPlanPremium,
+					},
+				},
+			}
+			server, err := NewServer(Options{
+				App:         recApp,
+				OpenBrowser: func(string) error { return nil },
+				Token:       "test-token",
+				Out:         io.Discard,
+			})
+			if err != nil {
+				t.Fatalf("NewServer() error = %v", err)
+			}
+
+			req := httptest.NewRequest(http.MethodPost, tt.target, strings.NewReader(tt.body))
+			rec := httptest.NewRecorder()
+			server.Handler().ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("POST %s status = %d, want %d: %s", tt.target, rec.Code, http.StatusOK, rec.Body.String())
+			}
+
+			var state app.ViewState
+			if err := json.Unmarshal(rec.Body.Bytes(), &state); err != nil {
+				t.Fatalf("decode state: %v", err)
+			}
+			if state.CoachlessAuth.Status != app.CoachlessAuthStatusStored {
+				t.Fatalf("state.CoachlessAuth = %+v", state.CoachlessAuth)
+			}
+			if tt.wantLoginCalls != recApp.loginCoachlessAuthCalls {
+				t.Fatalf("loginCoachlessAuthCalls = %d, want %d", recApp.loginCoachlessAuthCalls, tt.wantLoginCalls)
+			}
+			if tt.wantLogoutCalls != recApp.logoutCoachlessAuthCalls {
+				t.Fatalf("logoutCoachlessAuthCalls = %d, want %d", recApp.logoutCoachlessAuthCalls, tt.wantLogoutCalls)
+			}
+		})
+	}
+}
+
+func TestCoachlessAuthEndpointErrors(t *testing.T) {
+	server, err := NewServer(Options{
+		App:         new(stubApp),
+		OpenBrowser: func(string) error { return nil },
+		Token:       "test-token",
+		Out:         io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	tests := []struct {
+		name       string
+		method     string
+		target     string
+		body       string
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name:       "login requires ui token",
+			method:     http.MethodPost,
+			target:     "/api/coachless/auth/login",
+			body:       `{}`,
+			wantStatus: http.StatusUnauthorized,
+			wantCode:   "ui.invalid_token",
+		},
+		{
+			name:       "logout is not GET",
+			method:     http.MethodGet,
+			target:     "/api/coachless/auth/logout?token=test-token",
+			wantStatus: http.StatusMethodNotAllowed,
+			wantCode:   "ui.method_not_allowed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.target, strings.NewReader(tt.body))
+			rec := httptest.NewRecorder()
+			server.Handler().ServeHTTP(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("%s %s status = %d, want %d: %s", tt.method, tt.target, rec.Code, tt.wantStatus, rec.Body.String())
+			}
+
+			var body map[string]string
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			if body["error_code"] != tt.wantCode {
+				t.Fatalf("error_code = %q, want %q", body["error_code"], tt.wantCode)
+			}
+		})
 	}
 }

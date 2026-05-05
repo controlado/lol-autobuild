@@ -131,6 +131,23 @@ Stop and start the watcher to apply changes.</div>
         <section class="panel panel-coachless panel-stack" id="coachlessPanel" aria-labelledby="coachlessDataTitle">
           <h2 class="section-title" id="coachlessDataTitle" data-i18n="settings.coachless_data">Coachless</h2>
 
+          <div class="coachless-auth-status" aria-live="polite">
+            <div>
+              <p class="label" data-i18n="coachless.auth_title">Authentication</p>
+              <p class="value" id="coachlessAuthStatus" data-i18n="coachless.auth_missing">Not signed in</p>
+            </div>
+            <div class="coachless-auth-meta">
+              <span class="tag" id="coachlessAuthPlan" data-i18n="coachless.auth_plan_unknown">Plan unknown</span>
+              <span class="tag" id="coachlessAuthExpires" data-i18n="coachless.auth_expiry_unknown">Expiry unknown</span>
+            </div>
+          </div>
+
+          <div class="actions coachless-auth-actions">
+            <button type="button" id="coachlessAuthLoginButton" data-i18n="coachless.auth_login">Sign in</button>
+            <button type="button" id="coachlessAuthLogoutButton" class="secondary"
+              data-i18n="coachless.auth_logout" disabled>Sign out</button>
+          </div>
+
           <div class="field">
             <label class="label" for="patch" data-i18n="settings.patch">Patch</label>
             <input id="patch" type="text" autocomplete="off" placeholder="16.7">

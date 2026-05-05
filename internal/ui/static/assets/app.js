@@ -15,6 +15,7 @@ const knownMessageKeys = {
   "Champ select is not ready.": "lcu.champ_select_unavailable",
   "Select a champion first.": "lcu.champion_not_selected",
   "Coachless login is missing.": "coachless.login_missing",
+  "Coachless authentication is unavailable.": "coachless.auth_unavailable",
   "Another sync is already running": "sync.already_running",
   "Rune page limit reached. Delete a rune page in League Client or keep an AutoBuild page available for reuse.": "sync.rune_page_limit_reached",
   "Watcher pre-start failed.": "watch.pre_start_failed",
@@ -49,6 +50,11 @@ const ids = {
   spellsSuboptions: document.getElementById("spellsSuboptions"),
   keepFlash: document.getElementById("keepFlash"),
   dryRun: document.getElementById("dryRun"),
+  coachlessAuthStatus: document.getElementById("coachlessAuthStatus"),
+  coachlessAuthPlan: document.getElementById("coachlessAuthPlan"),
+  coachlessAuthExpires: document.getElementById("coachlessAuthExpires"),
+  coachlessAuthLoginButton: document.getElementById("coachlessAuthLoginButton"),
+  coachlessAuthLogoutButton: document.getElementById("coachlessAuthLogoutButton"),
   syncButton: document.getElementById("syncButton"),
   watcherButton: document.getElementById("watcherButton"),
   autoSaveStatus: document.getElementById("autoSaveStatus"),
@@ -490,6 +496,11 @@ function setBusy(isBusy) {
   ids.main.setAttribute("aria-busy", String(isBusy));
   ids.syncButton.disabled = isBusy;
   ids.watcherButton.disabled = isBusy;
+  ids.coachlessAuthLoginButton.disabled = isBusy;
+  ids.coachlessAuthLogoutButton.disabled = isBusy;
+  if (!isBusy && currentState) {
+    renderCoachlessAuth(currentState.coachless_auth || {});
+  }
 }
 
 function renderUpdateButton() {
@@ -628,6 +639,54 @@ function formatTime(value) {
   }).format(date);
 }
 
+function coachlessAuthIsPresent(auth) {
+  return auth && auth.status && auth.status !== "missing";
+}
+
+function coachlessAuthStatusDescriptor(auth) {
+  const status = auth && auth.status ? auth.status : "missing";
+  if (status === "stored") {
+    return { key: "coachless.auth_stored", tone: "good" };
+  }
+  if (status === "expired") {
+    return { key: "coachless.auth_expired", tone: "warn" };
+  }
+  if (status === "error") {
+    return { key: "coachless.auth_error", tone: "bad" };
+  }
+  return { key: "coachless.auth_missing", tone: "bad" };
+}
+
+function coachlessAuthPlanText(plan) {
+  if (plan === "premium") {
+    return t("coachless.auth_plan_premium");
+  }
+  if (plan === "free") {
+    return t("coachless.auth_plan_free");
+  }
+  return t("coachless.auth_plan_unknown");
+}
+
+function coachlessAuthExpiresText(auth) {
+  if (auth && auth.expires_at) {
+    return t("coachless.auth_expires_at", { time: formatTime(auth.expires_at) });
+  }
+  return t("coachless.auth_expiry_unknown");
+}
+
+function renderCoachlessAuth(auth = {}) {
+  const descriptor = coachlessAuthStatusDescriptor(auth);
+  ids.coachlessAuthStatus.className = `value${descriptor.tone ? ` is-${descriptor.tone}` : ""}`;
+  ids.coachlessAuthStatus.textContent = auth.message || t(descriptor.key);
+  ids.coachlessAuthPlan.textContent = coachlessAuthPlanText(auth.plan);
+  ids.coachlessAuthExpires.textContent = coachlessAuthExpiresText(auth);
+
+  const isPresent = coachlessAuthIsPresent(auth);
+  ids.coachlessAuthLoginButton.textContent = isPresent ? t("coachless.auth_switch") : t("coachless.auth_login");
+  ids.coachlessAuthLoginButton.disabled = actionInFlight;
+  ids.coachlessAuthLogoutButton.disabled = actionInFlight || !isPresent;
+}
+
 function renderLogList() {
   ids.logList.replaceChildren(...logHistory.map(item => {
     const li = document.createElement("li");
@@ -723,6 +782,7 @@ function renderForms(state) {
 function renderState(state) {
   currentState = state;
   renderUpdate(state);
+  renderCoachlessAuth(state.coachless_auth || {});
 
   watcherRunning = state.watcher.running;
   ids.watcherButton.textContent = watcherRunning ? t("action.stop_watcher") : t("action.start_watcher");
@@ -972,6 +1032,16 @@ ids.leagueTierPresetSlider.addEventListener("input", () => {
 ids.spellsOptionsButton.addEventListener("click", () => {
   const isOpen = ids.spellsOptionsButton.getAttribute("aria-expanded") === "true";
   setSpellsSuboptionsOpen(!isOpen);
+});
+ids.coachlessAuthLoginButton.addEventListener("click", () => {
+  post("/api/coachless/auth/login", null, "coachless.auth_logging_in").catch(error => {
+    setMessage({ fallback: error.message }, true);
+  });
+});
+ids.coachlessAuthLogoutButton.addEventListener("click", () => {
+  post("/api/coachless/auth/logout", null, "coachless.auth_logging_out").catch(error => {
+    setMessage({ fallback: error.message }, true);
+  });
 });
 ids.syncButton.addEventListener("click", () => {
   postAfterSaving("/api/sync", null, "action.running_sync").catch(error => {

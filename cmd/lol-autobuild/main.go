@@ -26,7 +26,10 @@ import (
 	"github.com/controlado/lol-autobuild/internal/update"
 )
 
-const defaultConfigPath = "config.yaml"
+const (
+	defaultConfigPath = "config.yaml"
+	coachlessLoginURL = "https://coachless.gg/login-area/login"
+)
 
 type executionFlags struct {
 	ConfigPath  string
@@ -57,6 +60,7 @@ func rootCmd() *cobra.Command {
 	}
 
 	root.AddCommand(uiCmd())
+	root.AddCommand(authCmd())
 	root.AddCommand(syncCmd())
 	root.AddCommand(watchCmd())
 	return root
@@ -182,6 +186,7 @@ func runUI(ctx context.Context, configPath string) error {
 		UpdateChecker: appUpdateChecker{
 			source: update.NewGitHubChecker(update.Options{CurrentVersion: buildinfo.Version}),
 		},
+		CoachlessAuth:    appCoachlessAuthSession{session: buildCoachlessAuthSession(cfg)},
 		ConfigStore:      appConfigStore,
 		RuntimeConfig:    runtimeConfigFromConfig(cfg),
 		MessageFromError: appMessageFromErr,
@@ -333,7 +338,7 @@ func buildService(cfg config.Config) (autobuild.Service, error) {
 		coachlessClient,
 		secretStore,
 		auth.BrowserSource{
-			LoginURL:       "https://coachless.gg/login-area/login",
+			LoginURL:       coachlessLoginURL,
 			AcquireTimeout: 3 * time.Minute,
 		},
 		auth.EnvManualSource{},
@@ -355,6 +360,23 @@ func buildService(cfg config.Config) (autobuild.Service, error) {
 			TopSpells:     cfg.Recommendation.TopSpells,
 		},
 	})
+}
+
+func buildCoachlessAuthSession(cfg config.Config) *auth.CoachlessSession {
+	coachlessClient := coachless.NewClient(cfg.Coachless.APIBaseURL, time.Duration(cfg.Coachless.TimeoutSeconds)*time.Second)
+	secretStore := secrets.NewKeyringStore(cfg.Secrets.ServiceName)
+
+	return auth.NewCoachlessSession(
+		coachlessClient,
+		secretStore,
+		auth.BrowserSource{
+			LoginURL:       coachlessLoginURL,
+			AcquireTimeout: 3 * time.Minute,
+		},
+		auth.CoachlessSessionOptions{
+			TokenSkew: time.Duration(cfg.Auth.TokenSkewSeconds) * time.Second,
+		},
+	)
 }
 
 func checkLCUStatus(ctx context.Context, cfg config.Config) lcu.ConnectionStatus {
