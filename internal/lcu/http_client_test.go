@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -397,74 +398,92 @@ func TestHTTPClient(t *testing.T) {
 	t.Parallel()
 
 	custom := &http.Client{Timeout: time.Second}
-	tests := []struct {
-		name     string
-		client   *Client
-		protocol string
-		assert   func(*testing.T, *http.Client)
-	}{
-		{
-			name:     "returns configured custom client",
-			client:   &Client{HTTPClient: custom},
-			protocol: "http",
-			assert: func(t *testing.T, got *http.Client) {
-				t.Helper()
 
-				if got != custom {
-					t.Fatalf("expected same custom client pointer")
-				}
-			},
-		},
-		{
-			name:     "http creates default client without tls transport override",
-			client:   &Client{},
-			protocol: "http",
-			assert: func(t *testing.T, got *http.Client) {
-				t.Helper()
-
-				if got == nil {
-					t.Fatalf("expected non-nil client")
-				}
-				if got.Timeout != 3*time.Second {
-					t.Fatalf("expected timeout 3s, got %s", got.Timeout)
-				}
-				if got.Transport != nil {
-					t.Fatalf("expected nil transport for http protocol, got %T", got.Transport)
-				}
-			},
-		},
-		{
-			name:     "https creates default client with insecure tls transport",
-			client:   &Client{},
-			protocol: "https",
-			assert: func(t *testing.T, got *http.Client) {
-				t.Helper()
-
-				if got == nil {
-					t.Fatalf("expected non-nil client")
-				}
-				if got.Timeout != 3*time.Second {
-					t.Fatalf("expected timeout 3s, got %s", got.Timeout)
-				}
-
-				transport, ok := got.Transport.(*http.Transport)
-				if !ok {
-					t.Fatalf("expected *http.Transport, got %T", got.Transport)
-				}
-				if transport.TLSClientConfig == nil {
-					t.Fatalf("expected TLSClientConfig to be set")
-				}
-				if !transport.TLSClientConfig.InsecureSkipVerify {
-					t.Fatalf("expected InsecureSkipVerify=true for https protocol")
-				}
-			},
-		},
+	if got := (&Client{HTTPClient: custom}).httpClient("https"); got != custom {
+		t.Fatalf("expected configured custom client pointer")
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			tt.assert(t, tt.client.httpClient(tt.protocol))
-		})
+	httpClient := (&Client{}).httpClient("http")
+	if got := (&Client{}).httpClient("http"); got != httpClient {
+		t.Fatalf("expected shared default http client")
+	}
+	assertDefaultLCUHTTPClient(t, httpClient, false)
+
+	httpsClient := (&Client{}).httpClient("https")
+	if got := (&Client{}).httpClient("https"); got != httpsClient {
+		t.Fatalf("expected shared default https client")
+	}
+	if httpsClient == httpClient {
+		t.Fatalf("expected separate default clients for http and https")
+	}
+	assertDefaultLCUHTTPClient(t, httpsClient, true)
+}
+
+func TestHTTPClientConcurrentDefaultReuse(t *testing.T) {
+	t.Parallel()
+
+	const workers = 32
+	var (
+		wg      sync.WaitGroup
+		results = make(chan *http.Client, workers)
+	)
+
+	wg.Add(workers)
+	for range workers {
+		go func() {
+			defer wg.Done()
+			results <- (&Client{}).httpClient("https")
+		}()
+	}
+	wg.Wait()
+	close(results)
+
+	var first *http.Client
+	for got := range results {
+		if first == nil {
+			first = got
+			continue
+		}
+		if got != first {
+			t.Fatalf("expected concurrent calls to share the same default client")
+		}
+	}
+	assertDefaultLCUHTTPClient(t, first, true)
+}
+
+func assertDefaultLCUHTTPClient(t *testing.T, got *http.Client, wantTLS bool) {
+	t.Helper()
+
+	if got == nil {
+		t.Fatalf("expected non-nil client")
+	}
+	if got.Timeout != 3*time.Second {
+		t.Fatalf("expected timeout 3s, got %s", got.Timeout)
+	}
+	if got.Transport == nil {
+		t.Fatalf("expected default transport")
+	}
+	if got.Transport == http.DefaultTransport {
+		t.Fatalf("expected cloned default transport")
+	}
+
+	transport, ok := got.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected *http.Transport, got %T", got.Transport)
+	}
+	if !transport.DisableKeepAlives {
+		t.Fatalf("expected DisableKeepAlives=true")
+	}
+	if wantTLS {
+		if transport.TLSClientConfig == nil {
+			t.Fatalf("expected TLSClientConfig to be set")
+		}
+		if !transport.TLSClientConfig.InsecureSkipVerify {
+			t.Fatalf("expected InsecureSkipVerify=true for https protocol")
+		}
+		return
+	}
+	if transport.TLSClientConfig != nil && transport.TLSClientConfig.InsecureSkipVerify {
+		t.Fatalf("expected http protocol not to enable insecure TLS")
 	}
 }

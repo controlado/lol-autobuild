@@ -10,15 +10,21 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
+)
+
+const httpStatusBodyLimit = 256
+
+var (
+	defaultLCUHTTPClientMu sync.Mutex
+	defaultLCUHTTPClients  = map[string]*http.Client{}
 )
 
 var (
 	errHTTPNotFound = errors.New("http: not found")
 	errHTTPStatus   = errors.New("http: bad status")
 )
-
-const httpStatusBodyLimit = 256
 
 type httpStatusError struct {
 	sentinel   error
@@ -118,14 +124,39 @@ func (c *Client) httpClient(protocol string) *http.Client {
 		return c.HTTPClient
 	}
 
-	client := &http.Client{Timeout: 3 * time.Second}
-	if protocol == "https" {
-		client.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-			},
-		}
+	return defaultLCUHTTPClient(protocol)
+}
+
+func defaultLCUHTTPClient(protocol string) *http.Client {
+	protocol = strings.ToLower(strings.TrimSpace(protocol))
+
+	defaultLCUHTTPClientMu.Lock()
+	defer defaultLCUHTTPClientMu.Unlock()
+
+	if client, ok := defaultLCUHTTPClients[protocol]; ok {
+		return client
 	}
 
+	client := newDefaultLCUHTTPClient(protocol)
+	defaultLCUHTTPClients[protocol] = client
 	return client
+}
+
+func newDefaultLCUHTTPClient(protocol string) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DisableKeepAlives = true
+
+	if protocol == "https" {
+		tlsConfig := &tls.Config{}
+		if transport.TLSClientConfig != nil {
+			tlsConfig = transport.TLSClientConfig.Clone()
+		}
+		tlsConfig.InsecureSkipVerify = true
+		transport.TLSClientConfig = tlsConfig
+	}
+
+	return &http.Client{
+		Timeout:   3 * time.Second,
+		Transport: transport,
+	}
 }
