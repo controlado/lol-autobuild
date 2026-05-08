@@ -88,8 +88,24 @@ func runtimeConfigFromConfig(cfg config.Config) app.RuntimeConfig {
 func appLCUStatusFromLCU(status lcu.ConnectionStatus) app.LCUStatus {
 	return app.LCUStatus{
 		State:   appLCUConnectionStateFromLCU(status.State),
-		Message: status.Message,
+		Message: appLCUStatusMessageFromLCU(status),
 		Source:  status.Source,
+	}
+}
+
+func appLCUStatusMessageFromLCU(status lcu.ConnectionStatus) string {
+	switch {
+	case status.State == lcu.ConnectionStateOff:
+		return app.MessageCodeLCUOff
+	case status.State == lcu.ConnectionStateConnected:
+		return ""
+	case errors.Is(status.Err, lcu.ErrLCUNotReachable),
+		errors.Is(status.Err, context.DeadlineExceeded):
+		return app.MessageCodeLCUNotReachable
+	case errors.Is(status.Err, lcu.ErrLockfileNotFound):
+		return app.MessageCodeLCULockfileNotFound
+	default:
+		return app.MessageCodeLCUNotConnected
 	}
 }
 
@@ -196,6 +212,8 @@ func appMessageFromErr(err error) app.UserMessage {
 		return app.UserMessage{Code: app.MessageCodeLCUOff, Text: "LCU is off."}
 	case errors.Is(err, lcu.ErrLockfileNotFound):
 		return app.UserMessage{Code: app.MessageCodeLCULockfileNotFound, Text: "League Client is not open."}
+	case errors.Is(err, lcu.ErrLCUNotReachable):
+		return app.UserMessage{Code: app.MessageCodeLCUNotReachable, Text: "League Client is not reachable."}
 	case errors.Is(err, lcu.ErrChampSelectUnavailable):
 		return app.UserMessage{Code: app.MessageCodeLCUChampSelectUnavailable, Text: "Champ select is not ready."}
 	case errors.Is(err, lcu.ErrChampionNotSelected):

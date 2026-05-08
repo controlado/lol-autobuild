@@ -117,8 +117,8 @@ func TestAppLCUStatusFromLCU(t *testing.T) {
 	}{
 		{
 			name: "off",
-			in:   lcu.ConnectionStatus{State: lcu.ConnectionStateOff, Message: "LCU is off"},
-			want: app.LCUStatus{State: app.LCUConnectionStateOff, Message: "LCU is off"},
+			in:   lcu.ConnectionStatus{State: lcu.ConnectionStateOff},
+			want: app.LCUStatus{State: app.LCUConnectionStateOff, Message: app.MessageCodeLCUOff},
 		},
 		{
 			name: "connected",
@@ -127,8 +127,23 @@ func TestAppLCUStatusFromLCU(t *testing.T) {
 		},
 		{
 			name: "not connected",
-			in:   lcu.ConnectionStatus{State: lcu.ConnectionStateNotConnected, Message: "missing"},
-			want: app.LCUStatus{State: app.LCUConnectionStateNotConnected, Message: "missing"},
+			in:   lcu.ConnectionStatus{State: lcu.ConnectionStateNotConnected},
+			want: app.LCUStatus{State: app.LCUConnectionStateNotConnected, Message: app.MessageCodeLCUNotConnected},
+		},
+		{
+			name: "lockfile not found",
+			in:   lcu.ConnectionStatus{State: lcu.ConnectionStateNotConnected, Err: lcu.ErrLockfileNotFound},
+			want: app.LCUStatus{State: app.LCUConnectionStateNotConnected, Message: app.MessageCodeLCULockfileNotFound},
+		},
+		{
+			name: "not reachable",
+			in:   lcu.ConnectionStatus{State: lcu.ConnectionStateNotConnected, Err: fmt.Errorf("probe: %w", lcu.ErrLCUNotReachable)},
+			want: app.LCUStatus{State: app.LCUConnectionStateNotConnected, Message: app.MessageCodeLCUNotReachable},
+		},
+		{
+			name: "deadline exceeded",
+			in:   lcu.ConnectionStatus{State: lcu.ConnectionStateNotConnected, Err: context.DeadlineExceeded},
+			want: app.LCUStatus{State: app.LCUConnectionStateNotConnected, Message: app.MessageCodeLCUNotReachable},
 		},
 	}
 
@@ -258,6 +273,11 @@ func TestAppMessageFromErr(t *testing.T) {
 			name: "lockfile missing",
 			err:  fmt.Errorf("sync: %w", lcu.ErrLockfileNotFound),
 			want: app.UserMessage{Code: app.MessageCodeLCULockfileNotFound, Text: "League Client is not open."},
+		},
+		{
+			name: "lcu not reachable",
+			err:  fmt.Errorf("sync: %w", lcu.ErrLCUNotReachable),
+			want: app.UserMessage{Code: app.MessageCodeLCUNotReachable, Text: "League Client is not reachable."},
 		},
 		{
 			name: "champ select unavailable",

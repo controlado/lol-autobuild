@@ -114,6 +114,7 @@
   "lcu.not_connected": "Não conectado",
   "lcu.off": "LCU desligado.",
   "lcu.lockfile_not_found": "Abra o League Client.",
+  "lcu.not_reachable": "League Client inacessível.",
   "lcu.champ_select_unavailable": "A seleção de campeões não está pronta.",
   "lcu.champion_not_selected": "Selecione um campeão primeiro.",
   "coachless.login_missing": "Login do Coachless ausente.",

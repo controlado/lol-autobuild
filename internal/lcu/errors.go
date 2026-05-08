@@ -7,6 +7,7 @@ import (
 var (
 	ErrNotConfigured                     = errors.New("lcu client is not configured")
 	ErrLockfileNotFound                  = errors.New("lcu lockfile not found")
+	ErrLCUNotReachable                   = errors.New("lcu is not reachable")
 	ErrInvalidLockfile                   = errors.New("invalid lcu lockfile")
 	ErrChampSelectUnavailable            = errors.New("champ select session is unavailable")
 	ErrChampionNotSelected               = errors.New("local champion is not selected")

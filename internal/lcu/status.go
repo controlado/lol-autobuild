@@ -16,17 +16,14 @@ const (
 )
 
 type ConnectionStatus struct {
-	State   ConnectionState `json:"state"`
-	Message string          `json:"message,omitempty"`
-	Source  string          `json:"source,omitempty"`
+	State  ConnectionState `json:"state"`
+	Source string          `json:"source,omitempty"`
+	Err    error           `json:"-"`
 }
 
 func (c *Client) ConnectionStatus(ctx context.Context) ConnectionStatus {
 	if !c.Enabled {
-		return ConnectionStatus{
-			State:   ConnectionStateOff,
-			Message: "LCU is off",
-		}
+		return ConnectionStatus{State: ConnectionStateOff}
 	}
 
 	var (
@@ -34,7 +31,7 @@ func (c *Client) ConnectionStatus(ctx context.Context) ConnectionStatus {
 		attempt          = newConnectionAttempt()
 		candidateHandler = func(info connectionInfo, candidateLabel string) (shouldTerminate bool) {
 			if err := c.probeConnection(ctx, info); err != nil {
-				attempt.observe(candidateLabel, nil, err)
+				attempt.observe(candidateLabel, ErrLCUNotReachable, err)
 				return false
 			}
 
@@ -47,18 +44,13 @@ func (c *Client) ConnectionStatus(ctx context.Context) ConnectionStatus {
 	)
 
 	if success, err := c.forEachCandidate(ctx, attempt, candidateHandler); err != nil {
-		return ConnectionStatus{
-			State:   ConnectionStateNotConnected,
-			Message: err.Error(),
-		}
+		return ConnectionStatus{State: ConnectionStateNotConnected, Err: err}
 	} else if success {
 		return status
 	}
 
-	return ConnectionStatus{
-		State:   ConnectionStateNotConnected,
-		Message: attempt.finish(ErrLockfileNotFound).Error(),
-	}
+	err := attempt.finish(ErrLockfileNotFound, ErrLCUNotReachable)
+	return ConnectionStatus{State: ConnectionStateNotConnected, Err: err}
 }
 
 func (c *Client) probeConnection(ctx context.Context, info connectionInfo) error {

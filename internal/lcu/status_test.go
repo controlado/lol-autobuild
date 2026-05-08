@@ -2,6 +2,7 @@ package lcu
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -109,5 +110,33 @@ func TestConnectionStatusProbeFailure(t *testing.T) {
 	status := client.ConnectionStatus(context.Background())
 	if status.State != ConnectionStateNotConnected {
 		t.Fatalf("expected not connected status, got %#v", status)
+	}
+}
+
+func TestConnectionStatusProbeRefusedIsNotLockfileMissing(t *testing.T) {
+	t.Parallel()
+
+	client := &Client{
+		Enabled: true,
+		discoverProcessConnections: func(context.Context) []connectionCandidate {
+			return []connectionCandidate{
+				staticCandidate("process:1234", connectionInfo{
+					Port:     mustClosedTCPPort(t),
+					Password: "secret",
+					Protocol: "http",
+				}),
+			}
+		},
+	}
+
+	status := client.ConnectionStatus(context.Background())
+	if status.State != ConnectionStateNotConnected {
+		t.Fatalf("expected not connected status, got %#v", status)
+	}
+	if !errors.Is(status.Err, ErrLCUNotReachable) {
+		t.Fatalf("status error = %v, want %v", status.Err, ErrLCUNotReachable)
+	}
+	if errors.Is(status.Err, ErrLockfileNotFound) {
+		t.Fatalf("status error = %v, should not wrap lockfile missing", status.Err)
 	}
 }

@@ -2,7 +2,9 @@ package app
 
 const (
 	MessageCodeLCUOff                    = "lcu.off"
+	MessageCodeLCUNotConnected           = "lcu.not_connected"
 	MessageCodeLCULockfileNotFound       = "lcu.lockfile_not_found"
+	MessageCodeLCUNotReachable           = "lcu.not_reachable"
 	MessageCodeLCUChampSelectUnavailable = "lcu.champ_select_unavailable"
 	MessageCodeLCUChampionNotSelected    = "lcu.champion_not_selected"
 	MessageCodeCoachlessLoginMissing     = "coachless.login_missing"
