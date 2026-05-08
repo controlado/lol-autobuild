@@ -8,23 +8,6 @@ const localeFiles = {
 };
 const translations = Object.create(null);
 const translationLoads = Object.create(null);
-const knownMessageKeys = {
-  "LCU is off.": "lcu.off",
-  "LCU is off": "lcu.off",
-  "League Client is not open.": "lcu.lockfile_not_found",
-  "Champ select is not ready.": "lcu.champ_select_unavailable",
-  "Select a champion first.": "lcu.champion_not_selected",
-  "Coachless login is missing.": "coachless.login_missing",
-  "Coachless authentication is unavailable.": "coachless.auth_unavailable",
-  "Another sync is already running": "sync.already_running",
-  "Rune page limit reached. Delete a rune page in League Client or keep an AutoBuild page available for reuse.": "sync.rune_page_limit_reached",
-  "Watcher pre-start failed.": "watch.pre_start_failed",
-  "Watcher start failed.": "watch.start_failed",
-  "Invalid UI token.": "ui.invalid_token",
-  "Settings are invalid.": "ui.invalid_settings",
-  "Method is not allowed.": "ui.method_not_allowed",
-  "UI file is missing.": "ui.file_missing"
-};
 let currentLocale = resolveInitialLocale();
 const ids = {
   main: document.querySelector("main"),
@@ -217,17 +200,31 @@ function textForDescriptor(descriptor) {
     if (hasTranslation(descriptor)) {
       return t(descriptor);
     }
-    const key = knownMessageKeys[descriptor] || "";
-    return key ? t(key) : descriptor;
+    return descriptor;
   }
 
   const fallback = descriptor.fallback || "";
-  const key = descriptor.key || knownMessageKeys[fallback] || "";
+  const key = descriptor.key || "";
   if (hasTranslation(key)) {
     return t(key, {}, fallback);
   }
 
   return fallback;
+}
+
+function descriptorFromWarning(warning) {
+  if (!warning) {
+    return { fallback: "" };
+  }
+  return {
+    key: warning.key || "",
+    fallback: warning.fallback || ""
+  };
+}
+
+function warningLogKey(warning) {
+  const descriptor = descriptorFromWarning(warning);
+  return `${descriptor.key}:${descriptor.fallback}`;
 }
 
 function applyStaticTranslations() {
@@ -745,8 +742,8 @@ function renderLog(state = {}, sync) {
 
   if (sync && sync.Warnings && sync.Warnings.length > 0) {
     wrote = ensureStateLog(
-      sync.Warnings.map(warning => ({ fallback: warning, tone: "warn" })),
-      `warnings:${state.last_sync_at || ""}:${sync.Warnings.join("|")}`
+      sync.Warnings.map(warning => ({ ...descriptorFromWarning(warning), tone: "warn" })),
+      `warnings:${state.last_sync_at || ""}:${sync.Warnings.map(warningLogKey).join("|")}`
     ) || wrote;
   }
 

@@ -215,7 +215,7 @@ func TestSyncTranslatesRunePageLimitWarning(t *testing.T) {
 
 	foundLimitWarning := false
 	for _, warning := range got.Warnings {
-		if warning == runePageLimitReachedWarning {
+		if warning == RunePageLimitReachedWarning {
 			foundLimitWarning = true
 		}
 		if strings.Contains(warning, "RPC_ERROR") || strings.Contains(warning, "Max pages reached") {

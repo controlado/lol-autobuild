@@ -31,7 +31,9 @@ func TestViewStateJSONContract(t *testing.T) {
 		LastSync: &SyncSummary{
 			DetectedChampionID:   22,
 			DetectedChampionName: "Ashe",
-			Warnings:             []string{"warning"},
+			Warnings: []MessageDescriptor{
+				{Key: "warning.key", Fallback: "warning"},
+			},
 		},
 	}
 
@@ -78,8 +80,12 @@ func TestViewStateJSONContract(t *testing.T) {
 		t.Fatalf("last_sync.DetectedChampionName = %v, want Ashe", lastSync["DetectedChampionName"])
 	}
 	warnings, ok := lastSync["Warnings"].([]any)
-	if !ok || len(warnings) != 1 || warnings[0] != "warning" {
+	if !ok || len(warnings) != 1 {
 		t.Fatalf("last_sync.Warnings = %#v", lastSync["Warnings"])
+	}
+	warning, ok := warnings[0].(map[string]any)
+	if !ok || warning["key"] != "warning.key" || warning["fallback"] != "warning" {
+		t.Fatalf("last_sync.Warnings[0] = %#v", warnings[0])
 	}
 }
 

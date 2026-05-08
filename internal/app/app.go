@@ -495,7 +495,7 @@ func cloneSyncSummary(res *SyncSummary) *SyncSummary {
 	}
 
 	out := *res
-	out.Warnings = append([]string{}, res.Warnings...)
+	out.Warnings = append([]MessageDescriptor{}, res.Warnings...)
 	return &out
 }
 
@@ -508,7 +508,28 @@ func syncSummaryFromResult(res autobuild.SyncResult) *SyncSummary {
 		ItemSetApplied:       res.ItemSetApplied,
 		RunePageApplied:      res.RunePageApplied,
 		SpellsApplied:        res.SpellsApplied,
-		Warnings:             append([]string{}, res.Warnings...),
+		Warnings:             syncWarningDescriptorsFromText(res.Warnings),
+	}
+}
+
+func syncWarningDescriptorsFromText(warnings []string) []MessageDescriptor {
+	if len(warnings) == 0 {
+		return []MessageDescriptor{}
+	}
+
+	out := make([]MessageDescriptor, 0, len(warnings))
+	for _, warning := range warnings {
+		out = append(out, syncWarningDescriptorFromText(warning))
+	}
+	return out
+}
+
+func syncWarningDescriptorFromText(warning string) MessageDescriptor {
+	switch warning {
+	case autobuild.RunePageLimitReachedWarning:
+		return MessageDescriptor{Key: MessageCodeSyncRunePageLimitReached, Fallback: warning}
+	default:
+		return MessageDescriptor{Fallback: warning}
 	}
 }
 

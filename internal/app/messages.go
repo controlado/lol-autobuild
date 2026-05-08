@@ -10,6 +10,7 @@ const (
 	MessageCodeCoachlessLoginMissing     = "coachless.login_missing"
 	MessageCodeCoachlessAuthUnavailable  = "coachless.auth_unavailable"
 	MessageCodeSyncAlreadyRunning        = "sync.already_running"
+	MessageCodeSyncRunePageLimitReached  = "sync.rune_page_limit_reached"
 	MessageCodeWatcherPreStartFailed     = "watch.pre_start_failed"
 	MessageCodeWatcherStartFailed        = "watch.start_failed"
 )

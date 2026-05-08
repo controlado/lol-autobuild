@@ -345,8 +345,8 @@ func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 		t.Fatalf("state.LastSyncAt = %v, want %v", state.LastSyncAt, lastSyncAt)
 	}
 
-	state.LastSync.Warnings[0] = "mutated"
-	state.LastSync.Warnings = append(state.LastSync.Warnings, "extra")
+	state.LastSync.Warnings[0].Fallback = "mutated"
+	state.LastSync.Warnings = append(state.LastSync.Warnings, MessageDescriptor{Fallback: "extra"})
 	*state.LastSyncAt = state.LastSyncAt.Add(5 * time.Minute)
 	*state.Update.CheckedAt = state.Update.CheckedAt.Add(5 * time.Minute)
 
@@ -404,6 +404,23 @@ func TestStateBoundsLCUStatusRefresh(t *testing.T) {
 	}
 	if state.LCU.Message != context.DeadlineExceeded.Error() {
 		t.Fatalf("LCU message = %q, want deadline exceeded", state.LCU.Message)
+	}
+}
+
+func TestSyncSummaryMapsKnownWarningsToMessageDescriptors(t *testing.T) {
+	summary := syncSummaryFromResult(autobuild.SyncResult{
+		Warnings: []string{
+			autobuild.RunePageLimitReachedWarning,
+			"low sample",
+		},
+	})
+
+	wantWarnings := []MessageDescriptor{
+		{Key: MessageCodeSyncRunePageLimitReached, Fallback: autobuild.RunePageLimitReachedWarning},
+		{Fallback: "low sample"},
+	}
+	if !reflect.DeepEqual(summary.Warnings, wantWarnings) {
+		t.Fatalf("warnings = %+v, want %+v", summary.Warnings, wantWarnings)
 	}
 }
 
