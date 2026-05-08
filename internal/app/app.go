@@ -69,11 +69,10 @@ type App struct {
 	watcherConfigSet bool
 	updateState      UpdateState
 
-	lastErrorMessage string
-	lastErrorCode    string
-	lastWatchNotice  *WatcherNoticeState
-	lastSync         *SyncSummary
-	lastSyncAt       time.Time
+	lastError       *MessageDescriptor
+	lastWatchNotice *WatcherNoticeState
+	lastSync        *SyncSummary
+	lastSyncAt      time.Time
 }
 
 func New(opts Options) (*App, error) {
@@ -115,11 +114,10 @@ func (a *App) State(ctx context.Context) ViewState {
 				ConfigStale: a.watcherConfigStaleLocked(configSnapshot),
 				LastNotice:  cloneWatcherNotice(a.lastWatchNotice),
 			},
-			Update:        cloneUpdateState(a.updateState),
-			SyncRunning:   a.syncRunning,
-			LastSync:      cloneSyncSummary(a.lastSync),
-			LastError:     a.lastErrorMessage,
-			LastErrorCode: a.lastErrorCode,
+			Update:      cloneUpdateState(a.updateState),
+			SyncRunning: a.syncRunning,
+			LastSync:    cloneSyncSummary(a.lastSync),
+			LastError:   cloneMessageDescriptor(a.lastError),
 		}
 	)
 
@@ -134,10 +132,16 @@ func (a *App) State(ctx context.Context) ViewState {
 		state.CoachlessAuth = cloneCoachlessAuthState(a.coachlessAuth.Status(ctx))
 	}
 	statusCtx, cancel := context.WithTimeout(ctx, lcuStateRefreshTimeout)
-	state.LCU = a.lcuStatus(statusCtx, configSnapshot)
+	state.LCU = cloneLCUStatus(a.lcuStatus(statusCtx, configSnapshot))
 	cancel()
 
 	return state
+}
+
+func cloneLCUStatus(status LCUStatus) LCUStatus {
+	out := status
+	out.Message = cloneMessageDescriptor(status.Message)
+	return out
 }
 
 func cloneCoachlessAuthState(state CoachlessAuthState) CoachlessAuthState {
@@ -146,6 +150,7 @@ func cloneCoachlessAuthState(state CoachlessAuthState) CoachlessAuthState {
 		expiresAt := *state.ExpiresAt
 		out.ExpiresAt = &expiresAt
 	}
+	out.Message = cloneMessageDescriptor(state.Message)
 	return out
 }
 
@@ -162,7 +167,7 @@ func (a *App) SaveSettings(ctx context.Context, settings Settings) (ViewState, U
 
 	a.mu.Lock()
 	a.cfg = cfg
-	a.setLastErrorMessage(UserMessage{})
+	a.setLastErrorLocked(UserMessage{})
 	a.mu.Unlock()
 
 	return a.State(ctx), UserMessage{}
@@ -184,17 +189,17 @@ func (a *App) runCoachlessAuthAction(ctx context.Context, action func() error) (
 
 	if a.coachlessAuth == nil {
 		msg = coachlessAuthUnavailableMessage()
-		a.setLastErrorMessageSafe(msg)
+		a.setLastError(msg)
 		return ViewState{}, msg
 	}
 
 	if err := action(); err != nil {
 		msg = a.messageFromErr(err)
-		a.setLastErrorMessageSafe(msg)
+		a.setLastError(msg)
 		return ViewState{}, msg
 	}
 
-	a.setLastErrorMessageSafe(msg)
+	a.setLastError(msg)
 	return a.State(ctx), msg
 }
 
@@ -208,15 +213,14 @@ func (a *App) configSnapshot() RuntimeConfig {
 	return a.cfg
 }
 
-func (a *App) setLastErrorMessageSafe(msg UserMessage) {
+func (a *App) setLastError(msg UserMessage) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.setLastErrorMessage(msg)
+	a.setLastErrorLocked(msg)
 }
 
-func (a *App) setLastErrorMessage(msg UserMessage) {
-	a.lastErrorMessage = msg.Text
-	a.lastErrorCode = msg.Code
+func (a *App) setLastErrorLocked(msg UserMessage) {
+	a.lastError = msg.Descriptor()
 }
 
 func normalizeConfig(cfg RuntimeConfig) RuntimeConfig {
@@ -302,7 +306,7 @@ func (a *App) runWatcher(ctx context.Context, watcherID int, svc autobuild.Servi
 	a.watcherConfigSet = false
 
 	if err != nil && ctx.Err() == nil {
-		a.setLastErrorMessage(a.messageFromErr(err))
+		a.setLastErrorLocked(a.messageFromErr(err))
 	}
 }
 
@@ -316,7 +320,7 @@ func (a *App) reserveWatcherStart() (cfg RuntimeConfig, watcherID int, ok bool) 
 
 	a.watcherID++
 	a.watcherStarting = true
-	a.setLastErrorMessage(UserMessage{})
+	a.setLastErrorLocked(UserMessage{})
 
 	return a.cfg, a.watcherID, true
 }
@@ -347,7 +351,7 @@ func (a *App) observeWatchCycle(watchID int, c autobuild.WatchCycle) {
 	}
 
 	if c.Err != nil {
-		a.setLastErrorMessage(a.messageFromErr(c.Err))
+		a.setLastErrorLocked(a.messageFromErr(c.Err))
 		return
 	}
 
@@ -356,7 +360,7 @@ func (a *App) observeWatchCycle(watchID int, c autobuild.WatchCycle) {
 		a.lastSyncAt = time.Now().UTC()
 	}
 
-	a.setLastErrorMessage(UserMessage{})
+	a.setLastErrorLocked(UserMessage{})
 }
 
 func (a *App) observeWatchNotice(watchID int, notice autobuild.WatchNotice) {
@@ -374,7 +378,7 @@ func (a *App) observeWatchNotice(watchID int, notice autobuild.WatchNotice) {
 func watcherNoticeStateFromNotice(notice autobuild.WatchNotice, at time.Time) WatcherNoticeState {
 	state := WatcherNoticeState{
 		Kind:         string(notice.Kind),
-		Message:      notice.Message,
+		Message:      NewMessageDescriptor("", notice.Message),
 		Source:       notice.Source,
 		URI:          notice.URI,
 		Phase:        notice.Phase,
@@ -382,7 +386,7 @@ func watcherNoticeStateFromNotice(notice autobuild.WatchNotice, at time.Time) Wa
 		At:           at,
 	}
 	if notice.Err != nil {
-		state.Error = notice.Err.Error()
+		state.Error = NewMessageDescriptor("", notice.Err.Error())
 	}
 	return state
 }
@@ -392,6 +396,16 @@ func cloneWatcherNotice(notice *WatcherNoticeState) *WatcherNoticeState {
 		return nil
 	}
 	out := *notice
+	out.Message = cloneMessageDescriptor(notice.Message)
+	out.Error = cloneMessageDescriptor(notice.Error)
+	return &out
+}
+
+func cloneMessageDescriptor(descriptor *MessageDescriptor) *MessageDescriptor {
+	if descriptor == nil {
+		return nil
+	}
+	out := *descriptor
 	return &out
 }
 
@@ -431,7 +445,7 @@ func (a *App) releaseWatcher(watcherID int, err error) {
 	a.watcherConfigSet = false
 
 	if err != nil {
-		a.setLastErrorMessage(a.messageFromErr(err))
+		a.setLastErrorLocked(a.messageFromErr(err))
 	}
 }
 
@@ -465,7 +479,7 @@ func (a *App) beginSync() (configSnapshot RuntimeConfig, alreadySyncing bool) {
 	}
 
 	a.syncRunning = true
-	a.setLastErrorMessage(UserMessage{})
+	a.setLastErrorLocked(UserMessage{})
 	return a.cfg, false
 }
 
@@ -476,7 +490,7 @@ func (a *App) finishSync(res *autobuild.SyncResult, err error) {
 	a.syncRunning = false
 
 	if err != nil {
-		a.setLastErrorMessage(a.messageFromErr(err))
+		a.setLastErrorLocked(a.messageFromErr(err))
 		return
 	}
 
@@ -486,7 +500,7 @@ func (a *App) finishSync(res *autobuild.SyncResult, err error) {
 		a.lastSync = syncSummaryFromResult(*res)
 	}
 	a.lastSyncAt = time.Now().UTC()
-	a.setLastErrorMessage(UserMessage{})
+	a.setLastErrorLocked(UserMessage{})
 }
 
 func cloneSyncSummary(res *SyncSummary) *SyncSummary {
@@ -614,19 +628,19 @@ func (a *App) finishUpdateCheck(result UpdateCheckResult, err error) {
 	case err == nil && result.Available:
 		newState.Status = UpdateStatusAvailable
 		if newState.LatestVersion != "" {
-			newState.Message = fmt.Sprintf("Download %s.", newState.LatestVersion)
+			newState.Message = NewMessageDescriptor("", fmt.Sprintf("Download %s.", newState.LatestVersion))
 		} else {
-			newState.Message = "Download the new version."
+			newState.Message = NewMessageDescriptor("", "Download the new version.")
 		}
 	case err == nil:
 		newState.Status = UpdateStatusCurrent
-		newState.Message = "You have the latest version."
+		newState.Message = NewMessageDescriptor("", "You have the latest version.")
 	case errors.Is(err, ErrUpdateUnavailable):
 		newState.Status = UpdateStatusUnavailable
-		newState.Message = "This build cannot check updates."
+		newState.Message = NewMessageDescriptor("", "This build cannot check updates.")
 	default:
 		newState.Status = UpdateStatusError
-		newState.Message = err.Error()
+		newState.Message = NewMessageDescriptor("", err.Error())
 	}
 
 	a.mu.Lock()
@@ -640,5 +654,6 @@ func cloneUpdateState(state UpdateState) UpdateState {
 		checkedAt := *state.CheckedAt
 		out.CheckedAt = &checkedAt
 	}
+	out.Message = cloneMessageDescriptor(state.Message)
 	return out
 }

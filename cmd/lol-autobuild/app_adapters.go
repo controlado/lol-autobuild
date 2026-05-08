@@ -93,20 +93,21 @@ func appLCUStatusFromLCU(status lcu.ConnectionStatus) app.LCUStatus {
 	}
 }
 
-func appLCUStatusMessageFromLCU(status lcu.ConnectionStatus) string {
+func appLCUStatusMessageFromLCU(status lcu.ConnectionStatus) *app.MessageDescriptor {
+	var code = ""
 	switch {
 	case status.State == lcu.ConnectionStateOff:
-		return app.MessageCodeLCUOff
-	case status.State == lcu.ConnectionStateConnected:
-		return ""
+		code = app.MessageCodeLCUOff
 	case errors.Is(status.Err, lcu.ErrLCUNotReachable),
 		errors.Is(status.Err, context.DeadlineExceeded):
-		return app.MessageCodeLCUNotReachable
+		code = app.MessageCodeLCUNotReachable
 	case errors.Is(status.Err, lcu.ErrLockfileNotFound):
-		return app.MessageCodeLCULockfileNotFound
+		code = app.MessageCodeLCULockfileNotFound
+	case status.State == lcu.ConnectionStateConnected:
 	default:
-		return app.MessageCodeLCUNotConnected
+		code = app.MessageCodeLCUNotConnected
 	}
+	return app.NewMessageDescriptor(code, "")
 }
 
 func appLCUConnectionStateFromLCU(state lcu.ConnectionState) app.LCUConnectionState {
@@ -176,7 +177,7 @@ func appCoachlessAuthStateFromAuth(status auth.CoachlessSessionState) app.Coachl
 		Status:    appCoachlessAuthStatusFromAuth(status.Status),
 		Plan:      appCoachlessAuthPlanFromAuth(status.Plan),
 		ExpiresAt: status.ExpiresAt,
-		Message:   status.Message,
+		Message:   app.NewMessageDescriptor("", status.Message),
 	}
 }
 

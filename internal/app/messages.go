@@ -20,8 +20,20 @@ type UserMessage struct {
 	Text string
 }
 
+func NewMessageDescriptor(key, fallback string) *MessageDescriptor {
+	if key == "" && fallback == "" {
+		return nil
+	}
+
+	return &MessageDescriptor{Key: key, Fallback: fallback}
+}
+
 func (m UserMessage) Empty() bool {
 	return m.Code == "" && m.Text == ""
+}
+
+func (m UserMessage) Descriptor() *MessageDescriptor {
+	return NewMessageDescriptor(m.Code, m.Text)
 }
 
 func userMessageFromErr(err error) UserMessage {

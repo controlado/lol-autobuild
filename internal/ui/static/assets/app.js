@@ -196,13 +196,6 @@ function textForDescriptor(descriptor) {
     return "";
   }
 
-  if (typeof descriptor === "string") {
-    if (hasTranslation(descriptor)) {
-      return t(descriptor);
-    }
-    return descriptor;
-  }
-
   const fallback = descriptor.fallback || "";
   const key = descriptor.key || "";
   if (hasTranslation(key)) {
@@ -212,19 +205,11 @@ function textForDescriptor(descriptor) {
   return fallback;
 }
 
-function descriptorFromWarning(warning) {
-  if (!warning) {
-    return { fallback: "" };
+function descriptorLogKey(descriptor) {
+  if (!descriptor) {
+    return "";
   }
-  return {
-    key: warning.key || "",
-    fallback: warning.fallback || ""
-  };
-}
-
-function warningLogKey(warning) {
-  const descriptor = descriptorFromWarning(warning);
-  return `${descriptor.key}:${descriptor.fallback}`;
+  return `${descriptor.key || ""}:${descriptor.fallback || ""}`;
 }
 
 function applyStaticTranslations() {
@@ -675,7 +660,7 @@ function coachlessAuthExpiresText(auth) {
 function renderCoachlessAuth(auth = {}) {
   const descriptor = coachlessAuthStatusDescriptor(auth);
   ids.coachlessAuthStatus.className = `value${descriptor.tone ? ` is-${descriptor.tone}` : ""}`;
-  ids.coachlessAuthStatus.textContent = auth.message || t(descriptor.key);
+  ids.coachlessAuthStatus.textContent = textForDescriptor(auth.message) || t(descriptor.key);
   ids.coachlessAuthPlan.textContent = coachlessAuthPlanText(auth.plan);
   ids.coachlessAuthExpires.textContent = coachlessAuthExpiresText(auth);
 
@@ -727,23 +712,26 @@ function ensureStateLog(items, logKey) {
 
 function renderLog(state = {}, sync) {
   if (state.last_error) {
-    appendLog([{ key: state.last_error_code, fallback: state.last_error, tone: "error" }], `error:${state.last_error_code || state.last_error}`);
+    appendLog([{ ...state.last_error, tone: "error" }], `error:${descriptorLogKey(state.last_error)}`);
     return;
   }
 
   let wrote = false;
   const notice = state.watcher && state.watcher.last_notice;
   if (notice && notice.kind) {
-    const fallback = notice.error || notice.message || notice.kind;
-    const tone = notice.error || notice.kind === "reconnecting" ? "warn" : "";
-    const noticeKey = `watch_notice:${notice.at || ""}:${notice.kind}:${notice.error || notice.message || ""}`;
-    wrote = ensureStateLog([{ key: `watch.notice.${notice.kind}`, fallback, tone }], noticeKey) || wrote;
+    const errorDescriptor = notice.error;
+    const messageDescriptor = notice.message;
+    if (messageDescriptor) {
+      const tone = errorDescriptor || notice.kind === "reconnecting" ? "warn" : "";
+      const noticeKey = `watch_notice:${notice.at || ""}:${notice.kind}:${descriptorLogKey(messageDescriptor)}:${descriptorLogKey(errorDescriptor)}`;
+      wrote = ensureStateLog([{ ...messageDescriptor, tone }], noticeKey) || wrote;
+    }
   }
 
   if (sync && sync.Warnings && sync.Warnings.length > 0) {
     wrote = ensureStateLog(
-      sync.Warnings.map(warning => ({ ...descriptorFromWarning(warning), tone: "warn" })),
-      `warnings:${state.last_sync_at || ""}:${sync.Warnings.map(warningLogKey).join("|")}`
+      sync.Warnings.map(warning => ({ ...(warning || {}), tone: "warn" })),
+      `warnings:${state.last_sync_at || ""}:${sync.Warnings.map(descriptorLogKey).join("|")}`
     ) || wrote;
   }
 
@@ -795,7 +783,7 @@ function renderState(state = {}) {
   } else if (lcu.state === "off") {
     setValue(ids.lcuStatus, t("lcu.disabled"), "warn");
   } else {
-    setValue(ids.lcuStatus, textForDescriptor(lcu.message || "lcu.not_connected"), "bad");
+    setValue(ids.lcuStatus, textForDescriptor(lcu.message || { key: "lcu.not_connected" }), "bad");
   }
 
   const sync = state.last_sync;
@@ -808,7 +796,7 @@ function renderState(state = {}) {
   setCell(ids.spellsValue, sync ? appliedText(sync.SpellsApplied) : t("state.not_applied"), sync && sync.SpellsApplied ? "good" : "");
 
   if (state.last_error) {
-    setMessage({ key: state.last_error_code, fallback: state.last_error }, true);
+    setMessage(state.last_error, true);
   } else if (sync && sync.Warnings && sync.Warnings.length > 0) {
     setMessage({ key: "message.sync_with_warnings" });
   } else if (sync) {

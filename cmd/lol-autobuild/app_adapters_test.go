@@ -111,39 +111,47 @@ func TestAppLCUStatusFromLCU(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
-		in   lcu.ConnectionStatus
-		want app.LCUStatus
+		name           string
+		in             lcu.ConnectionStatus
+		wantState      app.LCUConnectionState
+		wantSource     string
+		wantMessageKey string
 	}{
 		{
-			name: "off",
-			in:   lcu.ConnectionStatus{State: lcu.ConnectionStateOff},
-			want: app.LCUStatus{State: app.LCUConnectionStateOff, Message: app.MessageCodeLCUOff},
+			name:           "off",
+			in:             lcu.ConnectionStatus{State: lcu.ConnectionStateOff},
+			wantState:      app.LCUConnectionStateOff,
+			wantMessageKey: app.MessageCodeLCUOff,
 		},
 		{
-			name: "connected",
-			in:   lcu.ConnectionStatus{State: lcu.ConnectionStateConnected, Source: "lockfile"},
-			want: app.LCUStatus{State: app.LCUConnectionStateConnected, Source: "lockfile"},
+			name:       "connected",
+			in:         lcu.ConnectionStatus{State: lcu.ConnectionStateConnected, Source: "lockfile"},
+			wantState:  app.LCUConnectionStateConnected,
+			wantSource: "lockfile",
 		},
 		{
-			name: "not connected",
-			in:   lcu.ConnectionStatus{State: lcu.ConnectionStateNotConnected},
-			want: app.LCUStatus{State: app.LCUConnectionStateNotConnected, Message: app.MessageCodeLCUNotConnected},
+			name:           "not connected",
+			in:             lcu.ConnectionStatus{State: lcu.ConnectionStateNotConnected},
+			wantState:      app.LCUConnectionStateNotConnected,
+			wantMessageKey: app.MessageCodeLCUNotConnected,
 		},
 		{
-			name: "lockfile not found",
-			in:   lcu.ConnectionStatus{State: lcu.ConnectionStateNotConnected, Err: lcu.ErrLockfileNotFound},
-			want: app.LCUStatus{State: app.LCUConnectionStateNotConnected, Message: app.MessageCodeLCULockfileNotFound},
+			name:           "lockfile not found",
+			in:             lcu.ConnectionStatus{State: lcu.ConnectionStateNotConnected, Err: lcu.ErrLockfileNotFound},
+			wantState:      app.LCUConnectionStateNotConnected,
+			wantMessageKey: app.MessageCodeLCULockfileNotFound,
 		},
 		{
-			name: "not reachable",
-			in:   lcu.ConnectionStatus{State: lcu.ConnectionStateNotConnected, Err: fmt.Errorf("probe: %w", lcu.ErrLCUNotReachable)},
-			want: app.LCUStatus{State: app.LCUConnectionStateNotConnected, Message: app.MessageCodeLCUNotReachable},
+			name:           "not reachable",
+			in:             lcu.ConnectionStatus{State: lcu.ConnectionStateNotConnected, Err: fmt.Errorf("probe: %w", lcu.ErrLCUNotReachable)},
+			wantState:      app.LCUConnectionStateNotConnected,
+			wantMessageKey: app.MessageCodeLCUNotReachable,
 		},
 		{
-			name: "deadline exceeded",
-			in:   lcu.ConnectionStatus{State: lcu.ConnectionStateNotConnected, Err: context.DeadlineExceeded},
-			want: app.LCUStatus{State: app.LCUConnectionStateNotConnected, Message: app.MessageCodeLCUNotReachable},
+			name:           "deadline exceeded",
+			in:             lcu.ConnectionStatus{State: lcu.ConnectionStateNotConnected, Err: context.DeadlineExceeded},
+			wantState:      app.LCUConnectionStateNotConnected,
+			wantMessageKey: app.MessageCodeLCUNotReachable,
 		},
 	}
 
@@ -151,9 +159,11 @@ func TestAppLCUStatusFromLCU(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := appLCUStatusFromLCU(tt.in); got != tt.want {
-				t.Fatalf("appLCUStatusFromLCU() = %+v, want %+v", got, tt.want)
+			got := appLCUStatusFromLCU(tt.in)
+			if got.State != tt.wantState || got.Source != tt.wantSource {
+				t.Fatalf("appLCUStatusFromLCU() = %+v, want state %q source %q", got, tt.wantState, tt.wantSource)
 			}
+			assertAppMessageDescriptor(t, got.Message, tt.wantMessageKey, "")
 		})
 	}
 }
@@ -175,9 +185,7 @@ func TestAppCoachlessAuthStateFromAuth(t *testing.T) {
 	if got.ExpiresAt == nil || !got.ExpiresAt.Equal(expiresAt) {
 		t.Fatalf("converted ExpiresAt = %v, want %v", got.ExpiresAt, expiresAt)
 	}
-	if got.Message != "status" {
-		t.Fatalf("converted Message = %q, want status", got.Message)
-	}
+	assertAppMessageDescriptor(t, got.Message, "", "status")
 }
 
 type stubUpdateSource struct {
@@ -309,5 +317,22 @@ func TestAppMessageFromErr(t *testing.T) {
 				t.Fatalf("appMessageFromErr() = %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+func assertAppMessageDescriptor(t *testing.T, got *app.MessageDescriptor, wantKey, wantFallback string) {
+	t.Helper()
+
+	if wantKey == "" && wantFallback == "" {
+		if got != nil {
+			t.Fatalf("message descriptor = %+v, want nil", got)
+		}
+		return
+	}
+	if got == nil {
+		t.Fatalf("message descriptor = nil, want key %q fallback %q", wantKey, wantFallback)
+	}
+	if got.Key != wantKey || got.Fallback != wantFallback {
+		t.Fatalf("message descriptor = %+v, want key %q fallback %q", got, wantKey, wantFallback)
 	}
 }

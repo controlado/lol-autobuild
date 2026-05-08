@@ -37,7 +37,7 @@ func newTestApp(t *testing.T, opts testAppOptions) *App {
 	}
 	if opts.lcuStatus == nil {
 		opts.lcuStatus = func(context.Context, RuntimeConfig) LCUStatus {
-			return LCUStatus{State: LCUConnectionStateOff, Message: "LCU is off"}
+			return LCUStatus{State: LCUConnectionStateOff, Message: NewMessageDescriptor("", "LCU is off")}
 		}
 	}
 	if opts.updateChecker == nil {
@@ -292,8 +292,7 @@ func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 
 	app.syncRunning = true
 	app.watcherRunning = true
-	app.lastErrorMessage = "previous error"
-	app.lastErrorCode = "test.error"
+	app.lastError = NewMessageDescriptor("test.error", "previous error")
 	app.lastSync = syncSummaryFromResult(*wantLastSync)
 	app.lastSyncAt = lastSyncAt
 	app.updateState = UpdateState{
@@ -302,7 +301,7 @@ func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 		LatestVersion:  "v0.2.0",
 		DownloadURL:    "https://example.test/latest",
 		CheckedAt:      &lastSyncAt,
-		Message:        "Download v0.2.0.",
+		Message:        NewMessageDescriptor("", "Download v0.2.0."),
 	}
 
 	state := app.State(context.Background())
@@ -331,12 +330,7 @@ func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 	if !state.SyncRunning {
 		t.Fatal("expected sync to be running")
 	}
-	if state.LastError != "previous error" {
-		t.Fatalf("state.LastError = %q, want %q", state.LastError, "previous error")
-	}
-	if state.LastErrorCode != "test.error" {
-		t.Fatalf("state.LastErrorCode = %q, want %q", state.LastErrorCode, "test.error")
-	}
+	assertMessageDescriptor(t, state.LastError, "test.error", "previous error")
 	assertSyncResultEqual(t, state.LastSync, wantLastSync)
 	if state.LastSync == app.lastSync {
 		t.Fatal("state.LastSync should be a copy")
@@ -347,10 +341,14 @@ func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 
 	state.LastSync.Warnings[0].Fallback = "mutated"
 	state.LastSync.Warnings = append(state.LastSync.Warnings, MessageDescriptor{Fallback: "extra"})
+	state.LastError.Fallback = "mutated"
+	state.Update.Message.Fallback = "mutated"
 	*state.LastSyncAt = state.LastSyncAt.Add(5 * time.Minute)
 	*state.Update.CheckedAt = state.Update.CheckedAt.Add(5 * time.Minute)
 
 	next := app.State(context.Background())
+	assertMessageDescriptor(t, next.LastError, "test.error", "previous error")
+	assertMessageDescriptor(t, next.Update.Message, "", "Download v0.2.0.")
 	assertSyncResultEqual(t, next.LastSync, wantLastSync)
 	if next.LastSyncAt == nil || !next.LastSyncAt.Equal(lastSyncAt) {
 		t.Fatalf("next.LastSyncAt = %v, want %v", next.LastSyncAt, lastSyncAt)
@@ -366,6 +364,7 @@ func TestStateCopiesCoachlessAuthState(t *testing.T) {
 		Status:    CoachlessAuthStatusStored,
 		Plan:      CoachlessAuthPlanPremium,
 		ExpiresAt: &expiresAt,
+		Message:   NewMessageDescriptor("", "stored"),
 	}}
 	app := newTestApp(t, testAppOptions{coachlessAuth: authSession})
 
@@ -376,19 +375,22 @@ func TestStateCopiesCoachlessAuthState(t *testing.T) {
 	if state.CoachlessAuth.ExpiresAt == nil || !state.CoachlessAuth.ExpiresAt.Equal(expiresAt) {
 		t.Fatalf("CoachlessAuth.ExpiresAt = %v, want %v", state.CoachlessAuth.ExpiresAt, expiresAt)
 	}
+	assertMessageDescriptor(t, state.CoachlessAuth.Message, "", "stored")
 
 	*state.CoachlessAuth.ExpiresAt = state.CoachlessAuth.ExpiresAt.Add(time.Hour)
+	state.CoachlessAuth.Message.Fallback = "mutated"
 	next := app.State(context.Background())
 	if next.CoachlessAuth.ExpiresAt == nil || !next.CoachlessAuth.ExpiresAt.Equal(expiresAt) {
 		t.Fatalf("next CoachlessAuth.ExpiresAt = %v, want %v", next.CoachlessAuth.ExpiresAt, expiresAt)
 	}
+	assertMessageDescriptor(t, next.CoachlessAuth.Message, "", "stored")
 }
 
 func TestStateBoundsLCUStatusRefresh(t *testing.T) {
 	app := newTestApp(t, testAppOptions{
 		lcuStatus: func(ctx context.Context, _ RuntimeConfig) LCUStatus {
 			<-ctx.Done()
-			return LCUStatus{State: LCUConnectionStateNotConnected, Message: ctx.Err().Error()}
+			return LCUStatus{State: LCUConnectionStateNotConnected, Message: NewMessageDescriptor("", ctx.Err().Error())}
 		},
 	})
 
@@ -402,9 +404,7 @@ func TestStateBoundsLCUStatusRefresh(t *testing.T) {
 	if state.LCU.State != LCUConnectionStateNotConnected {
 		t.Fatalf("LCU state = %q, want not_connected", state.LCU.State)
 	}
-	if state.LCU.Message != context.DeadlineExceeded.Error() {
-		t.Fatalf("LCU message = %q, want deadline exceeded", state.LCU.Message)
-	}
+	assertMessageDescriptor(t, state.LCU.Message, "", context.DeadlineExceeded.Error())
 }
 
 func TestSyncSummaryMapsKnownWarningsToMessageDescriptors(t *testing.T) {
@@ -430,7 +430,7 @@ func TestCoachlessAuthActionsUseSessionWithoutSavingConfig(t *testing.T) {
 		status: CoachlessAuthState{Status: CoachlessAuthStatusStored, Plan: CoachlessAuthPlanUnknown},
 	}
 	app := newTestApp(t, testAppOptions{configStore: store, coachlessAuth: authSession})
-	app.lastErrorMessage = "old error"
+	app.lastError = NewMessageDescriptor("", "old error")
 
 	state, message := app.LoginCoachlessAuth(context.Background())
 	if !message.Empty() {
@@ -451,8 +451,8 @@ func TestCoachlessAuthActionsUseSessionWithoutSavingConfig(t *testing.T) {
 	if store.saveCount() != 0 {
 		t.Fatalf("config saves = %d, want 0", store.saveCount())
 	}
-	if state.LastError != "" {
-		t.Fatalf("LastError = %q, want empty", state.LastError)
+	if state.LastError != nil {
+		t.Fatalf("LastError = %+v, want nil", state.LastError)
 	}
 }
 
@@ -469,9 +469,7 @@ func TestCoachlessAuthActionErrorRecordsLastError(t *testing.T) {
 	}
 
 	current := app.State(context.Background())
-	if current.LastError != "auth failed" {
-		t.Fatalf("LastError = %q, want auth failed", current.LastError)
-	}
+	assertMessageDescriptor(t, current.LastError, "", "auth failed")
 }
 
 func TestSaveSettingsPersistsTrimmedSettings(t *testing.T) {
@@ -491,11 +489,11 @@ func TestSaveSettingsPersistsTrimmedSettings(t *testing.T) {
 			if got.Settings.LCUEnabled {
 				return LCUStatus{State: LCUConnectionStateConnected, Source: "settings"}
 			}
-			return LCUStatus{State: LCUConnectionStateOff, Message: "LCU is off"}
+			return LCUStatus{State: LCUConnectionStateOff, Message: NewMessageDescriptor("", "LCU is off")}
 		},
 	})
 
-	app.lastErrorMessage = "stale error"
+	app.lastError = NewMessageDescriptor("", "stale error")
 
 	settings := Settings{
 		Patch:              " 14.9 ",
@@ -530,8 +528,8 @@ func TestSaveSettingsPersistsTrimmedSettings(t *testing.T) {
 	if state.Settings != wantCfg.Settings {
 		t.Fatalf("state.Settings = %+v, want %+v", state.Settings, wantCfg.Settings)
 	}
-	if state.LastError != "" {
-		t.Fatalf("state.LastError = %q, want empty", state.LastError)
+	if state.LastError != nil {
+		t.Fatalf("state.LastError = %+v, want nil", state.LastError)
 	}
 	if state.LCU.State != LCUConnectionStateConnected {
 		t.Fatalf("state.LCU.State = %q, want %q", state.LCU.State, LCUConnectionStateConnected)
@@ -555,7 +553,7 @@ func TestSaveSettingsReturnsErrorWithoutMutatingConfig(t *testing.T) {
 
 	app.watcherRunning = true
 	app.cancelWatcher = func() { cancelCalled = true }
-	app.lastErrorMessage = "previous error"
+	app.lastError = NewMessageDescriptor("", "previous error")
 
 	state, message := app.SaveSettings(context.Background(), Settings{
 		Patch:       " 15.1 ",
@@ -587,9 +585,7 @@ func TestSaveSettingsReturnsErrorWithoutMutatingConfig(t *testing.T) {
 	if !current.Watcher.Running {
 		t.Fatal("expected watcher to remain running after save failure")
 	}
-	if current.LastError != "previous error" {
-		t.Fatalf("current.LastError = %q, want %q", current.LastError, "previous error")
-	}
+	assertMessageDescriptor(t, current.LastError, "", "previous error")
 }
 
 func TestSaveSettingsMarksRunningWatcherConfigStaleWithoutRestart(t *testing.T) {
@@ -861,8 +857,8 @@ func TestStartWatcherLifecycle(t *testing.T) {
 	current := app.State(context.Background())
 	assertSyncResultEqual(t, current.LastSync, wantResult)
 	assertTimeBetween(t, current.LastSyncAt, beforeSuccess, afterSuccess)
-	if current.LastError != "" {
-		t.Fatalf("current.LastError = %q, want empty", current.LastError)
+	if current.LastError != nil {
+		t.Fatalf("current.LastError = %+v, want nil", current.LastError)
 	}
 
 	beforeNotice := time.Now().UTC()
@@ -885,14 +881,16 @@ func TestStartWatcherLifecycle(t *testing.T) {
 	if current.Watcher.LastNotice.Phase != "FINALIZATION" || current.Watcher.LastNotice.ConnectionID != 2 {
 		t.Fatalf("unexpected watcher notice: %+v", current.Watcher.LastNotice)
 	}
+	assertMessageDescriptorFallback(t, current.Watcher.LastNotice.Message, "snapshot finalized")
+	if current.Watcher.LastNotice.Error != nil {
+		t.Fatalf("notice error = %+v, want nil", current.Watcher.LastNotice.Error)
+	}
 	assertTimeBetween(t, &current.Watcher.LastNotice.At, beforeNotice, afterNotice)
 	assertSyncResultEqual(t, current.LastSync, wantResult)
 
 	call.req.OnCycle(autobuild.WatchCycle{Err: errors.New("watch cycle failed")})
 	current = app.State(context.Background())
-	if current.LastError != "watch cycle failed" {
-		t.Fatalf("current.LastError = %q, want %q", current.LastError, "watch cycle failed")
-	}
+	assertMessageDescriptor(t, current.LastError, "", "watch cycle failed")
 	assertSyncResultEqual(t, current.LastSync, wantResult)
 
 	stopped := app.StopWatcher(context.Background())
@@ -984,9 +982,7 @@ func TestStartWatcherReleasesReservationOnFactoryError(t *testing.T) {
 	if current.Watcher.Running {
 		t.Fatal("expected watcher reservation to be released")
 	}
-	if current.LastError != "factory failed" {
-		t.Fatalf("current.LastError = %q, want %q", current.LastError, "factory failed")
-	}
+	assertMessageDescriptor(t, current.LastError, "", "factory failed")
 
 	started, message := app.StartWatcher(context.Background())
 	if !message.Empty() {
@@ -1033,7 +1029,7 @@ func TestRunSyncSuccess(t *testing.T) {
 			return svc, nil
 		},
 	})
-	app.lastErrorMessage = "stale error"
+	app.lastError = NewMessageDescriptor("", "stale error")
 
 	before := time.Now().UTC()
 	state, message := app.RunSync(context.Background())
@@ -1051,8 +1047,8 @@ func TestRunSyncSuccess(t *testing.T) {
 	if state.SyncRunning {
 		t.Fatal("expected sync to be finished")
 	}
-	if state.LastError != "" {
-		t.Fatalf("state.LastError = %q, want empty", state.LastError)
+	if state.LastError != nil {
+		t.Fatalf("state.LastError = %+v, want nil", state.LastError)
 	}
 	assertSyncResultEqual(t, state.LastSync, &wantResult)
 	assertTimeBetween(t, state.LastSyncAt, before, after)
@@ -1120,9 +1116,7 @@ func TestRunSyncFailureCases(t *testing.T) {
 			if current.SyncRunning {
 				t.Fatal("expected syncRunning to be released after failure")
 			}
-			if current.LastError != tt.wantMessage {
-				t.Fatalf("current.LastError = %q, want %q", current.LastError, tt.wantMessage)
-			}
+			assertMessageDescriptor(t, current.LastError, "", tt.wantMessage)
 			assertSyncResultEqual(t, current.LastSync, oldSync)
 			if current.LastSyncAt == nil || !current.LastSyncAt.Equal(oldSyncAt) {
 				t.Fatalf("current.LastSyncAt = %v, want %v", current.LastSyncAt, oldSyncAt)
@@ -1192,7 +1186,7 @@ func TestRunSyncRejectsConcurrentCalls(t *testing.T) {
 	}
 }
 
-func TestRunSyncFailureSetsLastErrorCode(t *testing.T) {
+func TestRunSyncFailureSetsLastErrorDescriptor(t *testing.T) {
 	cfg := testConfig()
 	championNotSelectedErr := errors.New("champion not selected")
 
@@ -1226,12 +1220,7 @@ func TestRunSyncFailureSetsLastErrorCode(t *testing.T) {
 	}
 
 	current := app.State(context.Background())
-	if current.LastError != "Select a champion first." {
-		t.Fatalf("LastError = %q, want %q", current.LastError, "Select a champion first.")
-	}
-	if current.LastErrorCode != MessageCodeLCUChampionNotSelected {
-		t.Fatalf("LastErrorCode = %q, want %q", current.LastErrorCode, MessageCodeLCUChampionNotSelected)
-	}
+	assertMessageDescriptor(t, current.LastError, MessageCodeLCUChampionNotSelected, "Select a champion first.")
 }
 
 func TestCheckUpdatesAvailable(t *testing.T) {
@@ -1247,7 +1236,7 @@ func TestCheckUpdatesAvailable(t *testing.T) {
 		},
 	}
 	app := newTestApp(t, testAppOptions{updateChecker: checker})
-	app.lastErrorMessage = "sync failed"
+	app.lastError = NewMessageDescriptor("", "sync failed")
 
 	state, message := app.CheckUpdates(context.Background())
 	if !message.Empty() {
@@ -1265,12 +1254,11 @@ func TestCheckUpdatesAvailable(t *testing.T) {
 	if state.Update.DownloadURL == "" {
 		t.Fatal("expected download URL")
 	}
+	assertMessageDescriptor(t, state.Update.Message, "", "Download v0.2.0.")
 	if state.Update.CheckedAt == nil {
 		t.Fatal("expected checked_at")
 	}
-	if state.LastError != "sync failed" {
-		t.Fatalf("LastError = %q, want previous sync error", state.LastError)
-	}
+	assertMessageDescriptor(t, state.LastError, "", "sync failed")
 }
 
 func TestCheckUpdatesCurrent(t *testing.T) {
@@ -1294,9 +1282,7 @@ func TestCheckUpdatesCurrent(t *testing.T) {
 	if state.Update.Status != UpdateStatusCurrent {
 		t.Fatalf("Update.Status = %q, want %q", state.Update.Status, UpdateStatusCurrent)
 	}
-	if state.Update.Message == "" {
-		t.Fatal("expected update message")
-	}
+	assertMessageDescriptor(t, state.Update.Message, "", "You have the latest version.")
 }
 
 func TestCheckUpdatesUnavailableDoesNotSetLastError(t *testing.T) {
@@ -1307,7 +1293,7 @@ func TestCheckUpdatesUnavailableDoesNotSetLastError(t *testing.T) {
 		},
 	}
 	app := newTestApp(t, testAppOptions{updateChecker: checker})
-	app.lastErrorMessage = "watch failed"
+	app.lastError = NewMessageDescriptor("", "watch failed")
 
 	state, message := app.CheckUpdates(context.Background())
 	if !message.Empty() {
@@ -1316,9 +1302,8 @@ func TestCheckUpdatesUnavailableDoesNotSetLastError(t *testing.T) {
 	if state.Update.Status != UpdateStatusUnavailable {
 		t.Fatalf("Update.Status = %q, want %q", state.Update.Status, UpdateStatusUnavailable)
 	}
-	if state.LastError != "watch failed" {
-		t.Fatalf("LastError = %q, want previous watch error", state.LastError)
-	}
+	assertMessageDescriptor(t, state.Update.Message, "", "This build cannot check updates.")
+	assertMessageDescriptor(t, state.LastError, "", "watch failed")
 }
 
 func TestCheckUpdatesErrorDoesNotSetLastError(t *testing.T) {
@@ -1329,7 +1314,7 @@ func TestCheckUpdatesErrorDoesNotSetLastError(t *testing.T) {
 		},
 	}
 	app := newTestApp(t, testAppOptions{updateChecker: checker})
-	app.lastErrorMessage = "sync failed"
+	app.lastError = NewMessageDescriptor("", "sync failed")
 
 	state, message := app.CheckUpdates(context.Background())
 	if !message.Empty() {
@@ -1338,12 +1323,8 @@ func TestCheckUpdatesErrorDoesNotSetLastError(t *testing.T) {
 	if state.Update.Status != UpdateStatusError {
 		t.Fatalf("Update.Status = %q, want %q", state.Update.Status, UpdateStatusError)
 	}
-	if state.Update.Message != "github failed" {
-		t.Fatalf("Update.Message = %q, want github failed", state.Update.Message)
-	}
-	if state.LastError != "sync failed" {
-		t.Fatalf("LastError = %q, want previous sync error", state.LastError)
-	}
+	assertMessageDescriptor(t, state.Update.Message, "", "github failed")
+	assertMessageDescriptor(t, state.LastError, "", "sync failed")
 }
 
 func TestCheckUpdatesRejectsConcurrentChecks(t *testing.T) {
@@ -1544,5 +1525,27 @@ func assertTimeBetween(t *testing.T, got *time.Time, before, after time.Time) {
 	}
 	if got.Before(before) || got.After(after) {
 		t.Fatalf("time = %v, want between %v and %v", *got, before, after)
+	}
+}
+
+func assertMessageDescriptor(t *testing.T, got *MessageDescriptor, wantKey, wantFallback string) {
+	t.Helper()
+
+	if got == nil {
+		t.Fatalf("message descriptor = nil, want key %q fallback %q", wantKey, wantFallback)
+	}
+	if got.Key != wantKey || got.Fallback != wantFallback {
+		t.Fatalf("message descriptor = %+v, want key %q fallback %q", got, wantKey, wantFallback)
+	}
+}
+
+func assertMessageDescriptorFallback(t *testing.T, got *MessageDescriptor, wantFallback string) {
+	t.Helper()
+
+	if got == nil {
+		t.Fatalf("message descriptor = nil, want fallback %q", wantFallback)
+	}
+	if got.Fallback != wantFallback {
+		t.Fatalf("message descriptor fallback = %q, want %q", got.Fallback, wantFallback)
 	}
 }

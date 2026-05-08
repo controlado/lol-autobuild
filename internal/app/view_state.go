@@ -33,12 +33,12 @@ const (
 )
 
 type UpdateState struct {
-	Status         UpdateStatus `json:"status"`
-	CurrentVersion string       `json:"current_version,omitempty"`
-	LatestVersion  string       `json:"latest_version,omitempty"`
-	DownloadURL    string       `json:"download_url,omitempty"`
-	CheckedAt      *time.Time   `json:"checked_at,omitempty"`
-	Message        string       `json:"message,omitempty"`
+	Status         UpdateStatus       `json:"status"`
+	CurrentVersion string             `json:"current_version,omitempty"`
+	LatestVersion  string             `json:"latest_version,omitempty"`
+	DownloadURL    string             `json:"download_url,omitempty"`
+	CheckedAt      *time.Time         `json:"checked_at,omitempty"`
+	Message        *MessageDescriptor `json:"message,omitempty"`
 }
 
 type LCUConnectionState string
@@ -56,7 +56,7 @@ type (
 	}
 	LCUStatus struct {
 		State   LCUConnectionState `json:"state"`
-		Message string             `json:"message,omitempty"`
+		Message *MessageDescriptor `json:"message,omitempty"`
 		Source  string             `json:"source,omitempty"`
 	}
 	SyncSummary struct {
@@ -70,14 +70,14 @@ type (
 		Warnings             []MessageDescriptor `json:"Warnings"`
 	}
 	WatcherNoticeState struct {
-		Kind         string    `json:"kind"`
-		Message      string    `json:"message,omitempty"`
-		Error        string    `json:"error,omitempty"`
-		Source       string    `json:"source,omitempty"`
-		URI          string    `json:"uri,omitempty"`
-		Phase        string    `json:"phase,omitempty"`
-		ConnectionID int       `json:"connection_id,omitempty"`
-		At           time.Time `json:"at"`
+		Kind         string             `json:"kind"`
+		Message      *MessageDescriptor `json:"message,omitempty"`
+		Error        *MessageDescriptor `json:"error,omitempty"`
+		Source       string             `json:"source,omitempty"`
+		URI          string             `json:"uri,omitempty"`
+		Phase        string             `json:"phase,omitempty"`
+		ConnectionID int                `json:"connection_id,omitempty"`
+		At           time.Time          `json:"at"`
 	}
 	WatcherState struct {
 		Running     bool                `json:"running"`
@@ -88,7 +88,7 @@ type (
 		Status    CoachlessAuthStatus `json:"status"`
 		Plan      CoachlessAuthPlan   `json:"plan"`
 		ExpiresAt *time.Time          `json:"expires_at,omitempty"`
-		Message   string              `json:"message,omitempty"`
+		Message   *MessageDescriptor  `json:"message,omitempty"`
 	}
 	ViewState struct {
 		Settings      Settings           `json:"settings"`
@@ -99,7 +99,6 @@ type (
 		SyncRunning   bool               `json:"sync_running"`
 		LastSync      *SyncSummary       `json:"last_sync,omitempty"`
 		LastSyncAt    *time.Time         `json:"last_sync_at,omitempty"`
-		LastError     string             `json:"last_error,omitempty"`
-		LastErrorCode string             `json:"last_error_code,omitempty"`
+		LastError     *MessageDescriptor `json:"last_error,omitempty"`
 	}
 )
