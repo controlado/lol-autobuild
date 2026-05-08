@@ -378,7 +378,7 @@ func (a *App) observeWatchNotice(watchID int, notice autobuild.WatchNotice) {
 func watcherNoticeStateFromNotice(notice autobuild.WatchNotice, at time.Time) WatcherNoticeState {
 	state := WatcherNoticeState{
 		Kind:         string(notice.Kind),
-		Message:      NewMessageDescriptor("", notice.Message),
+		Message:      NewMessageDescriptor(watchNoticeMessageKey(notice.Kind), notice.Message),
 		Source:       notice.Source,
 		URI:          notice.URI,
 		Phase:        notice.Phase,
@@ -389,6 +389,21 @@ func watcherNoticeStateFromNotice(notice autobuild.WatchNotice, at time.Time) Wa
 		state.Error = NewMessageDescriptor("", notice.Err.Error())
 	}
 	return state
+}
+
+func watchNoticeMessageKey(kind autobuild.WatchNoticeKind) string {
+	switch kind {
+	case autobuild.WatchNoticeConnected:
+		return MessageCodeWatchNoticeConnected
+	case autobuild.WatchNoticeReconnecting:
+		return MessageCodeWatchNoticeReconnecting
+	case autobuild.WatchNoticeSnapshotFinalization:
+		return MessageCodeWatchNoticeSnapshotFinalization
+	case autobuild.WatchNoticeSnapshotWaiting:
+		return MessageCodeWatchNoticeSnapshotWaiting
+	default:
+		return ""
+	}
 }
 
 func cloneWatcherNotice(notice *WatcherNoticeState) *WatcherNoticeState {
@@ -627,20 +642,16 @@ func (a *App) finishUpdateCheck(result UpdateCheckResult, err error) {
 	switch {
 	case err == nil && result.Available:
 		newState.Status = UpdateStatusAvailable
-		if newState.LatestVersion != "" {
-			newState.Message = NewMessageDescriptor("", fmt.Sprintf("Download %s.", newState.LatestVersion))
-		} else {
-			newState.Message = NewMessageDescriptor("", "Download the new version.")
-		}
+		newState.Message = updateAvailableMessage(newState.LatestVersion)
 	case err == nil:
 		newState.Status = UpdateStatusCurrent
-		newState.Message = NewMessageDescriptor("", "You have the latest version.")
+		newState.Message = updateCurrentMessage()
 	case errors.Is(err, ErrUpdateUnavailable):
 		newState.Status = UpdateStatusUnavailable
-		newState.Message = NewMessageDescriptor("", "This build cannot check updates.")
+		newState.Message = updateUnavailableMessage()
 	default:
 		newState.Status = UpdateStatusError
-		newState.Message = NewMessageDescriptor("", err.Error())
+		newState.Message = updateErrorMessage(err)
 	}
 
 	a.mu.Lock()

@@ -881,7 +881,7 @@ func TestStartWatcherLifecycle(t *testing.T) {
 	if current.Watcher.LastNotice.Phase != "FINALIZATION" || current.Watcher.LastNotice.ConnectionID != 2 {
 		t.Fatalf("unexpected watcher notice: %+v", current.Watcher.LastNotice)
 	}
-	assertMessageDescriptorFallback(t, current.Watcher.LastNotice.Message, "snapshot finalized")
+	assertMessageDescriptor(t, current.Watcher.LastNotice.Message, MessageCodeWatchNoticeSnapshotFinalization, "snapshot finalized")
 	if current.Watcher.LastNotice.Error != nil {
 		t.Fatalf("notice error = %+v, want nil", current.Watcher.LastNotice.Error)
 	}
@@ -1282,7 +1282,7 @@ func TestCheckUpdatesCurrent(t *testing.T) {
 	if state.Update.Status != UpdateStatusCurrent {
 		t.Fatalf("Update.Status = %q, want %q", state.Update.Status, UpdateStatusCurrent)
 	}
-	assertMessageDescriptor(t, state.Update.Message, "", "You have the latest version.")
+	assertMessageDescriptor(t, state.Update.Message, "update.up_to_date", "You have the latest version.")
 }
 
 func TestCheckUpdatesUnavailableDoesNotSetLastError(t *testing.T) {
@@ -1302,7 +1302,7 @@ func TestCheckUpdatesUnavailableDoesNotSetLastError(t *testing.T) {
 	if state.Update.Status != UpdateStatusUnavailable {
 		t.Fatalf("Update.Status = %q, want %q", state.Update.Status, UpdateStatusUnavailable)
 	}
-	assertMessageDescriptor(t, state.Update.Message, "", "This build cannot check updates.")
+	assertMessageDescriptor(t, state.Update.Message, "update.cannot_check", "This build cannot check updates.")
 	assertMessageDescriptor(t, state.LastError, "", "watch failed")
 }
 
