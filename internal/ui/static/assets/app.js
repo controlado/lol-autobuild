@@ -81,6 +81,7 @@ let updateChecking = false;
 let currentUpdateStatus = "idle";
 
 let currentState = null;
+let stateRequestInFlight = null;
 
 let currentMessage = { key: "message.no_sync_session" };
 let currentMessageIsError = false;
@@ -727,7 +728,7 @@ function ensureStateLog(items, logKey) {
   return appendLog(items, logKey);
 }
 
-function renderLog(state, sync) {
+function renderLog(state = {}, sync) {
   if (state.last_error) {
     appendLog([{ key: state.last_error_code, fallback: state.last_error, tone: "error" }], `error:${state.last_error_code || state.last_error}`);
     return;
@@ -753,7 +754,7 @@ function renderLog(state, sync) {
     wrote = ensureStateLog([{ key: "log.sync_without_warnings" }], `sync:${state.last_sync_at || JSON.stringify(sync)}`) || wrote;
   }
 
-  if (!wrote && state.watcher.running) {
+  if (!wrote && state.watcher && state.watcher.running) {
     ensureStateLog([{ key: "log.watcher_waiting" }], "watcher:running");
   }
 
@@ -762,40 +763,42 @@ function renderLog(state, sync) {
   }
 }
 
-function renderForms(state) {
-  const settings = state.settings;
+function renderForms(state = {}) {
+  const settings = state.settings || {};
   formsLoaded = true;
-  ids.lcuEnabled.checked = settings.lcu_enabled;
+  ids.lcuEnabled.checked = Boolean(settings.lcu_enabled);
   ids.patch.value = settings.patch || "";
   ids.patchRangeSlider.value = String(patchRangeIndexFromValue(patchRangeValueFromSettings(settings)));
   ids.leagueTierPresetSlider.value = String(leagueTierIndexFromPreset(settings.league_tier_preset || "emerald_plus"));
-  ids.applyItems.checked = settings.apply_items;
-  ids.applyRunes.checked = settings.apply_runes;
-  ids.applySpells.checked = settings.apply_spells;
-  ids.keepFlash.checked = settings.keep_flash;
-  ids.dryRun.checked = settings.dry_run;
+  ids.applyItems.checked = Boolean(settings.apply_items);
+  ids.applyRunes.checked = Boolean(settings.apply_runes);
+  ids.applySpells.checked = Boolean(settings.apply_spells);
+  ids.keepFlash.checked = Boolean(settings.keep_flash);
+  ids.dryRun.checked = Boolean(settings.dry_run);
   syncSpellsSuboptions();
   renderAdvancedSliderValues();
   renderModeStatus(settings);
 }
 
-function renderState(state) {
+function renderState(state = {}) {
   currentState = state;
+  const watcher = state.watcher || {};
+  const lcu = state.lcu || {};
   renderUpdate(state);
   renderCoachlessAuth(state.coachless_auth || {});
 
-  watcherRunning = state.watcher.running;
+  watcherRunning = Boolean(watcher.running);
   ids.watcherButton.textContent = watcherRunning ? t("action.stop_watcher") : t("action.start_watcher");
   ids.watcherButton.setAttribute("aria-pressed", String(watcherRunning));
   setValue(ids.watcherStatus, watcherRunning ? t("watcher.running") : t("watcher.stopped"), watcherRunning ? "good" : "");
-  ids.watcherConfigWarning.hidden = !(state.watcher && state.watcher.config_stale);
+  ids.watcherConfigWarning.hidden = !watcher.config_stale;
 
-  if (state.lcu.state === "connected") {
+  if (lcu.state === "connected") {
     setValue(ids.lcuStatus, t("lcu.connected"), "good");
-  } else if (state.lcu.state === "off") {
+  } else if (lcu.state === "off") {
     setValue(ids.lcuStatus, t("lcu.disabled"), "warn");
   } else {
-    setValue(ids.lcuStatus, textForDescriptor(state.lcu.message || "lcu.not_connected"), "bad");
+    setValue(ids.lcuStatus, textForDescriptor(lcu.message || "lcu.not_connected"), "bad");
   }
 
   const sync = state.last_sync;
@@ -813,7 +816,7 @@ function renderState(state) {
     setMessage({ key: "message.sync_with_warnings" });
   } else if (sync) {
     setMessage({ key: "message.sync_finished" });
-  } else if (state.watcher.running) {
+  } else if (watcher.running) {
     setMessage({ key: "message.watcher_waiting" });
   } else {
     setMessage({ key: "message.no_sync_session" });
@@ -822,14 +825,29 @@ function renderState(state) {
   renderLog(state, sync);
 }
 
-async function loadForms() {
-  const state = await api("/api/state");
+async function loadInitialState() {
+  const state = await requestState();
   renderForms(state);
+  renderState(state);
 }
 
 async function loadState() {
-  const state = await api("/api/state");
+  const state = await requestState();
+  if (!formsLoaded) {
+    renderForms(state);
+  }
   renderState(state);
+}
+
+function requestState() {
+  if (stateRequestInFlight) {
+    return stateRequestInFlight;
+  }
+
+  stateRequestInFlight = api("/api/state").finally(() => {
+    stateRequestInFlight = null;
+  });
+  return stateRequestInFlight;
 }
 
 async function checkUpdates(isManual) {
@@ -986,8 +1004,11 @@ async function initialize() {
   currentLocale = await ensureLocale(currentLocale);
   applyStaticTranslations();
   positionAdvancedSliderTicks();
-  loadForms().catch(error => setMessage({ key: error.code, fallback: error.fallback || error.message }, true));
-  loadState().catch(error => setMessage({ key: error.code, fallback: error.fallback || error.message }, true));
+  try {
+    await loadInitialState();
+  } catch (error) {
+    setMessage({ key: error.code, fallback: error.fallback || error.message }, true);
+  }
   checkUpdates(false).catch(() => { });
   setInterval(() => loadState().catch(() => { }), 3000);
 }

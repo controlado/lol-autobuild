@@ -274,7 +274,7 @@ func TestRuneSettingsAreEnabledInStaticUI(t *testing.T) {
 	}
 	for _, want := range []string{
 		"apply_runes: ids.applyRunes.checked",
-		"ids.applyRunes.checked = settings.apply_runes",
+		"ids.applyRunes.checked = Boolean(settings.apply_runes)",
 		`ids.applyRunes.addEventListener("change", scheduleSave)`,
 	} {
 		if !strings.Contains(jsBody, want) {
