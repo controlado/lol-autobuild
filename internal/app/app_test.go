@@ -1538,14 +1538,3 @@ func assertMessageDescriptor(t *testing.T, got *MessageDescriptor, wantKey, want
 		t.Fatalf("message descriptor = %+v, want key %q fallback %q", got, wantKey, wantFallback)
 	}
 }
-
-func assertMessageDescriptorFallback(t *testing.T, got *MessageDescriptor, wantFallback string) {
-	t.Helper()
-
-	if got == nil {
-		t.Fatalf("message descriptor = nil, want fallback %q", wantFallback)
-	}
-	if got.Fallback != wantFallback {
-		t.Fatalf("message descriptor fallback = %q, want %q", got.Fallback, wantFallback)
-	}
-}
