@@ -13,6 +13,8 @@ import (
 
 var ErrUpdateUnavailable = errors.New("update check unavailable")
 
+const lcuStateRefreshTimeout = 750 * time.Millisecond
+
 type (
 	ServiceFactory    func(RuntimeConfig) (autobuild.Service, error)
 	LCUStatusProvider func(context.Context, RuntimeConfig) LCUStatus
@@ -131,7 +133,9 @@ func (a *App) State(ctx context.Context) ViewState {
 	if a.coachlessAuth != nil {
 		state.CoachlessAuth = cloneCoachlessAuthState(a.coachlessAuth.Status(ctx))
 	}
-	state.LCU = a.lcuStatus(ctx, configSnapshot)
+	statusCtx, cancel := context.WithTimeout(ctx, lcuStateRefreshTimeout)
+	state.LCU = a.lcuStatus(statusCtx, configSnapshot)
+	cancel()
 
 	return state
 }

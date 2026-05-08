@@ -384,6 +384,29 @@ func TestStateCopiesCoachlessAuthState(t *testing.T) {
 	}
 }
 
+func TestStateBoundsLCUStatusRefresh(t *testing.T) {
+	app := newTestApp(t, testAppOptions{
+		lcuStatus: func(ctx context.Context, _ RuntimeConfig) LCUStatus {
+			<-ctx.Done()
+			return LCUStatus{State: LCUConnectionStateNotConnected, Message: ctx.Err().Error()}
+		},
+	})
+
+	start := time.Now()
+	state := app.State(context.Background())
+	elapsed := time.Since(start)
+
+	if elapsed > lcuStateRefreshTimeout+500*time.Millisecond {
+		t.Fatalf("State() took %v, want bounded by LCU state refresh timeout", elapsed)
+	}
+	if state.LCU.State != LCUConnectionStateNotConnected {
+		t.Fatalf("LCU state = %q, want not_connected", state.LCU.State)
+	}
+	if state.LCU.Message != context.DeadlineExceeded.Error() {
+		t.Fatalf("LCU message = %q, want deadline exceeded", state.LCU.Message)
+	}
+}
+
 func TestCoachlessAuthActionsUseSessionWithoutSavingConfig(t *testing.T) {
 	store := &recordingConfigStore{}
 	authSession := &stubCoachlessAuth{
