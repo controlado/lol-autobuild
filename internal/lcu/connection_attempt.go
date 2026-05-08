@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type candidateHandler func(info connectionInfo, candidateLabel string) (shouldTerminate bool)
 
 func (c *Client) forEachCandidate(ctx context.Context, attempt *connectionAttempt, handler candidateHandler) (success bool, ctxErr error) {
+	seenEndpoints := map[string]struct{}{}
 	for _, candidate := range c.connectionCandidates(ctx) {
 		if ctxErr = ctx.Err(); ctxErr != nil {
 			return false, ctxErr
@@ -23,6 +25,11 @@ func (c *Client) forEachCandidate(ctx context.Context, attempt *connectionAttemp
 			attempt.observe(candidateLabel, ErrLockfileNotFound, err)
 			continue
 		}
+		endpointKey := candidateEndpointKey(info)
+		if _, ok := seenEndpoints[endpointKey]; ok {
+			continue
+		}
+		seenEndpoints[endpointKey] = struct{}{}
 		attempt.markResolvableCandidate()
 
 		if handler(info, candidateLabel) {
@@ -31,6 +38,10 @@ func (c *Client) forEachCandidate(ctx context.Context, attempt *connectionAttemp
 	}
 
 	return false, ctxErr
+}
+
+func candidateEndpointKey(info connectionInfo) string {
+	return fmt.Sprintf("%s:%d:%s", strings.ToLower(strings.TrimSpace(info.Protocol)), info.Port, info.Password)
 }
 
 type connectionAttempt struct {
