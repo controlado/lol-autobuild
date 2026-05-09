@@ -8,10 +8,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 	"testing"
 
@@ -406,7 +404,7 @@ var placeholderPattern = regexp.MustCompile(`\{[A-Za-z0-9_]+\}`)
 
 func placeholders(value string) []string {
 	matches := placeholderPattern.FindAllString(value, -1)
-	sort.Strings(matches)
+	slices.Sort(matches)
 	return matches
 }
 
@@ -560,7 +558,7 @@ func TestEnemySelectionEndpointIsLightweight(t *testing.T) {
 	if recApp.runSyncCalls != 0 {
 		t.Fatalf("run sync calls = %d, want 0", recApp.runSyncCalls)
 	}
-	if !reflect.DeepEqual(recApp.selectedEnemyChampionIDs, []int{20, 10}) {
+	if !slices.Equal(recApp.selectedEnemyChampionIDs, []int{20, 10}) {
 		t.Fatalf("selected ids = %+v, want [20 10]", recApp.selectedEnemyChampionIDs)
 	}
 
@@ -568,7 +566,7 @@ func TestEnemySelectionEndpointIsLightweight(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
-	if !reflect.DeepEqual(body.SelectedEnemyChampionIDs, []int{20, 10}) {
+	if !slices.Equal(body.SelectedEnemyChampionIDs, []int{20, 10}) {
 		t.Fatalf("response selected ids = %+v, want [20 10]", body.SelectedEnemyChampionIDs)
 	}
 }

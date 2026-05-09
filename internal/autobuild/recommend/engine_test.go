@@ -2,6 +2,7 @@ package recommend
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
@@ -139,7 +140,7 @@ func TestRecommendRunePagePrefersTwoQualifiedSecondaryRows(t *testing.T) {
 	}
 
 	want := []int{8005, 9101, 9104, 8299, 8224, 8233, 5005, 5008, 5002}
-	if !reflect.DeepEqual(got.Page.SelectedPerkIDs, want) {
+	if !slices.Equal(got.Page.SelectedPerkIDs, want) {
 		t.Fatalf("selectedPerkIDs = %#v, want %#v", got.Page.SelectedPerkIDs, want)
 	}
 }
@@ -168,7 +169,7 @@ func TestRecommendRunePageUsesSecondaryFallbackToCompletePage(t *testing.T) {
 	}
 
 	want := []int{8005, 9101, 9104, 8299, 8233, 8224, 5005, 5008, 5002}
-	if !reflect.DeepEqual(got.Page.SelectedPerkIDs, want) {
+	if !slices.Equal(got.Page.SelectedPerkIDs, want) {
 		t.Fatalf("selectedPerkIDs = %#v, want %#v", got.Page.SelectedPerkIDs, want)
 	}
 }

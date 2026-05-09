@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"reflect"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -182,14 +182,14 @@ func TestApplyRunePageSuccessCreatesPageWithoutDeletingUserPage(t *testing.T) {
 		"GET /lol-perks/v1/pages",
 		"POST /lol-perks/v1/pages",
 	}
-	if !reflect.DeepEqual(calls, wantCalls) {
+	if !slices.Equal(calls, wantCalls) {
 		t.Fatalf("calls = %#v, want %#v", calls, wantCalls)
 	}
 
 	if createPayload.Name != expectedPageName || createPayload.PrimaryStyleID != expectedPrimary || createPayload.SubStyleID != expectedSecondary || !createPayload.Current {
 		t.Fatalf("unexpected create payload: %#v", createPayload)
 	}
-	if !reflect.DeepEqual(createPayload.SelectedPerkIDs, expectedPerkIDs) {
+	if !slices.Equal(createPayload.SelectedPerkIDs, expectedPerkIDs) {
 		t.Fatalf("selectedPerkIds = %#v, want %#v", createPayload.SelectedPerkIDs, expectedPerkIDs)
 	}
 }
@@ -250,7 +250,7 @@ func TestApplyRunePageReusesExistingManagedPageWhenCurrentIsUserPage(t *testing.
 		"DELETE /lol-perks/v1/pages/456",
 		"POST /lol-perks/v1/pages",
 	}
-	if !reflect.DeepEqual(calls, wantCalls) {
+	if !slices.Equal(calls, wantCalls) {
 		t.Fatalf("calls = %#v, want %#v", calls, wantCalls)
 	}
 }
@@ -357,7 +357,7 @@ func TestApplyRunePageIgnoresNonDeletableManagedPageAndCreatesNew(t *testing.T) 
 		"GET /lol-perks/v1/pages",
 		"POST /lol-perks/v1/pages",
 	}
-	if !reflect.DeepEqual(calls, wantCalls) {
+	if !slices.Equal(calls, wantCalls) {
 		t.Fatalf("calls = %#v, want %#v", calls, wantCalls)
 	}
 }
@@ -410,7 +410,7 @@ func TestApplyRunePageReusesFirstDeletableManagedPage(t *testing.T) {
 		"DELETE /lol-perks/v1/pages/456",
 		"POST /lol-perks/v1/pages",
 	}
-	if !reflect.DeepEqual(calls, wantCalls) {
+	if !slices.Equal(calls, wantCalls) {
 		t.Fatalf("calls = %#v, want %#v", calls, wantCalls)
 	}
 }
@@ -458,7 +458,7 @@ func TestApplyRunePageCreatesPageWhenCurrentPageIsMissing(t *testing.T) {
 		"GET /lol-perks/v1/pages",
 		"POST /lol-perks/v1/pages",
 	}
-	if !reflect.DeepEqual(calls, wantCalls) {
+	if !slices.Equal(calls, wantCalls) {
 		t.Fatalf("calls = %#v, want %#v", calls, wantCalls)
 	}
 	if !createPayload.Current {
@@ -511,7 +511,7 @@ func TestApplyRunePageReusesManagedPageWhenCurrentPageIsMissing(t *testing.T) {
 		"DELETE /lol-perks/v1/pages/456",
 		"POST /lol-perks/v1/pages",
 	}
-	if !reflect.DeepEqual(calls, wantCalls) {
+	if !slices.Equal(calls, wantCalls) {
 		t.Fatalf("calls = %#v, want %#v", calls, wantCalls)
 	}
 }
@@ -564,7 +564,7 @@ func TestApplyRunePageSuccessReplacesManagedPage(t *testing.T) {
 		"DELETE /lol-perks/v1/pages/123",
 		"POST /lol-perks/v1/pages",
 	}
-	if !reflect.DeepEqual(calls, wantCalls) {
+	if !slices.Equal(calls, wantCalls) {
 		t.Fatalf("calls = %#v, want %#v", calls, wantCalls)
 	}
 }
@@ -769,7 +769,7 @@ func TestApplyRunePageRestoresPreviousPageWhenCreateFails(t *testing.T) {
 	if restorePayload.Name != restoredOldName || !restorePayload.Current || restorePayload.PrimaryStyleID != domain.RuneStyleResolve {
 		t.Fatalf("unexpected restore payload: %#v", restorePayload)
 	}
-	if !reflect.DeepEqual(restorePayload.SelectedPerkIDs, restorePerkIDs) {
+	if !slices.Equal(restorePayload.SelectedPerkIDs, restorePerkIDs) {
 		t.Fatalf("restore perks = %#v, want %#v", restorePayload.SelectedPerkIDs, restorePerkIDs)
 	}
 	if !strings.Contains(err.Error(), "previous rune page restored") {
@@ -839,7 +839,7 @@ func TestApplyRunePageRestoresPreviousPageWhenApplyContextIsCanceledAfterDelete(
 	if restorePayload.Name != restoredOldName || !restorePayload.Current || restorePayload.PrimaryStyleID != domain.RuneStyleResolve {
 		t.Fatalf("unexpected restore payload: %#v", restorePayload)
 	}
-	if !reflect.DeepEqual(restorePayload.SelectedPerkIDs, restorePerkIDs) {
+	if !slices.Equal(restorePayload.SelectedPerkIDs, restorePerkIDs) {
 		t.Fatalf("restore perks = %#v, want %#v", restorePayload.SelectedPerkIDs, restorePerkIDs)
 	}
 	if !strings.Contains(err.Error(), "previous rune page restored") {

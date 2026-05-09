@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -332,7 +333,7 @@ func TestSyncUsesAdvancedCoachlessFilters(t *testing.T) {
 	if gotFilters.Patch.Major != 16 || gotFilters.Patch.Patch != 8 || gotFilters.Patch.PatchAdditions != PatchAdditionsDefault {
 		t.Fatalf("unexpected patch filter: %#v", gotFilters.Patch)
 	}
-	if !reflect.DeepEqual(gotFilters.LeagueTiers, []int{6, 7}) {
+	if !slices.Equal(gotFilters.LeagueTiers, []int{6, 7}) {
 		t.Fatalf("league tiers = %#v, want %#v", gotFilters.LeagueTiers, []int{6, 7})
 	}
 }
@@ -752,7 +753,7 @@ func TestResolveLeagueTierPreset(t *testing.T) {
 			if err != nil {
 				t.Fatalf("resolveLeagueTierPreset() error = %v", err)
 			}
-			if !reflect.DeepEqual(got, tt.want) {
+			if !slices.Equal(got, tt.want) {
 				t.Fatalf("tiers = %#v, want %#v", got, tt.want)
 			}
 		})
@@ -760,20 +761,17 @@ func TestResolveLeagueTierPreset(t *testing.T) {
 }
 
 func hasItemCall(calls []domain.ItemStatsRequest, itemType int, itemSlots []int, includeSupportItems bool) bool {
-	for _, call := range calls {
-		if call.ItemType == itemType &&
-			reflect.DeepEqual(call.ItemSlots, itemSlots) &&
-			call.IncludeSupportItems == includeSupportItems {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(calls, func(call domain.ItemStatsRequest) bool {
+		return call.ItemType == itemType &&
+			slices.Equal(call.ItemSlots, itemSlots) &&
+			call.IncludeSupportItems == includeSupportItems
+	})
 }
 
 func assertMatchups(t *testing.T, filters domain.CommonFilters, want []int) {
 	t.Helper()
 
-	if reflect.DeepEqual(filters.MatchupChampionIDs, want) {
+	if slices.Equal(filters.MatchupChampionIDs, want) {
 		return
 	}
 
@@ -783,7 +781,7 @@ func assertMatchups(t *testing.T, filters domain.CommonFilters, want []int) {
 func assertMatchupsFor(t *testing.T, filters domain.CommonFilters, want []int, label string) {
 	t.Helper()
 
-	if reflect.DeepEqual(filters.MatchupChampionIDs, want) {
+	if slices.Equal(filters.MatchupChampionIDs, want) {
 		return
 	}
 

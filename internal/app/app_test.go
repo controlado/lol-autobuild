@@ -433,7 +433,7 @@ func TestStateReadsChampSelectAndSelectionStaysInMemory(t *testing.T) {
 	})
 
 	state := app.State(context.Background())
-	if !reflect.DeepEqual(state.ChampSelect.EnemyChampions, []ChampionRef{
+	if !slices.Equal(state.ChampSelect.EnemyChampions, []ChampionRef{
 		{ID: 10, Name: "Kayle"},
 		{ID: 20, Name: "Nunu & Willump"},
 		{ID: 30, Name: "Ashe"},
@@ -445,7 +445,7 @@ func TestStateReadsChampSelectAndSelectionStaysInMemory(t *testing.T) {
 	}
 
 	selection := app.SetEnemyChampionSelection(context.Background(), []int{30, 20, 20, 999, 10})
-	if !reflect.DeepEqual(selection.SelectedEnemyChampionIDs, []int{10, 20, 30}) {
+	if !slices.Equal(selection.SelectedEnemyChampionIDs, []int{10, 20, 30}) {
 		t.Fatalf("selected ids = %+v, want LCU order [10 20 30]", selection.SelectedEnemyChampionIDs)
 	}
 	if store.saveCount() != 0 {
@@ -490,7 +490,7 @@ func TestRunSyncUsesSelectedEnemyChampionIDs(t *testing.T) {
 	}
 
 	call := waitForSyncCall(t, svc)
-	if !reflect.DeepEqual(call.req.MatchupChampionIDs, []int{20}) {
+	if !slices.Equal(call.req.MatchupChampionIDs, []int{20}) {
 		t.Fatalf("MatchupChampionIDs = %+v, want [20]", call.req.MatchupChampionIDs)
 	}
 }
@@ -533,7 +533,7 @@ func TestRunSyncKeepsSelectedEnemyChampionIDsWhenRefreshFails(t *testing.T) {
 	}
 
 	call := waitForSyncCall(t, svc)
-	if !reflect.DeepEqual(call.req.MatchupChampionIDs, []int{20}) {
+	if !slices.Equal(call.req.MatchupChampionIDs, []int{20}) {
 		t.Fatalf("MatchupChampionIDs = %+v, want [20]", call.req.MatchupChampionIDs)
 	}
 }
@@ -567,7 +567,7 @@ func TestSetEnemyChampionSelectionKeepsCachedRosterWhenRefreshFails(t *testing.T
 
 	champSelectErr = errors.New("champ select refresh failed")
 	selection := app.SetEnemyChampionSelection(context.Background(), []int{20})
-	if !reflect.DeepEqual(selection.SelectedEnemyChampionIDs, []int{20}) {
+	if !slices.Equal(selection.SelectedEnemyChampionIDs, []int{20}) {
 		t.Fatalf("selected ids = %+v, want [20]", selection.SelectedEnemyChampionIDs)
 	}
 }
@@ -613,7 +613,7 @@ func TestWatcherKeepsSelectedEnemyChampionIDsWhenRefreshFails(t *testing.T) {
 
 	call := waitForWatchCall(t, svc)
 	champSelectErr = errors.New("champ select refresh failed")
-	if got := call.req.SelectedMatchupChampionIDs(); !reflect.DeepEqual(got, []int{20}) {
+	if got := call.req.SelectedMatchupChampionIDs(); !slices.Equal(got, []int{20}) {
 		t.Fatalf("SelectedMatchupChampionIDs() = %+v, want [20]", got)
 	}
 
@@ -668,7 +668,7 @@ func TestSyncSummaryMapsKnownWarningsToMessageDescriptors(t *testing.T) {
 		{Key: MessageCodeSyncRunePageLimitReached, Fallback: autobuild.RunePageLimitReachedWarning},
 		{Fallback: "low sample"},
 	}
-	if !reflect.DeepEqual(summary.Warnings, wantWarnings) {
+	if !slices.Equal(summary.Warnings, wantWarnings) {
 		t.Fatalf("warnings = %+v, want %+v", summary.Warnings, wantWarnings)
 	}
 }

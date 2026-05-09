@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"reflect"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -281,7 +281,7 @@ func TestDetectEnemyChampionsPreservesLCUOrder(t *testing.T) {
 		t.Fatalf("SessionKey = %q, want game:9876", state.SessionKey)
 	}
 	want := []domain.ChampionRef{{ID: 777, Name: "Yone"}, {ID: 22, Name: "Ashe"}}
-	if !reflect.DeepEqual(state.EnemyChampions, want) {
+	if !slices.Equal(state.EnemyChampions, want) {
 		t.Fatalf("EnemyChampions = %+v, want %+v", state.EnemyChampions, want)
 	}
 }

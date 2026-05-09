@@ -2,7 +2,7 @@ package lcu
 
 import (
 	"context"
-	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -30,7 +30,7 @@ func TestForEachCandidateSkipsDuplicateResolvedEndpoints(t *testing.T) {
 	if success {
 		t.Fatal("forEachCandidate() success = true, want false")
 	}
-	if !reflect.DeepEqual(labels, []string{"process:1"}) {
+	if !slices.Equal(labels, []string{"process:1"}) {
 		t.Fatalf("candidate labels = %+v, want [process:1]", labels)
 	}
 }
@@ -58,7 +58,7 @@ func TestForEachCandidateKeepsDistinctCredentials(t *testing.T) {
 	if success {
 		t.Fatal("forEachCandidate() success = true, want false")
 	}
-	if !reflect.DeepEqual(labels, []string{"first", "second"}) {
+	if !slices.Equal(labels, []string{"first", "second"}) {
 		t.Fatalf("candidate labels = %+v, want [first second]", labels)
 	}
 }

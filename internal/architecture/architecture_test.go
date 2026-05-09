@@ -5,6 +5,7 @@ import (
 	"io"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -104,17 +105,12 @@ func listInternalPackages(t *testing.T) []packageMeta {
 func assertNoForbiddenDirectImports(t *testing.T, packages []packageMeta, rule importRule) {
 	t.Helper()
 
-	forbidden := make(map[string]struct{}, len(rule.Forbidden))
-	for _, importPath := range rule.Forbidden {
-		forbidden[importPath] = struct{}{}
-	}
-
 	for _, pkg := range packages {
 		if !matchesPackagePrefix(pkg.ImportPath, rule.PackagePrefix) {
 			continue
 		}
 		for _, importPath := range pkg.Imports {
-			if _, ok := forbidden[importPath]; ok {
+			if slices.Contains(rule.Forbidden, importPath) {
 				t.Fatalf("%s imports forbidden package %s", pkg.ImportPath, importPath)
 			}
 		}

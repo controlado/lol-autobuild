@@ -1,7 +1,7 @@
 package domain
 
 import (
-	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -13,7 +13,7 @@ func TestMatchupChampionIDsForRosterCapsBeforeRosterOrder(t *testing.T) {
 
 	got := MatchupChampionIDsForRoster(requested, roster, MaxMatchupChampionIDs)
 	want := []int{10, 20, 30, 40, 60}
-	if !reflect.DeepEqual(got, want) {
+	if !slices.Equal(got, want) {
 		t.Fatalf("MatchupChampionIDsForRoster() = %+v, want %+v", got, want)
 	}
 }
@@ -26,7 +26,7 @@ func TestMatchupChampionIDsForRosterFiltersInvalidAndDuplicateIDs(t *testing.T) 
 
 	got := MatchupChampionIDsForRoster(requested, roster, MaxMatchupChampionIDs)
 	want := []int{20, 10}
-	if !reflect.DeepEqual(got, want) {
+	if !slices.Equal(got, want) {
 		t.Fatalf("MatchupChampionIDsForRoster() = %+v, want %+v", got, want)
 	}
 }
