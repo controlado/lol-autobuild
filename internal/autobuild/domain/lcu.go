@@ -40,11 +40,22 @@ type ApplySummonerSpellsRequest struct {
 }
 
 type DetectedSelection struct {
-	ChampionID   int
-	ChampionName string
-	Position     Position
-	QueueID      int
-	IsAutofilled bool
+	ChampionID     int
+	ChampionName   string
+	Position       Position
+	QueueID        int
+	IsAutofilled   bool
+	EnemyChampions []ChampionRef
+}
+
+type ChampionRef struct {
+	ID   int
+	Name string
+}
+
+type ChampSelectState struct {
+	SessionKey     string
+	EnemyChampions []ChampionRef
 }
 
 type LCUEvent struct {

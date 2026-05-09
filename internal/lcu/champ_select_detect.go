@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 )
@@ -37,6 +38,7 @@ func (c *Client) DetectSelection(ctx context.Context) (detectedSelection domain.
 				return false
 			}
 			detectedSelection.ChampionName = c.resolveChampionName(ctx, info, detectedSelection.ChampionID)
+			detectedSelection.EnemyChampions = c.resolvedChampSelectState(ctx, info, session).EnemyChampions
 
 			return true
 		}
@@ -55,6 +57,34 @@ func (c *Client) DetectSelection(ctx context.Context) (detectedSelection domain.
 		domain.ErrPositionUnknown,
 		ErrPositionDetectionUnsupportedQueue,
 	)
+}
+
+func (c *Client) DetectEnemyChampions(ctx context.Context) (champSelectState domain.ChampSelectState, err error) {
+	if !c.Enabled {
+		return domain.ChampSelectState{}, ErrNotConfigured
+	}
+
+	var (
+		attempt          = newConnectionAttempt()
+		candidateHandler = func(info connectionInfo, candidateLabel string) (shouldTerminate bool) {
+			session, err := c.fetchChampSelectSession(ctx, info)
+			if err != nil {
+				attempt.observe(candidateLabel, nil, err)
+				return false
+			}
+
+			champSelectState = c.resolvedChampSelectState(ctx, info, session)
+			return true
+		}
+	)
+
+	if success, err := c.forEachCandidate(ctx, attempt, candidateHandler); err != nil {
+		return domain.ChampSelectState{}, err
+	} else if success {
+		return champSelectState, nil
+	}
+
+	return domain.ChampSelectState{}, attempt.finish(ErrChampSelectUnavailable)
 }
 
 func classifyDetectSelectionError(err error) error {
@@ -106,4 +136,18 @@ func isPositionDetectionQueueSupported(queueIDValue int) bool {
 	default:
 		return false
 	}
+}
+
+func (c *Client) resolveChampionRefs(ctx context.Context, info connectionInfo, champions []domain.ChampionRef) []domain.ChampionRef {
+	out := slices.Clone(champions)
+	for idx := range out {
+		out[idx].Name = c.resolveChampionName(ctx, info, out[idx].ID)
+	}
+	return out
+}
+
+func (c *Client) resolvedChampSelectState(ctx context.Context, info connectionInfo, session champSelectSession) domain.ChampSelectState {
+	state := champSelectStateFromSession(session)
+	state.EnemyChampions = c.resolveChampionRefs(ctx, info, state.EnemyChampions)
+	return state
 }

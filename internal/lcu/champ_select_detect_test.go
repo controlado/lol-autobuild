@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -237,6 +238,168 @@ func TestDetectSelectionContinuesWhenChampionNameLookupFails(t *testing.T) {
 	}
 	if selection.ChampionID != 240 || selection.ChampionName != "" {
 		t.Fatalf("selection = %#v, want champion 240 without name", selection)
+	}
+}
+
+func TestDetectEnemyChampionsPreservesLCUOrder(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/lol-champ-select/v1/session":
+			_, _ = fmt.Fprint(w, `{
+				"gameId":9876,
+				"queueId":420,
+				"localPlayerCellId":3,
+				"myTeam":[{"cellId":3,"championId":240,"assignedPosition":"TOP"}],
+				"theirTeam":[
+					{"cellId":6,"championId":777},
+					{"cellId":7,"championId":0},
+					{"cellId":8,"championId":22}
+				]
+			}`)
+		case "/lol-game-data/assets/v1/champion-summary.json":
+			_, _ = fmt.Fprint(w, `[{"id":22,"name":"Ashe"},{"id":777,"name":"Yone"}]`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	lockfilePath := filepath.Join(t.TempDir(), "lockfile")
+	writeLockfile(t, lockfilePath, mustServerPort(t, server.URL))
+
+	client := NewClient(true, lockfilePath)
+	client.discoverProcessConnections = func(context.Context) []connectionCandidate { return nil }
+
+	state, err := client.DetectEnemyChampions(context.Background())
+	if err != nil {
+		t.Fatalf("DetectEnemyChampions() error = %v", err)
+	}
+
+	if state.SessionKey != "game:9876" {
+		t.Fatalf("SessionKey = %q, want game:9876", state.SessionKey)
+	}
+	want := []domain.ChampionRef{{ID: 777, Name: "Yone"}, {ID: 22, Name: "Ashe"}}
+	if !reflect.DeepEqual(state.EnemyChampions, want) {
+		t.Fatalf("EnemyChampions = %+v, want %+v", state.EnemyChampions, want)
+	}
+}
+
+func TestChampSelectSessionKeyPrefersGameID(t *testing.T) {
+	t.Parallel()
+
+	session := champSelectSession{
+		GameID:            []byte(`9876`),
+		QueueID:           420,
+		LocalPlayerCellID: 3,
+		MyTeam:            []champSelectPlayerSelection{{CellID: 3, ChampionID: 240}},
+		TheirTeam:         []champSelectPlayerSelection{{CellID: 6, ChampionID: 777}},
+	}
+
+	if got := champSelectSessionKey(session); got != "game:9876" {
+		t.Fatalf("SessionKey = %q, want game:9876", got)
+	}
+}
+
+func TestChampSelectSessionKeyFallbackIgnoresChampionChanges(t *testing.T) {
+	t.Parallel()
+
+	base := champSelectSession{
+		QueueID:           420,
+		LocalPlayerCellID: 3,
+		MyTeam: []champSelectPlayerSelection{
+			{CellID: 3, ChampionID: 240},
+			{CellID: 2, ChampionID: 1},
+		},
+		TheirTeam: []champSelectPlayerSelection{
+			{CellID: 8, ChampionID: 22},
+			{CellID: 6, ChampionID: 777},
+		},
+	}
+	changedChampions := champSelectSession{
+		QueueID:           420,
+		LocalPlayerCellID: 3,
+		MyTeam: []champSelectPlayerSelection{
+			{CellID: 2, ChampionID: 99},
+			{CellID: 3, ChampionID: 157},
+		},
+		TheirTeam: []champSelectPlayerSelection{
+			{CellID: 6, ChampionID: 1},
+			{CellID: 8, ChampionID: 517},
+		},
+	}
+
+	want := "queue:420:local:3:my:2,3,:their:6,8,"
+	if got := champSelectSessionKey(base); got != want {
+		t.Fatalf("base SessionKey = %q, want %q", got, want)
+	}
+	if got := champSelectSessionKey(changedChampions); got != want {
+		t.Fatalf("changed SessionKey = %q, want %q", got, want)
+	}
+}
+
+func TestChampSelectSessionKeyFallbackUsesStableShape(t *testing.T) {
+	t.Parallel()
+
+	base := champSelectSession{
+		QueueID:           420,
+		LocalPlayerCellID: 3,
+		MyTeam:            []champSelectPlayerSelection{{CellID: 2}, {CellID: 3}},
+		TheirTeam:         []champSelectPlayerSelection{{CellID: 6}, {CellID: 8}},
+	}
+	baseKey := champSelectSessionKey(base)
+
+	tests := []struct {
+		name    string
+		session champSelectSession
+	}{
+		{
+			name: "queue changes",
+			session: champSelectSession{
+				QueueID:           440,
+				LocalPlayerCellID: 3,
+				MyTeam:            []champSelectPlayerSelection{{CellID: 2}, {CellID: 3}},
+				TheirTeam:         []champSelectPlayerSelection{{CellID: 6}, {CellID: 8}},
+			},
+		},
+		{
+			name: "local player changes",
+			session: champSelectSession{
+				QueueID:           420,
+				LocalPlayerCellID: 4,
+				MyTeam:            []champSelectPlayerSelection{{CellID: 2}, {CellID: 3}},
+				TheirTeam:         []champSelectPlayerSelection{{CellID: 6}, {CellID: 8}},
+			},
+		},
+		{
+			name: "ally cell changes",
+			session: champSelectSession{
+				QueueID:           420,
+				LocalPlayerCellID: 3,
+				MyTeam:            []champSelectPlayerSelection{{CellID: 2}, {CellID: 4}},
+				TheirTeam:         []champSelectPlayerSelection{{CellID: 6}, {CellID: 8}},
+			},
+		},
+		{
+			name: "enemy cell changes",
+			session: champSelectSession{
+				QueueID:           420,
+				LocalPlayerCellID: 3,
+				MyTeam:            []champSelectPlayerSelection{{CellID: 2}, {CellID: 3}},
+				TheirTeam:         []champSelectPlayerSelection{{CellID: 6}, {CellID: 9}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := champSelectSessionKey(tt.session); got == baseKey {
+				t.Fatalf("SessionKey = %q, want different from base %q", got, baseKey)
+			}
+		})
 	}
 }
 
