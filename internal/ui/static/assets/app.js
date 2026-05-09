@@ -33,6 +33,10 @@ const ids = {
   spellsSuboptions: document.getElementById("spellsSuboptions"),
   keepFlash: document.getElementById("keepFlash"),
   dryRun: document.getElementById("dryRun"),
+  enemyChampionList: document.getElementById("enemyChampionList"),
+  enemyChampionEmpty: document.getElementById("enemyChampionEmpty"),
+  enemySelectionCount: document.getElementById("enemySelectionCount"),
+  enemySelectionToggleButton: document.getElementById("enemySelectionToggleButton"),
   coachlessAuthStatus: document.getElementById("coachlessAuthStatus"),
   coachlessAuthPlan: document.getElementById("coachlessAuthPlan"),
   coachlessAuthExpires: document.getElementById("coachlessAuthExpires"),
@@ -75,6 +79,8 @@ let autoSaveTimer = 0;
 let autoSaveDirty = false;
 let autoSaveInFlight = null;
 let actionInFlight = false;
+let selectedEnemyChampionIDs = [];
+let enemySelectionSubmitting = false;
 
 let formsLoaded = false;
 
@@ -272,6 +278,7 @@ async function api(path, options = {}) {
 }
 
 const patchRangeValues = ["auto", "0", "1", "2", "3", "4"];
+const maxEnemyChampionSelections = 5;
 const leagueTierPresets = [
   { value: "gold_plus", key: "settings.rank_gold_plus", letter: "G", className: "rank-gold" },
   { value: "platinum_plus", key: "settings.rank_platinum_plus", letter: "P", className: "rank-platinum" },
@@ -574,6 +581,212 @@ function appliedText(value) {
   return value ? t("state.applied") : t("state.not_applied");
 }
 
+function uniquePositiveIDs(ids = []) {
+  const out = [];
+  const seen = new Set();
+  for (const rawID of ids) {
+    const id = Number(rawID);
+    if (!Number.isInteger(id) || id <= 0 || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function enemyChampionName(champion) {
+  const name = String(champion && champion.name ? champion.name : "").trim();
+  if (name) {
+    return name;
+  }
+
+  const id = Number(champion && champion.id ? champion.id : 0);
+  return id > 0 ? `#${id}` : t("state.not_detected");
+}
+
+function championIconURL(id) {
+  return `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/${encodeURIComponent(id)}.png`;
+}
+
+function initialForChampion(champion) {
+  const name = enemyChampionName(champion);
+  return name.replace(/^#/, "").slice(0, 1).toUpperCase() || "?";
+}
+
+function selectedEnemyIDsForRender(champSelect = {}) {
+  const enemies = Array.isArray(champSelect.enemy_champions) ? champSelect.enemy_champions : [];
+  const enemyIDs = new Set(enemies.map(champion => Number(champion.id)).filter(id => Number.isInteger(id) && id > 0));
+  const sourceIDs = enemySelectionSubmitting ? selectedEnemyChampionIDs : champSelect.selected_enemy_champion_ids;
+  return uniquePositiveIDs(sourceIDs).filter(id => enemyIDs.has(id)).slice(0, maxEnemyChampionSelections);
+}
+
+function visibleEnemyChampionIDs(champSelect = {}) {
+  const enemies = Array.isArray(champSelect.enemy_champions) ? champSelect.enemy_champions : [];
+  const out = [];
+  const seen = new Set();
+  for (const champion of enemies) {
+    const id = Number(champion && champion.id);
+    if (!Number.isInteger(id) || id <= 0 || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    out.push(id);
+    if (out.length === maxEnemyChampionSelections) {
+      break;
+    }
+  }
+  return out;
+}
+
+function allVisibleEnemyChampionsSelected(champSelect = {}) {
+  const visibleIDs = visibleEnemyChampionIDs(champSelect);
+  if (visibleIDs.length === 0) {
+    return false;
+  }
+
+  const selectedSet = new Set(selectedEnemyChampionIDs);
+  return visibleIDs.every(id => selectedSet.has(id));
+}
+
+function renderEnemyChampionSelector(champSelect = {}) {
+  const enemies = Array.isArray(champSelect.enemy_champions) ? champSelect.enemy_champions : [];
+  selectedEnemyChampionIDs = selectedEnemyIDsForRender(champSelect);
+  const selectedSet = new Set(selectedEnemyChampionIDs);
+  const visibleIDs = visibleEnemyChampionIDs(champSelect);
+  const allVisibleSelected = allVisibleEnemyChampionsSelected(champSelect);
+  const toggleLabelKey = allVisibleSelected ? "settings.enemy_clear_visible_aria" : "settings.enemy_select_visible_aria";
+  const toggleLabel = t(toggleLabelKey);
+
+  ids.enemySelectionCount.textContent = t("settings.enemy_selected_count", {
+    count: selectedEnemyChampionIDs.length,
+    max: maxEnemyChampionSelections
+  });
+  ids.enemyChampionEmpty.hidden = enemies.length > 0;
+  ids.enemySelectionToggleButton.disabled = enemySelectionSubmitting || visibleIDs.length === 0;
+  ids.enemySelectionToggleButton.textContent = allVisibleSelected ? "-" : "+";
+  ids.enemySelectionToggleButton.dataset.icon = allVisibleSelected ? "-" : "+";
+  ids.enemySelectionToggleButton.setAttribute("aria-label", toggleLabel);
+  ids.enemySelectionToggleButton.title = toggleLabel;
+
+  const buttons = enemies.map(champion => {
+    const championID = Number(champion.id);
+    const selected = selectedSet.has(championID);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `enemy-champion${selected ? " is-selected" : ""}`;
+    button.dataset.championId = String(championID);
+    button.setAttribute("aria-pressed", String(selected));
+    button.disabled = enemySelectionSubmitting || (!selected && selectedEnemyChampionIDs.length >= maxEnemyChampionSelections);
+
+    const icon = document.createElement("span");
+    icon.className = "enemy-champion-icon";
+
+    const img = document.createElement("img");
+    img.src = championIconURL(championID);
+    img.alt = "";
+    img.loading = "lazy";
+
+    const fallback = document.createElement("span");
+    fallback.className = "enemy-champion-fallback";
+    fallback.textContent = initialForChampion(champion);
+    fallback.hidden = true;
+
+    img.addEventListener("error", () => {
+      img.hidden = true;
+      fallback.hidden = false;
+    }, { once: true });
+
+    const label = document.createElement("span");
+    label.className = "enemy-champion-name";
+    label.title = enemyChampionName(champion);
+
+    const labelText = document.createElement("span");
+    labelText.className = "enemy-champion-name-text";
+    labelText.textContent = enemyChampionName(champion);
+    label.appendChild(labelText);
+
+    icon.replaceChildren(img, fallback);
+    button.replaceChildren(icon, label);
+    return button;
+  });
+
+  ids.enemyChampionList.replaceChildren(...buttons);
+}
+
+async function setEnemyChampionSelection(nextIDs) {
+  if (enemySelectionSubmitting) {
+    return;
+  }
+
+  enemySelectionSubmitting = true;
+  selectedEnemyChampionIDs = uniquePositiveIDs(nextIDs).slice(0, maxEnemyChampionSelections);
+  renderEnemyChampionSelector(currentState && currentState.champ_select ? currentState.champ_select : {});
+
+  try {
+    const selection = await api("/api/champ-select/enemy-selection", {
+      method: "POST",
+      body: JSON.stringify({ champion_ids: selectedEnemyChampionIDs })
+    });
+
+    selectedEnemyChampionIDs = uniquePositiveIDs(selection.selected_enemy_champion_ids);
+    if (currentState && currentState.champ_select) {
+      currentState.champ_select.selected_enemy_champion_ids = selectedEnemyChampionIDs;
+    }
+  } catch (error) {
+    setMessage({ key: error.code, fallback: error.fallback || error.message }, true);
+    enemySelectionSubmitting = false;
+    await loadState().catch(() => { });
+    return;
+  }
+
+  enemySelectionSubmitting = false;
+  if (currentState && currentState.champ_select) {
+    renderEnemyChampionSelector(currentState.champ_select);
+  }
+}
+
+function toggleEnemyChampionSelection(championID) {
+  if (enemySelectionSubmitting) {
+    return;
+  }
+
+  const id = Number(championID);
+  if (!Number.isInteger(id) || id <= 0) {
+    return;
+  }
+
+  const selectedSet = new Set(selectedEnemyChampionIDs);
+  if (selectedSet.has(id)) {
+    selectedSet.delete(id);
+  } else if (selectedSet.size < maxEnemyChampionSelections) {
+    selectedSet.add(id);
+  } else {
+    return;
+  }
+
+  setEnemyChampionSelection([...selectedSet]).catch(error => {
+    setMessage({ fallback: error.message }, true);
+  });
+}
+
+function toggleVisibleEnemyChampionSelection() {
+  if (enemySelectionSubmitting) {
+    return;
+  }
+
+  const champSelect = currentState && currentState.champ_select ? currentState.champ_select : {};
+  const visibleIDs = visibleEnemyChampionIDs(champSelect);
+  if (visibleIDs.length === 0) {
+    return;
+  }
+
+  const nextIDs = allVisibleEnemyChampionsSelected(champSelect) ? [] : visibleIDs;
+  setEnemyChampionSelection(nextIDs).catch(error => {
+    setMessage({ fallback: error.message }, true);
+  });
+}
+
 function championText(sync) {
   if (!sync) {
     return t("state.no_sync_yet");
@@ -766,11 +979,19 @@ function renderForms(state = {}) {
 }
 
 function renderState(state = {}) {
+  const previousChampSelect = currentState && currentState.champ_select ? currentState.champ_select : null;
   currentState = state;
+  if (enemySelectionSubmitting && previousChampSelect) {
+    currentState.champ_select = {
+      ...previousChampSelect,
+      selected_enemy_champion_ids: selectedEnemyChampionIDs
+    };
+  }
   const watcher = state.watcher || {};
   const lcu = state.lcu || {};
   renderUpdate(state);
   renderCoachlessAuth(state.coachless_auth || {});
+  renderEnemyChampionSelector(currentState.champ_select || {});
 
   watcherRunning = Boolean(watcher.running);
   ids.watcherButton.textContent = watcherRunning ? t("action.stop_watcher") : t("action.start_watcher");
@@ -1038,6 +1259,16 @@ ids.leagueTierPresetSlider.addEventListener("input", () => {
 ids.spellsOptionsButton.addEventListener("click", () => {
   const isOpen = ids.spellsOptionsButton.getAttribute("aria-expanded") === "true";
   setSpellsSuboptionsOpen(!isOpen);
+});
+ids.enemyChampionList.addEventListener("click", event => {
+  const button = event.target.closest(".enemy-champion");
+  if (!button || button.disabled) {
+    return;
+  }
+  toggleEnemyChampionSelection(button.dataset.championId);
+});
+ids.enemySelectionToggleButton.addEventListener("click", () => {
+  toggleVisibleEnemyChampionSelection();
 });
 ids.coachlessAuthLoginButton.addEventListener("click", () => {
   post("/api/coachless/auth/login", null, "coachless.auth_logging_in").catch(error => {

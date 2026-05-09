@@ -25,6 +25,7 @@ var staticFiles embed.FS
 type App interface {
 	State(ctx context.Context) app.ViewState
 	SaveSettings(ctx context.Context, settings app.Settings) (app.ViewState, app.UserMessage)
+	SetEnemyChampionSelection(ctx context.Context, championIDs []int) app.EnemyChampionSelectionState
 	LoginCoachlessAuth(ctx context.Context) (app.ViewState, app.UserMessage)
 	LogoutCoachlessAuth(ctx context.Context) (app.ViewState, app.UserMessage)
 	RunSync(ctx context.Context) (app.ViewState, app.UserMessage)
@@ -37,12 +38,17 @@ var (
 	invalidUITokenMessage   = app.UserMessage{Code: "ui.invalid_token", Text: "Invalid UI token."}
 	uiFileMissingMessage    = app.UserMessage{Code: "ui.file_missing", Text: "UI file is missing."}
 	invalidSettingsMessage  = app.UserMessage{Code: "ui.invalid_settings", Text: "Settings are invalid."}
+	invalidSelectionMessage = app.UserMessage{Code: "ui.invalid_selection", Text: "Enemy selection is invalid."}
 	methodNotAllowedMessage = app.UserMessage{Code: "ui.method_not_allowed", Text: "Method is not allowed."}
 )
 
 var i18nAssetPaths = map[string]string{
 	"/i18n/en.json":    "static/i18n/en.json",
 	"/i18n/pt-BR.json": "static/i18n/pt-BR.json",
+}
+
+type enemyChampionSelectionRequest struct {
+	ChampionIDs []int `json:"champion_ids"`
 }
 
 type staticAsset struct {
@@ -159,6 +165,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/i18n/", s.handleI18N)
 	mux.HandleFunc("/api/state", s.handleState)
 	mux.HandleFunc("/api/config", s.handleSaveConfig)
+	mux.HandleFunc("/api/champ-select/enemy-selection", s.handleSetEnemyChampionSelection)
 	mux.HandleFunc("/api/coachless/auth/login", s.handleCoachlessAuthLogin)
 	mux.HandleFunc("/api/coachless/auth/logout", s.handleCoachlessAuthLogout)
 	mux.HandleFunc("/api/sync", s.handleRunSync)
@@ -268,6 +275,20 @@ func (s *Server) handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, state)
+}
+
+func (s *Server) handleSetEnemyChampionSelection(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodPost) {
+		return
+	}
+
+	var req enemyChampionSelectionRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, invalidSelectionMessage)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, s.app.SetEnemyChampionSelection(r.Context(), req.ChampionIDs))
 }
 
 func (s *Server) handleCoachlessAuthLogin(w http.ResponseWriter, r *http.Request) {

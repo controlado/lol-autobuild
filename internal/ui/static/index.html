@@ -116,6 +116,28 @@
                 </div>
               </div>
             </div>
+            <div class="enemy-selector" aria-labelledby="enemyChampionsLabel">
+              <div class="enemy-selector-header">
+                <div class="label label-with-help" id="enemyChampionsLabel">
+                  <span data-i18n="settings.enemy_champions">Enemy champions</span>
+                  <button type="button" class="tooltip-trigger" aria-describedby="enemyChampionsTooltip"
+                    aria-label="Enemy champions help" data-i18n-aria-label="settings.enemy_champions_help_aria">?</button>
+                  <span class="tooltip-panel" id="enemyChampionsTooltip" role="tooltip">
+                    <span data-i18n="settings.enemy_champions_help">Pick up to 5 enemies. Coachless uses them for matchup
+                      data on the next sync.</span>
+                  </span>
+                </div>
+                <div class="enemy-selector-actions">
+                  <p class="tag" id="enemySelectionCount">0/5 selected</p>
+                  <button type="button" class="enemy-selection-toggle" id="enemySelectionToggleButton"
+                    aria-label="Select visible enemies" data-i18n-aria-label="settings.enemy_select_visible_aria"
+                    data-icon="+">+</button>
+                </div>
+              </div>
+              <div class="enemy-champion-list" id="enemyChampionList" role="list"></div>
+              <p class="help" id="enemyChampionEmpty" data-i18n="settings.enemy_champions_empty">No enemies
+                detected</p>
+            </div>
           </fieldset>
 
           <div class="actions">

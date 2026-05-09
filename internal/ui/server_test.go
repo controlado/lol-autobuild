@@ -8,7 +8,9 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -20,6 +22,9 @@ type stubApp struct {
 	state                    app.ViewState
 	saveState                *app.ViewState
 	saved                    app.Settings
+	saveCalls                int
+	selectedEnemyChampionIDs []int
+	runSyncCalls             int
 	loginCoachlessAuthCalls  int
 	logoutCoachlessAuthCalls int
 }
@@ -28,6 +33,7 @@ func (sa *stubApp) State(context.Context) (s app.ViewState) {
 	return sa.state
 }
 func (sa *stubApp) SaveSettings(_ context.Context, settings app.Settings) (s app.ViewState, msg app.UserMessage) {
+	sa.saveCalls++
 	sa.saved = settings
 	if sa.saveState != nil {
 		s = *sa.saveState
@@ -39,6 +45,10 @@ func (sa *stubApp) SaveSettings(_ context.Context, settings app.Settings) (s app
 	s = app.ViewState{Settings: settings}
 	return
 }
+func (sa *stubApp) SetEnemyChampionSelection(_ context.Context, championIDs []int) app.EnemyChampionSelectionState {
+	sa.selectedEnemyChampionIDs = slices.Clone(championIDs)
+	return app.EnemyChampionSelectionState{SelectedEnemyChampionIDs: slices.Clone(championIDs)}
+}
 func (sa *stubApp) LoginCoachlessAuth(context.Context) (s app.ViewState, msg app.UserMessage) {
 	sa.loginCoachlessAuthCalls++
 	return sa.state, app.UserMessage{}
@@ -48,6 +58,7 @@ func (sa *stubApp) LogoutCoachlessAuth(context.Context) (s app.ViewState, msg ap
 	return sa.state, app.UserMessage{}
 }
 func (sa *stubApp) RunSync(context.Context) (s app.ViewState, msg app.UserMessage) {
+	sa.runSyncCalls++
 	return
 }
 func (sa *stubApp) StartWatcher(context.Context) (s app.ViewState, msg app.UserMessage) {
@@ -521,6 +532,88 @@ func TestSaveConfigAcceptsAdvancedFilters(t *testing.T) {
 	}
 	if !state.Watcher.ConfigStale {
 		t.Fatal("response watcher.config_stale = false, want true")
+	}
+}
+
+func TestEnemySelectionEndpointIsLightweight(t *testing.T) {
+	recApp := &stubApp{}
+	server, err := NewServer(Options{
+		App:         recApp,
+		OpenBrowser: func(string) error { return nil },
+		Token:       "test-token",
+		Out:         io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/champ-select/enemy-selection?token=test-token", strings.NewReader(`{"champion_ids":[20,10]}`))
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST enemy selection status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if recApp.saveCalls != 0 {
+		t.Fatalf("save calls = %d, want 0", recApp.saveCalls)
+	}
+	if recApp.runSyncCalls != 0 {
+		t.Fatalf("run sync calls = %d, want 0", recApp.runSyncCalls)
+	}
+	if !reflect.DeepEqual(recApp.selectedEnemyChampionIDs, []int{20, 10}) {
+		t.Fatalf("selected ids = %+v, want [20 10]", recApp.selectedEnemyChampionIDs)
+	}
+
+	var body app.EnemyChampionSelectionState
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	if !reflect.DeepEqual(body.SelectedEnemyChampionIDs, []int{20, 10}) {
+		t.Fatalf("response selected ids = %+v, want [20 10]", body.SelectedEnemyChampionIDs)
+	}
+}
+
+func TestEnemySelectionEndpointErrors(t *testing.T) {
+	server, err := NewServer(Options{
+		App:         new(stubApp),
+		OpenBrowser: func(string) error { return nil },
+		Token:       "test-token",
+		Out:         io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+
+	tests := []struct {
+		name       string
+		method     string
+		target     string
+		body       string
+		wantStatus int
+		wantCode   string
+	}{
+		{name: "requires token", method: http.MethodPost, target: "/api/champ-select/enemy-selection", body: `{}`, wantStatus: http.StatusUnauthorized, wantCode: "ui.invalid_token"},
+		{name: "requires post", method: http.MethodGet, target: "/api/champ-select/enemy-selection?token=test-token", wantStatus: http.StatusMethodNotAllowed, wantCode: "ui.method_not_allowed"},
+		{name: "rejects unknown fields", method: http.MethodPost, target: "/api/champ-select/enemy-selection?token=test-token", body: `{"unknown":true}`, wantStatus: http.StatusBadRequest, wantCode: "ui.invalid_selection"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.target, strings.NewReader(tt.body))
+			rec := httptest.NewRecorder()
+			server.Handler().ServeHTTP(rec, req)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("%s %s status = %d, want %d: %s", tt.method, tt.target, rec.Code, tt.wantStatus, rec.Body.String())
+			}
+
+			var body map[string]string
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			if body["error_code"] != tt.wantCode {
+				t.Fatalf("error_code = %q, want %q", body["error_code"], tt.wantCode)
+			}
+		})
 	}
 }
 
