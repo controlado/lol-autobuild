@@ -54,7 +54,7 @@ func (c *Client) ConnectionStatus(ctx context.Context) ConnectionStatus {
 }
 
 func (c *Client) probeConnection(ctx context.Context, info connectionInfo) error {
-	if err := doRequest(ctx, c, info, http.MethodGet, "/riotclient/ux-state", nil); err != nil {
+	if err := doRequest(ctx, c, info, http.MethodGet, riotClientUXStateURI, nil); err != nil {
 		if errors.Is(err, errHTTPNotFound) {
 			return nil
 		}
