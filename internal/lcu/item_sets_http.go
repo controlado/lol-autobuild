@@ -8,7 +8,7 @@ import (
 )
 
 func (c *Client) fetchCurrentSummoner(ctx context.Context, info connectionInfo) (currentSummonerInfo, error) {
-	summonerInfo, err := doJSON[currentSummonerInfo](ctx, c, info, http.MethodGet, currentSummonerURI, nil)
+	summonerInfo, err := doJSON[currentSummonerInfo](ctx, c, info, http.MethodGet, currentSummonerPath, nil)
 	if err != nil {
 		return currentSummonerInfo{}, fmt.Errorf("%w: %v", ErrItemSetApplyFailed, err)
 	}
@@ -24,7 +24,7 @@ func (c *Client) fetchCurrentSummoner(ctx context.Context, info connectionInfo) 
 }
 
 func (c *Client) fetchItemSets(ctx context.Context, info connectionInfo, summonerID int64) (itemSetsPayload, error) {
-	endpoint := fmt.Sprintf(itemSetsURIFormat, summonerID)
+	endpoint := fmt.Sprintf(itemSetsPathFormat, summonerID)
 	itemSetsResult, err := doJSON[itemSetsPayload](ctx, c, info, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return itemSetsPayload{}, fmt.Errorf("%w: %v", ErrItemSetApplyFailed, err)
@@ -38,7 +38,7 @@ func (c *Client) fetchItemSets(ctx context.Context, info connectionInfo, summone
 }
 
 func (c *Client) putItemSets(ctx context.Context, info connectionInfo, summonerID int64, payload itemSetsPayload) error {
-	endpoint := fmt.Sprintf(itemSetsURIFormat, summonerID)
+	endpoint := fmt.Sprintf(itemSetsPathFormat, summonerID)
 	if err := doRequest(ctx, c, info, http.MethodPut, endpoint, payload); err != nil {
 		return fmt.Errorf("%w: %v", ErrItemSetApplyFailed, err)
 	}

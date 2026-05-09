@@ -38,7 +38,7 @@ func TestWatchEventsWithNoticesInterpretsEventsAndStopsOnCancel(t *testing.T) {
 					http.Error(w, "unauthorized", http.StatusUnauthorized)
 					return
 				}
-				if r.URL.Path == champSelectSessionURI {
+				if r.URL.Path == champSelectSessionPath {
 					http.NotFound(w, r)
 					return
 				}
@@ -151,7 +151,7 @@ func TestWatchEventsWithNoticesReconnectsAfterDisconnect(t *testing.T) {
 	var connCount atomic.Int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == champSelectSessionURI {
+		if r.URL.Path == champSelectSessionPath {
 			http.NotFound(w, r)
 			return
 		}
@@ -241,7 +241,7 @@ func TestWatchEventsWithNoticesEmitsConnectedAndFinalizationSnapshot(t *testing.
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == champSelectSessionURI {
+		if r.URL.Path == champSelectSessionPath {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"gameId":9876,"timer":{"phase":"FINALIZATION"},"queueId":420,"localPlayerCellId":1,"myTeam":[]}`))
 			return
@@ -330,7 +330,7 @@ func TestWatchEventsWithNoticesReportsReconnectAndContinues(t *testing.T) {
 	var connCount atomic.Int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == champSelectSessionURI {
+		if r.URL.Path == champSelectSessionPath {
 			http.NotFound(w, r)
 			return
 		}

@@ -10,7 +10,7 @@ import (
 )
 
 func (c *Client) fetchChampSelectSession(ctx context.Context, info connectionInfo) (champSelectSession, error) {
-	session, err := doJSON[champSelectSession](ctx, c, info, http.MethodGet, champSelectSessionURI, nil)
+	session, err := doJSON[champSelectSession](ctx, c, info, http.MethodGet, champSelectSessionPath, nil)
 	if err != nil {
 		if errors.Is(err, errHTTPNotFound) {
 			return champSelectSession{}, ErrChampSelectUnavailable
@@ -21,7 +21,7 @@ func (c *Client) fetchChampSelectSession(ctx context.Context, info connectionInf
 }
 
 func (c *Client) fetchChampSelectSessionEventData(ctx context.Context, info connectionInfo) (json.RawMessage, error) {
-	raw, err := doJSON[json.RawMessage](ctx, c, info, http.MethodGet, champSelectSessionURI, nil)
+	raw, err := doJSON[json.RawMessage](ctx, c, info, http.MethodGet, champSelectSessionPath, nil)
 	if err != nil {
 		if errors.Is(err, errHTTPNotFound) {
 			return nil, ErrChampSelectUnavailable
@@ -33,7 +33,7 @@ func (c *Client) fetchChampSelectSessionEventData(ctx context.Context, info conn
 
 func (c *Client) patchSelectionSpells(ctx context.Context, info connectionInfo, spell1ID int, spell2ID int) error {
 	var (
-		endpoint = champSelectMySelectionURI
+		endpoint = champSelectMySelectionPath
 		payload  = champSelectMySelectionPatch{Spell1ID: spell1ID, Spell2ID: spell2ID}
 	)
 	if err := doRequest(ctx, c, info, http.MethodPatch, endpoint, payload); err != nil {

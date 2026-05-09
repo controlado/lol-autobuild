@@ -14,7 +14,7 @@ type championNamePayload struct {
 }
 
 func (c *Client) fetchChampionSummaryNames(ctx context.Context, info connectionInfo) (map[int]string, error) {
-	raw, err := doJSON[json.RawMessage](ctx, c, info, http.MethodGet, championSummaryURI, nil)
+	raw, err := doJSON[json.RawMessage](ctx, c, info, http.MethodGet, championSummaryPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -27,7 +27,7 @@ func (c *Client) fetchChampionSummaryNames(ctx context.Context, info connectionI
 }
 
 func (c *Client) fetchChampionName(ctx context.Context, info connectionInfo, championID int) (string, error) {
-	path := fmt.Sprintf(championDetailsURIFormat, championID)
+	path := fmt.Sprintf(championDetailsPathFormat, championID)
 	payload, err := doJSON[championNamePayload](ctx, c, info, http.MethodGet, path, nil)
 	if err != nil {
 		return "", err

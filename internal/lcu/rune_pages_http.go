@@ -11,7 +11,7 @@ import (
 )
 
 func (c *Client) fetchCurrentRunePage(ctx context.Context, info connectionInfo) (runePage, bool, error) {
-	page, err := doJSON[runePage](ctx, c, info, http.MethodGet, currentRunePageURI, nil)
+	page, err := doJSON[runePage](ctx, c, info, http.MethodGet, currentRunePagePath, nil)
 	if err != nil {
 		if errors.Is(err, errHTTPNotFound) {
 			return runePage{}, false, nil
@@ -22,7 +22,7 @@ func (c *Client) fetchCurrentRunePage(ctx context.Context, info connectionInfo) 
 }
 
 func (c *Client) fetchRunePages(ctx context.Context, info connectionInfo) ([]runePage, error) {
-	pages, err := doJSON[[]runePage](ctx, c, info, http.MethodGet, runePagesURI, nil)
+	pages, err := doJSON[[]runePage](ctx, c, info, http.MethodGet, runePagesPath, nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: fetch rune pages: %v", ErrRunePageApplyFailed, err)
 	}
@@ -30,7 +30,7 @@ func (c *Client) fetchRunePages(ctx context.Context, info connectionInfo) ([]run
 }
 
 func (c *Client) deleteRunePage(ctx context.Context, info connectionInfo, pageID int) error {
-	endpoint := fmt.Sprintf(runePageURIFormat, pageID)
+	endpoint := fmt.Sprintf(runePagePathFormat, pageID)
 	if err := doRequest(ctx, c, info, http.MethodDelete, endpoint, nil); err != nil {
 		return fmt.Errorf("%w: delete rune page: %v", ErrRunePageApplyFailed, err)
 	}
@@ -38,7 +38,7 @@ func (c *Client) deleteRunePage(ctx context.Context, info connectionInfo, pageID
 }
 
 func (c *Client) createRunePage(ctx context.Context, info connectionInfo, payload runePageCreateRequest) error {
-	if err := doRequest(ctx, c, info, http.MethodPost, runePagesURI, payload); err != nil {
+	if err := doRequest(ctx, c, info, http.MethodPost, runePagesPath, payload); err != nil {
 		if isRunePageLimitReached(err) {
 			return fmt.Errorf("%w: create rune page failed LCU validation: %w: %v", ErrRunePageApplyFailed, domain.ErrRunePageLimitReached, err)
 		}

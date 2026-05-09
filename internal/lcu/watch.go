@@ -215,7 +215,7 @@ func (c *Client) emitSessionSnapshot(ctx context.Context, info connectionInfo, s
 			Message:      "Champ select snapshot is unavailable; waiting for websocket events.",
 			Err:          err,
 			Source:       source,
-			URI:          champSelectSessionURI,
+			URI:          champSelectSessionPath,
 			ConnectionID: connectionID,
 		})
 	}
@@ -225,7 +225,7 @@ func (c *Client) emitSessionSnapshot(ctx context.Context, info connectionInfo, s
 		Kind:         domain.LCUWatchNoticeSnapshotWaiting,
 		Message:      "Champ select snapshot is not finalized; waiting for websocket events.",
 		Source:       source,
-		URI:          champSelectSessionURI,
+		URI:          champSelectSessionPath,
 		Phase:        phase,
 		ConnectionID: connectionID,
 	}
@@ -244,7 +244,7 @@ func (c *Client) emitSessionSnapshot(ctx context.Context, info connectionInfo, s
 	select {
 	case out <- domain.LCUEvent{
 		EventType:        snapshotEventType,
-		URI:              champSelectSessionURI,
+		URI:              champSelectSessionPath,
 		Source:           domain.LCUEventSourceSnapshot,
 		ConnectionID:     connectionID,
 		ChampSelectPhase: phase,
