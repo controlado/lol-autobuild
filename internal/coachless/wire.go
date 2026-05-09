@@ -6,6 +6,11 @@ import (
 	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 )
 
+type apiRefreshResponse struct {
+	AccessToken  string `json:"accessToken"`
+	RefreshToken string `json:"refreshToken"`
+}
+
 type apiPatchInfo struct {
 	Label      string `json:"label"`
 	Major      int    `json:"major"`

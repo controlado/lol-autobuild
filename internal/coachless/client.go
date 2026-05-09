@@ -30,11 +30,6 @@ func NewClient(baseURL string, timeout time.Duration) *Client {
 	}
 }
 
-type apiRefreshResponse struct {
-	AccessToken  string `json:"accessToken"`
-	RefreshToken string `json:"refreshToken"`
-}
-
 func (c *Client) Refresh(ctx context.Context, refreshToken string) (domain.TokenPair, error) {
 	if strings.TrimSpace(refreshToken) == "" {
 		return domain.TokenPair{}, errors.New("refresh token is required")
