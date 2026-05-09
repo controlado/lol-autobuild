@@ -14,6 +14,7 @@ import (
 	"github.com/chromedp/chromedp"
 
 	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
+	"github.com/controlado/lol-autobuild/internal/coachless"
 )
 
 var ErrAccessTokenUnavailable = errors.New("unable to acquire valid access token")
@@ -75,7 +76,7 @@ func (s BrowserSource) Acquire(ctx context.Context) (domain.TokenPair, error) {
 	chromedp.ListenTarget(ctx, func(ev any) {
 		switch e := ev.(type) {
 		case *network.EventResponseReceived:
-			if e.Response == nil || !strings.Contains(e.Response.URL, "/api/Auth/login") {
+			if e.Response == nil || !strings.Contains(e.Response.URL, coachless.AuthLoginPath) {
 				return
 			}
 			go onAuthResponse(e)

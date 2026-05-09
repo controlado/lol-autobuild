@@ -36,12 +36,11 @@ func (c *Client) Refresh(ctx context.Context, refreshToken string) (domain.Token
 	}
 
 	var (
-		endpoint = "/api/Auth/refresh"
-		reqBody  = map[string]string{"refreshToken": refreshToken}
-		out      apiRefreshResponse
+		reqBody = map[string]string{"refreshToken": refreshToken}
+		out     apiRefreshResponse
 	)
 
-	if err := c.doJSON(ctx, http.MethodPost, endpoint, "", reqBody, &out); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, authRefreshPath, "", reqBody, &out); err != nil {
 		return domain.TokenPair{}, err
 	}
 
@@ -58,12 +57,9 @@ func (c *Client) Refresh(ctx context.Context, refreshToken string) (domain.Token
 }
 
 func (c *Client) GetPatches(ctx context.Context, accessToken string) ([]domain.PatchInfo, error) {
-	var (
-		endpoint = "/api/ChampionWinprob/GetPatches"
-		out      []apiPatchInfo
-	)
+	var out []apiPatchInfo
 
-	if err := c.doJSON(ctx, http.MethodGet, endpoint, accessToken, nil, &out); err != nil {
+	if err := c.doJSON(ctx, http.MethodGet, championWinprobPatchesPath, accessToken, nil, &out); err != nil {
 		return nil, err
 	}
 
@@ -71,12 +67,9 @@ func (c *Client) GetPatches(ctx context.Context, accessToken string) ([]domain.P
 }
 
 func (c *Client) GetKeystoneData(ctx context.Context, accessToken string, req domain.KeystoneRequest) ([]domain.KeystoneStat, error) {
-	var (
-		endpoint = "/api/Rune/GetKeystoneData"
-		out      []apiKeystoneStat
-	)
+	var out []apiKeystoneStat
 
-	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, apiKeystoneRequestFromDomain(req), &out); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, runeKeystoneDataPath, accessToken, apiKeystoneRequestFromDomain(req), &out); err != nil {
 		return nil, err
 	}
 
@@ -84,12 +77,9 @@ func (c *Client) GetKeystoneData(ctx context.Context, accessToken string, req do
 }
 
 func (c *Client) GetSecondaryTreePlaycount(ctx context.Context, accessToken string, req domain.SecondaryTreePlaycountRequest) ([]domain.RuneTreePlaycount, error) {
-	var (
-		endpoint = "/api/Rune/GetSecondaryTreePlaycount"
-		out      []apiRuneTreePlaycount
-	)
+	var out []apiRuneTreePlaycount
 
-	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, apiSecondaryTreePlaycountRequestFromDomain(req), &out); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, runeSecondaryTreePlaycountPath, accessToken, apiSecondaryTreePlaycountRequestFromDomain(req), &out); err != nil {
 		return nil, err
 	}
 
@@ -97,12 +87,9 @@ func (c *Client) GetSecondaryTreePlaycount(ctx context.Context, accessToken stri
 }
 
 func (c *Client) GetRuneStatsForKeystoneAndTree(ctx context.Context, accessToken string, req domain.RuneStatsRequest) (domain.RuneStatsByRow, error) {
-	var (
-		endpoint = "/api/Rune/GetRunesForKeystoneAndTree"
-		out      apiRuneStatsByRow
-	)
+	var out apiRuneStatsByRow
 
-	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, apiRuneStatsRequestFromDomain(req), &out); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, runeStatsForKeystoneAndTreePath, accessToken, apiRuneStatsRequestFromDomain(req), &out); err != nil {
 		return domain.RuneStatsByRow{}, err
 	}
 
@@ -110,12 +97,9 @@ func (c *Client) GetRuneStatsForKeystoneAndTree(ctx context.Context, accessToken
 }
 
 func (c *Client) GetShardStatsForKeystoneAndTree(ctx context.Context, accessToken string, req domain.ShardStatsRequest) (domain.ShardStats, error) {
-	var (
-		endpoint = "/api/Rune/GetShardsForKeystoneAndTree"
-		out      apiShardStats
-	)
+	var out apiShardStats
 
-	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, apiShardStatsRequestFromDomain(req), &out); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, runeShardsForKeystoneAndTreePath, accessToken, apiShardStatsRequestFromDomain(req), &out); err != nil {
 		return domain.ShardStats{}, err
 	}
 
@@ -123,12 +107,9 @@ func (c *Client) GetShardStatsForKeystoneAndTree(ctx context.Context, accessToke
 }
 
 func (c *Client) GetSummonerSpellStats(ctx context.Context, accessToken string, req domain.SummonerSpellStatsRequest) ([]domain.SummonerSpellStat, error) {
-	var (
-		out      []apiSummonerSpellStat
-		endpoint = "/api/ChampionWinprob/GetGlobalSummonerSpellStatistics"
-	)
+	var out []apiSummonerSpellStat
 
-	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, apiSummonerSpellStatsRequestFromDomain(req), &out); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, championWinprobSummonerSpellStatsPath, accessToken, apiSummonerSpellStatsRequestFromDomain(req), &out); err != nil {
 		return nil, err
 	}
 
@@ -136,12 +117,9 @@ func (c *Client) GetSummonerSpellStats(ctx context.Context, accessToken string, 
 }
 
 func (c *Client) GetItemStats(ctx context.Context, accessToken string, req domain.ItemStatsRequest) ([]domain.ItemStat, error) {
-	var (
-		out      []apiItemStat
-		endpoint = "/api/ChampionWinprob/GetGlobalItemStatistics"
-	)
+	var out []apiItemStat
 
-	if err := c.doJSON(ctx, http.MethodPost, endpoint, accessToken, apiItemStatsRequestFromDomain(req), &out); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, championWinprobItemStatsPath, accessToken, apiItemStatsRequestFromDomain(req), &out); err != nil {
 		return nil, err
 	}
 
