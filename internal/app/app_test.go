@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/controlado/lol-autobuild/internal/autobuild"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 )
 
 const testTimeout = 2 * time.Second
@@ -18,6 +20,7 @@ type testAppOptions struct {
 	cfg            RuntimeConfig
 	serviceFactory ServiceFactory
 	lcuStatus      LCUStatusProvider
+	champSelect    ChampSelectProvider
 	coachlessAuth  CoachlessAuthSession
 	updateChecker  UpdateChecker
 	configStore    ConfigStore
@@ -50,6 +53,7 @@ func newTestApp(t *testing.T, opts testAppOptions) *App {
 	app, err := New(Options{
 		ServiceFactory:   opts.serviceFactory,
 		LCUStatus:        opts.lcuStatus,
+		ChampSelect:      opts.champSelect,
 		CoachlessAuth:    opts.coachlessAuth,
 		UpdateChecker:    opts.updateChecker,
 		ConfigStore:      opts.configStore,
@@ -407,6 +411,251 @@ func TestStateBoundsLCUStatusRefresh(t *testing.T) {
 	assertMessageDescriptor(t, state.LCU.Message, "", context.DeadlineExceeded.Error())
 }
 
+func TestStateReadsChampSelectAndSelectionStaysInMemory(t *testing.T) {
+	cfg := testConfig()
+	cfg.Settings.LCUEnabled = true
+	store := &recordingConfigStore{}
+
+	champSelectState := domain.ChampSelectState{
+		SessionKey: "game:1",
+		EnemyChampions: []domain.ChampionRef{
+			{ID: 10, Name: "Kayle"},
+			{ID: 20, Name: "Nunu & Willump"},
+			{ID: 30, Name: "Ashe"},
+		},
+	}
+	app := newTestApp(t, testAppOptions{
+		cfg:         cfg,
+		configStore: store,
+		champSelect: func(context.Context, RuntimeConfig) (domain.ChampSelectState, error) {
+			return champSelectState, nil
+		},
+	})
+
+	state := app.State(context.Background())
+	if !reflect.DeepEqual(state.ChampSelect.EnemyChampions, []ChampionRef{
+		{ID: 10, Name: "Kayle"},
+		{ID: 20, Name: "Nunu & Willump"},
+		{ID: 30, Name: "Ashe"},
+	}) {
+		t.Fatalf("enemy champions = %+v", state.ChampSelect.EnemyChampions)
+	}
+	if len(state.ChampSelect.SelectedEnemyChampionIDs) != 0 {
+		t.Fatalf("selected ids = %+v, want empty", state.ChampSelect.SelectedEnemyChampionIDs)
+	}
+
+	selection := app.SetEnemyChampionSelection(context.Background(), []int{30, 20, 20, 999, 10})
+	if !reflect.DeepEqual(selection.SelectedEnemyChampionIDs, []int{10, 20, 30}) {
+		t.Fatalf("selected ids = %+v, want LCU order [10 20 30]", selection.SelectedEnemyChampionIDs)
+	}
+	if store.saveCount() != 0 {
+		t.Fatalf("config saves = %d, want 0", store.saveCount())
+	}
+
+	champSelectState = domain.ChampSelectState{
+		SessionKey:     "game:2",
+		EnemyChampions: []domain.ChampionRef{{ID: 20, Name: "Nunu & Willump"}},
+	}
+	state = app.State(context.Background())
+	if len(state.ChampSelect.SelectedEnemyChampionIDs) != 0 {
+		t.Fatalf("selected ids after new session = %+v, want empty", state.ChampSelect.SelectedEnemyChampionIDs)
+	}
+}
+
+func TestRunSyncUsesSelectedEnemyChampionIDs(t *testing.T) {
+	cfg := testConfig()
+	cfg.Settings.LCUEnabled = true
+
+	champSelectState := domain.ChampSelectState{
+		SessionKey: "game:1",
+		EnemyChampions: []domain.ChampionRef{
+			{ID: 10, Name: "Kayle"},
+			{ID: 20, Name: "Nunu & Willump"},
+		},
+	}
+	svc := newStubService()
+	app := newTestApp(t, testAppOptions{
+		cfg: cfg,
+		champSelect: func(context.Context, RuntimeConfig) (domain.ChampSelectState, error) {
+			return champSelectState, nil
+		},
+		serviceFactory: func(RuntimeConfig) (autobuild.Service, error) {
+			return svc, nil
+		},
+	})
+
+	app.SetEnemyChampionSelection(context.Background(), []int{20})
+	if _, message := app.RunSync(context.Background()); !message.Empty() {
+		t.Fatalf("RunSync() message = %q, want empty", message.Text)
+	}
+
+	call := waitForSyncCall(t, svc)
+	if !reflect.DeepEqual(call.req.MatchupChampionIDs, []int{20}) {
+		t.Fatalf("MatchupChampionIDs = %+v, want [20]", call.req.MatchupChampionIDs)
+	}
+}
+
+func TestRunSyncKeepsSelectedEnemyChampionIDsWhenRefreshFails(t *testing.T) {
+	cfg := testConfig()
+	cfg.Settings.LCUEnabled = true
+
+	champSelectState := domain.ChampSelectState{
+		SessionKey: "game:1",
+		EnemyChampions: []domain.ChampionRef{
+			{ID: 10, Name: "Kayle"},
+			{ID: 20, Name: "Nunu & Willump"},
+		},
+	}
+	var champSelectErr error
+	svc := newStubService()
+	app := newTestApp(t, testAppOptions{
+		cfg: cfg,
+		champSelect: func(context.Context, RuntimeConfig) (domain.ChampSelectState, error) {
+			if champSelectErr != nil {
+				return domain.ChampSelectState{}, champSelectErr
+			}
+			return champSelectState, nil
+		},
+		serviceFactory: func(RuntimeConfig) (autobuild.Service, error) {
+			return svc, nil
+		},
+	})
+
+	app.SetEnemyChampionSelection(context.Background(), []int{20})
+	champSelectErr = errors.New("champ select refresh failed")
+	state := app.State(context.Background())
+	if len(state.ChampSelect.EnemyChampions) != 0 {
+		t.Fatalf("enemy champions after failed state refresh = %+v, want empty", state.ChampSelect.EnemyChampions)
+	}
+
+	if _, message := app.RunSync(context.Background()); !message.Empty() {
+		t.Fatalf("RunSync() message = %q, want empty", message.Text)
+	}
+
+	call := waitForSyncCall(t, svc)
+	if !reflect.DeepEqual(call.req.MatchupChampionIDs, []int{20}) {
+		t.Fatalf("MatchupChampionIDs = %+v, want [20]", call.req.MatchupChampionIDs)
+	}
+}
+
+func TestSetEnemyChampionSelectionKeepsCachedRosterWhenRefreshFails(t *testing.T) {
+	cfg := testConfig()
+	cfg.Settings.LCUEnabled = true
+
+	champSelectState := domain.ChampSelectState{
+		SessionKey: "game:1",
+		EnemyChampions: []domain.ChampionRef{
+			{ID: 10, Name: "Kayle"},
+			{ID: 20, Name: "Nunu & Willump"},
+		},
+	}
+	var champSelectErr error
+	app := newTestApp(t, testAppOptions{
+		cfg: cfg,
+		champSelect: func(context.Context, RuntimeConfig) (domain.ChampSelectState, error) {
+			if champSelectErr != nil {
+				return domain.ChampSelectState{}, champSelectErr
+			}
+			return champSelectState, nil
+		},
+	})
+
+	state := app.State(context.Background())
+	if len(state.ChampSelect.EnemyChampions) != 2 {
+		t.Fatalf("enemy champions = %+v, want cached roster", state.ChampSelect.EnemyChampions)
+	}
+
+	champSelectErr = errors.New("champ select refresh failed")
+	selection := app.SetEnemyChampionSelection(context.Background(), []int{20})
+	if !reflect.DeepEqual(selection.SelectedEnemyChampionIDs, []int{20}) {
+		t.Fatalf("selected ids = %+v, want [20]", selection.SelectedEnemyChampionIDs)
+	}
+}
+
+func TestWatcherKeepsSelectedEnemyChampionIDsWhenRefreshFails(t *testing.T) {
+	cfg := testConfig()
+	cfg.Settings.LCUEnabled = true
+
+	champSelectState := domain.ChampSelectState{
+		SessionKey:     "game:1",
+		EnemyChampions: []domain.ChampionRef{{ID: 20, Name: "Nunu & Willump"}},
+	}
+	var champSelectErr error
+	svc := newStubService()
+	watchStopped := make(chan struct{})
+	svc.watchFn = func(ctx context.Context, req autobuild.WatchRequest) error {
+		<-ctx.Done()
+		close(watchStopped)
+		return nil
+	}
+
+	app := newTestApp(t, testAppOptions{
+		cfg: cfg,
+		champSelect: func(context.Context, RuntimeConfig) (domain.ChampSelectState, error) {
+			if champSelectErr != nil {
+				return domain.ChampSelectState{}, champSelectErr
+			}
+			return champSelectState, nil
+		},
+		serviceFactory: func(RuntimeConfig) (autobuild.Service, error) {
+			return svc, nil
+		},
+	})
+
+	app.SetEnemyChampionSelection(context.Background(), []int{20})
+	state, message := app.StartWatcher(context.Background())
+	if !message.Empty() {
+		t.Fatalf("StartWatcher() message = %q, want empty", message.Text)
+	}
+	if !state.Watcher.Running {
+		t.Fatal("expected watcher to be running")
+	}
+
+	call := waitForWatchCall(t, svc)
+	champSelectErr = errors.New("champ select refresh failed")
+	if got := call.req.SelectedMatchupChampionIDs(); !reflect.DeepEqual(got, []int{20}) {
+		t.Fatalf("SelectedMatchupChampionIDs() = %+v, want [20]", got)
+	}
+
+	app.StopWatcher(context.Background())
+	waitForSignal(t, watchStopped, "watch stop")
+}
+
+func TestRunSyncDropsSelectedEnemyChampionIDsWhenLCUDisabled(t *testing.T) {
+	cfg := testConfig()
+	cfg.Settings.LCUEnabled = true
+
+	champSelectState := domain.ChampSelectState{
+		SessionKey:     "game:1",
+		EnemyChampions: []domain.ChampionRef{{ID: 20, Name: "Nunu & Willump"}},
+	}
+	svc := newStubService()
+	app := newTestApp(t, testAppOptions{
+		cfg: cfg,
+		champSelect: func(context.Context, RuntimeConfig) (domain.ChampSelectState, error) {
+			return champSelectState, nil
+		},
+		serviceFactory: func(RuntimeConfig) (autobuild.Service, error) {
+			return svc, nil
+		},
+	})
+
+	app.SetEnemyChampionSelection(context.Background(), []int{20})
+	settings := cfg.Settings
+	settings.LCUEnabled = false
+	if _, message := app.SaveSettings(context.Background(), settings); !message.Empty() {
+		t.Fatalf("SaveSettings() message = %q, want empty", message.Text)
+	}
+	if _, message := app.RunSync(context.Background()); !message.Empty() {
+		t.Fatalf("RunSync() message = %q, want empty", message.Text)
+	}
+
+	call := waitForSyncCall(t, svc)
+	if len(call.req.MatchupChampionIDs) != 0 {
+		t.Fatalf("MatchupChampionIDs = %+v, want empty", call.req.MatchupChampionIDs)
+	}
+}
+
 func TestSyncSummaryMapsKnownWarningsToMessageDescriptors(t *testing.T) {
 	summary := syncSummaryFromResult(autobuild.SyncResult{
 		Warnings: []string{
@@ -464,7 +713,7 @@ func TestCoachlessAuthActionErrorRecordsLastError(t *testing.T) {
 	if message.Text != "auth failed" {
 		t.Fatalf("LoginCoachlessAuth() message = %+v", message)
 	}
-	if state != (ViewState{}) {
+	if !reflect.DeepEqual(state, ViewState{}) {
 		t.Fatalf("LoginCoachlessAuth() state = %+v, want zero", state)
 	}
 
@@ -568,7 +817,7 @@ func TestSaveSettingsReturnsErrorWithoutMutatingConfig(t *testing.T) {
 	if message.Text != "save failed" {
 		t.Fatalf("SaveSettings() message = %q, want %q", message.Text, "save failed")
 	}
-	if state != (ViewState{}) {
+	if !reflect.DeepEqual(state, ViewState{}) {
 		t.Fatalf("SaveSettings() state = %+v, want zero value", state)
 	}
 	if factoryCalls != 0 {
@@ -660,7 +909,7 @@ func TestSaveSettingsMarksRunningWatcherConfigStaleWithoutRestart(t *testing.T) 
 	}
 
 	factoryMu.Lock()
-	gotFactoryCfgs := append([]RuntimeConfig(nil), factoryCfgs...)
+	gotFactoryCfgs := slices.Clone(factoryCfgs)
 	factoryMu.Unlock()
 
 	if len(gotFactoryCfgs) != 1 {
@@ -974,7 +1223,7 @@ func TestStartWatcherReleasesReservationOnFactoryError(t *testing.T) {
 	if message.Text != "factory failed" {
 		t.Fatalf("StartWatcher() message = %q, want %q", message.Text, "factory failed")
 	}
-	if state != (ViewState{}) {
+	if !reflect.DeepEqual(state, ViewState{}) {
 		t.Fatalf("StartWatcher() state = %+v, want zero value", state)
 	}
 
@@ -1105,7 +1354,7 @@ func TestRunSyncFailureCases(t *testing.T) {
 			if message.Text != tt.wantMessage {
 				t.Fatalf("RunSync() message = %q, want %q", message.Text, tt.wantMessage)
 			}
-			if state != (ViewState{}) {
+			if !reflect.DeepEqual(state, ViewState{}) {
 				t.Fatalf("RunSync() state = %+v, want zero value", state)
 			}
 			if svc.syncCallCount() != tt.wantSyncCalls {
@@ -1165,7 +1414,7 @@ func TestRunSyncRejectsConcurrentCalls(t *testing.T) {
 	if message.Code != MessageCodeSyncAlreadyRunning {
 		t.Fatalf("second RunSync() code = %q, want %q", message.Code, MessageCodeSyncAlreadyRunning)
 	}
-	if state != (ViewState{}) {
+	if !reflect.DeepEqual(state, ViewState{}) {
 		t.Fatalf("second RunSync() state = %+v, want zero value", state)
 	}
 
@@ -1215,7 +1464,7 @@ func TestRunSyncFailureSetsLastErrorDescriptor(t *testing.T) {
 	if message.Code != MessageCodeLCUChampionNotSelected {
 		t.Fatalf("RunSync() code = %q, want %q", message.Code, MessageCodeLCUChampionNotSelected)
 	}
-	if state != (ViewState{}) {
+	if !reflect.DeepEqual(state, ViewState{}) {
 		t.Fatalf("RunSync() state = %+v, want zero value", state)
 	}
 
@@ -1506,6 +1755,9 @@ func assertWatchRequestMatchesConfig(t *testing.T, got autobuild.WatchRequest, c
 	}
 	if got.OnNotice == nil {
 		t.Fatal("watch OnNotice should not be nil")
+	}
+	if got.SelectedMatchupChampionIDs == nil {
+		t.Fatal("watch SelectedMatchupChampionIDs should not be nil")
 	}
 }
 

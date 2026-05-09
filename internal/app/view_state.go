@@ -59,6 +59,17 @@ type (
 		Message *MessageDescriptor `json:"message,omitempty"`
 		Source  string             `json:"source,omitempty"`
 	}
+	ChampionRef struct {
+		ID   int    `json:"id"`
+		Name string `json:"name,omitempty"`
+	}
+	ChampSelectState struct {
+		EnemyChampions           []ChampionRef `json:"enemy_champions"`
+		SelectedEnemyChampionIDs []int         `json:"selected_enemy_champion_ids"`
+	}
+	EnemyChampionSelectionState struct {
+		SelectedEnemyChampionIDs []int `json:"selected_enemy_champion_ids"`
+	}
 	SyncSummary struct {
 		DetectedChampionID   int                 `json:"DetectedChampionID"`
 		DetectedChampionName string              `json:"DetectedChampionName"`
@@ -93,6 +104,7 @@ type (
 	ViewState struct {
 		Settings      Settings           `json:"settings"`
 		LCU           LCUStatus          `json:"lcu"`
+		ChampSelect   ChampSelectState   `json:"champ_select"`
 		CoachlessAuth CoachlessAuthState `json:"coachless_auth"`
 		Watcher       WatcherState       `json:"watcher"`
 		Update        UpdateState        `json:"update"`

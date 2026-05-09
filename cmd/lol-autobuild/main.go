@@ -16,6 +16,7 @@ import (
 	"github.com/controlado/lol-autobuild/internal/app"
 	"github.com/controlado/lol-autobuild/internal/auth"
 	"github.com/controlado/lol-autobuild/internal/autobuild"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 	"github.com/controlado/lol-autobuild/internal/autobuild/recommend"
 	"github.com/controlado/lol-autobuild/internal/buildinfo"
 	"github.com/controlado/lol-autobuild/internal/coachless"
@@ -182,6 +183,10 @@ func runUI(ctx context.Context, configPath string) error {
 		},
 		LCUStatus: func(ctx context.Context, appCfg app.RuntimeConfig) app.LCUStatus {
 			return appLCUStatusFromLCU(checkLCUStatus(ctx, appConfigStore.configFor(appCfg)))
+		},
+		ChampSelect: func(ctx context.Context, appCfg app.RuntimeConfig) (domain.ChampSelectState, error) {
+			cfg := appConfigStore.configFor(appCfg)
+			return lcu.NewClient(cfg.LCU.Enabled, cfg.LCU.LockfilePath).DetectEnemyChampions(ctx)
 		},
 		UpdateChecker: appUpdateChecker{
 			source: update.NewGitHubChecker(update.Options{CurrentVersion: buildinfo.Version}),

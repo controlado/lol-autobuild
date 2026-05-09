@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/controlado/lol-autobuild/internal/autobuild"
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 )
 
 var ErrUpdateUnavailable = errors.New("update check unavailable")
@@ -16,10 +18,11 @@ var ErrUpdateUnavailable = errors.New("update check unavailable")
 const lcuStateRefreshTimeout = 750 * time.Millisecond
 
 type (
-	ServiceFactory    func(RuntimeConfig) (autobuild.Service, error)
-	LCUStatusProvider func(context.Context, RuntimeConfig) LCUStatus
-	MessageMapper     func(error) UserMessage
-	UpdateChecker     interface {
+	ServiceFactory      func(RuntimeConfig) (autobuild.Service, error)
+	LCUStatusProvider   func(context.Context, RuntimeConfig) LCUStatus
+	ChampSelectProvider func(context.Context, RuntimeConfig) (domain.ChampSelectState, error)
+	MessageMapper       func(error) UserMessage
+	UpdateChecker       interface {
 		CurrentVersion() string
 		Check(context.Context) (UpdateCheckResult, error)
 	}
@@ -40,6 +43,7 @@ type UpdateCheckResult struct {
 type Options struct {
 	ServiceFactory   ServiceFactory
 	LCUStatus        LCUStatusProvider
+	ChampSelect      ChampSelectProvider
 	UpdateChecker    UpdateChecker
 	CoachlessAuth    CoachlessAuthSession
 	ConfigStore      ConfigStore
@@ -54,6 +58,7 @@ type App struct {
 
 	serviceFactory ServiceFactory
 	lcuStatus      LCUStatusProvider
+	champSelect    ChampSelectProvider
 	updateChecker  UpdateChecker
 	coachlessAuth  CoachlessAuthSession
 	configStore    ConfigStore
@@ -73,6 +78,10 @@ type App struct {
 	lastWatchNotice *WatcherNoticeState
 	lastSync        *SyncSummary
 	lastSyncAt      time.Time
+
+	champSelectSessionKey    string
+	enemyChampions           []ChampionRef
+	selectedEnemyChampionIDs []int
 }
 
 func New(opts Options) (*App, error) {
@@ -86,6 +95,7 @@ func New(opts Options) (*App, error) {
 	return &App{
 		serviceFactory: opts.ServiceFactory,
 		lcuStatus:      opts.LCUStatus,
+		champSelect:    opts.ChampSelect,
 		updateChecker:  opts.UpdateChecker,
 		coachlessAuth:  opts.CoachlessAuth,
 		configStore:    opts.ConfigStore,
@@ -114,6 +124,10 @@ func (a *App) State(ctx context.Context) ViewState {
 				ConfigStale: a.watcherConfigStaleLocked(configSnapshot),
 				LastNotice:  cloneWatcherNotice(a.lastWatchNotice),
 			},
+			ChampSelect: ChampSelectState{
+				EnemyChampions:           []ChampionRef{},
+				SelectedEnemyChampionIDs: []int{},
+			},
 			Update:      cloneUpdateState(a.updateState),
 			SyncRunning: a.syncRunning,
 			LastSync:    cloneSyncSummary(a.lastSync),
@@ -131,6 +145,7 @@ func (a *App) State(ctx context.Context) ViewState {
 	if a.coachlessAuth != nil {
 		state.CoachlessAuth = cloneCoachlessAuthState(a.coachlessAuth.Status(ctx))
 	}
+	state.ChampSelect = a.refreshChampSelect(ctx, configSnapshot)
 	statusCtx, cancel := context.WithTimeout(ctx, lcuStateRefreshTimeout)
 	state.LCU = cloneLCUStatus(a.lcuStatus(statusCtx, configSnapshot))
 	cancel()
@@ -152,6 +167,138 @@ func cloneCoachlessAuthState(state CoachlessAuthState) CoachlessAuthState {
 	}
 	out.Message = cloneMessageDescriptor(state.Message)
 	return out
+}
+
+func (a *App) refreshChampSelect(ctx context.Context, cfg RuntimeConfig) ChampSelectState {
+	if state, ok := a.observeChampSelectFromProvider(ctx, cfg); ok {
+		return state
+	}
+
+	return a.clearVisibleEnemyChampions()
+}
+
+func (a *App) observeChampSelectFromProvider(ctx context.Context, cfg RuntimeConfig) (ChampSelectState, bool) {
+	if a.champSelect == nil || !cfg.Settings.LCUEnabled {
+		return ChampSelectState{}, false
+	}
+
+	champSelectCtx, cancel := context.WithTimeout(ctx, lcuStateRefreshTimeout)
+	defer cancel()
+
+	state, err := a.champSelect(champSelectCtx, cfg)
+	if err != nil {
+		return ChampSelectState{}, false
+	}
+
+	return a.observeChampSelectState(state), true
+}
+
+func (a *App) clearVisibleEnemyChampions() ChampSelectState {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.enemyChampions = nil
+	return a.champSelectStateLocked()
+}
+
+func (a *App) observeChampSelectState(state domain.ChampSelectState) ChampSelectState {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if state.SessionKey == "" {
+		a.enemyChampions = nil
+		return a.champSelectStateLocked()
+	}
+
+	if a.champSelectSessionKey != state.SessionKey {
+		a.champSelectSessionKey = state.SessionKey
+		a.selectedEnemyChampionIDs = nil
+	}
+
+	a.enemyChampions = appChampionRefsFromDomain(state.EnemyChampions)
+	a.selectedEnemyChampionIDs = selectedEnemyChampionIDs(a.selectedEnemyChampionIDs, a.enemyChampions)
+	return a.champSelectStateLocked()
+}
+
+func (a *App) champSelectStateLocked() ChampSelectState {
+	enemyChampions := slices.Clone(a.enemyChampions)
+	if len(enemyChampions) == 0 {
+		enemyChampions = []ChampionRef{}
+	}
+
+	return ChampSelectState{
+		EnemyChampions:           enemyChampions,
+		SelectedEnemyChampionIDs: selectedEnemyChampionIDs(a.selectedEnemyChampionIDs, a.enemyChampions),
+	}
+}
+
+func appChampionRefsFromDomain(in []domain.ChampionRef) []ChampionRef {
+	out := make([]ChampionRef, 0, len(in))
+	for _, champion := range in {
+		if champion.ID <= 0 {
+			continue
+		}
+		out = append(out, ChampionRef{
+			ID:   champion.ID,
+			Name: strings.TrimSpace(champion.Name),
+		})
+	}
+	return out
+}
+
+func selectedEnemyChampionIDs(requested []int, enemies []ChampionRef) []int {
+	selected := domain.MatchupChampionIDsForRoster(requested, domainChampionRefsFromApp(enemies), domain.MaxMatchupChampionIDs)
+	if len(selected) == 0 {
+		return []int{}
+	}
+	return selected
+}
+
+func domainChampionRefsFromApp(in []ChampionRef) []domain.ChampionRef {
+	out := make([]domain.ChampionRef, 0, len(in))
+	for _, champion := range in {
+		if champion.ID <= 0 {
+			continue
+		}
+		out = append(out, domain.ChampionRef{ID: champion.ID, Name: champion.Name})
+	}
+	return out
+}
+
+func (a *App) SetEnemyChampionSelection(ctx context.Context, championIDs []int) EnemyChampionSelectionState {
+	cfg := a.configSnapshot()
+	if a.champSelect == nil || !cfg.Settings.LCUEnabled {
+		_ = a.clearVisibleEnemyChampions()
+	} else {
+		_, _ = a.observeChampSelectFromProvider(ctx, cfg)
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.selectedEnemyChampionIDs = selectedEnemyChampionIDs(championIDs, a.enemyChampions)
+	selected := slices.Clone(a.selectedEnemyChampionIDs)
+	if len(selected) == 0 {
+		selected = []int{}
+	}
+
+	return EnemyChampionSelectionState{
+		SelectedEnemyChampionIDs: selected,
+	}
+}
+
+func (a *App) selectedEnemyChampionIDsForRequest(ctx context.Context, cfg RuntimeConfig) []int {
+	if a.champSelect == nil || !cfg.Settings.LCUEnabled {
+		return []int{}
+	}
+
+	if observed, ok := a.observeChampSelectFromProvider(ctx, cfg); ok {
+		return slices.Clone(observed.SelectedEnemyChampionIDs)
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return slices.Clone(a.selectedEnemyChampionIDs)
 }
 
 func (a *App) SaveSettings(ctx context.Context, settings Settings) (ViewState, UserMessage) {
@@ -287,7 +434,7 @@ func (a *App) StartWatcher(ctx context.Context) (ViewState, UserMessage) {
 }
 
 func (a *App) runWatcher(ctx context.Context, watcherID int, svc autobuild.Service, cfg RuntimeConfig) {
-	req := watchRequestFromConfig(cfg)
+	req := watchRequestFromConfig(cfg, func() []int { return a.selectedEnemyChampionIDsForRequest(ctx, cfg) })
 	req.OnCycle = func(c autobuild.WatchCycle) { a.observeWatchCycle(watcherID, c) }
 	req.OnNotice = func(n autobuild.WatchNotice) { a.observeWatchNotice(watcherID, n) }
 
@@ -476,7 +623,7 @@ func (a *App) RunSync(ctx context.Context) (ViewState, UserMessage) {
 		return ViewState{}, a.messageFromErr(err)
 	}
 
-	result, err := svc.Sync(ctx, syncRequestFromSettings(cfg.Settings))
+	result, err := svc.Sync(ctx, syncRequestFromSettings(cfg.Settings, a.selectedEnemyChampionIDsForRequest(ctx, cfg)))
 	a.finishSync(&result, err)
 	if err != nil {
 		return ViewState{}, a.messageFromErr(err)
@@ -562,12 +709,13 @@ func syncWarningDescriptorFromText(warning string) MessageDescriptor {
 	}
 }
 
-func syncRequestFromSettings(settings Settings) autobuild.SyncRequest {
+func syncRequestFromSettings(settings Settings, matchupChampionIDs []int) autobuild.SyncRequest {
 	return autobuild.SyncRequest{
 		Patch:              settings.Patch,
 		PatchAdditionsMode: settings.PatchAdditionsMode,
 		PatchAdditions:     settings.PatchAdditions,
 		LeagueTierPreset:   settings.LeagueTierPreset,
+		MatchupChampionIDs: slices.Clone(matchupChampionIDs),
 		ApplyItems:         settings.ApplyItems,
 		ApplyRunes:         settings.ApplyRunes,
 		ApplySpells:        settings.ApplySpells,
@@ -576,19 +724,20 @@ func syncRequestFromSettings(settings Settings) autobuild.SyncRequest {
 	}
 }
 
-func watchRequestFromConfig(cfg RuntimeConfig) autobuild.WatchRequest {
-	req := syncRequestFromSettings(cfg.Settings)
+func watchRequestFromConfig(cfg RuntimeConfig, selectedMatchupChampionIDs func() []int) autobuild.WatchRequest {
+	req := syncRequestFromSettings(cfg.Settings, nil)
 	return autobuild.WatchRequest{
-		Patch:              req.Patch,
-		PatchAdditionsMode: req.PatchAdditionsMode,
-		PatchAdditions:     req.PatchAdditions,
-		LeagueTierPreset:   req.LeagueTierPreset,
-		ApplyItems:         req.ApplyItems,
-		ApplyRunes:         req.ApplyRunes,
-		ApplySpells:        req.ApplySpells,
-		KeepFlash:          req.KeepFlash,
-		DryRun:             req.DryRun,
-		Debounce:           cfg.WatchDebounce,
+		Patch:                      req.Patch,
+		PatchAdditionsMode:         req.PatchAdditionsMode,
+		PatchAdditions:             req.PatchAdditions,
+		LeagueTierPreset:           req.LeagueTierPreset,
+		SelectedMatchupChampionIDs: selectedMatchupChampionIDs,
+		ApplyItems:                 req.ApplyItems,
+		ApplyRunes:                 req.ApplyRunes,
+		ApplySpells:                req.ApplySpells,
+		KeepFlash:                  req.KeepFlash,
+		DryRun:                     req.DryRun,
+		Debounce:                   cfg.WatchDebounce,
 	}
 }
 
