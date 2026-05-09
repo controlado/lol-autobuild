@@ -19,6 +19,7 @@ For the short user guide, read [README.md](README.md). Portuguese version: [READ
 | --- | --- | --- |
 | Champion and position detection from LCU | Implemented | Detection runs against `/lol-champ-select/v1/session`. |
 | Position detection queues | Implemented | Supported queue IDs: `400`, `420`, `440`, `3110`. |
+| Enemy matchup selection | Implemented | Local UI only. Selects up to five visible enemies from `theirTeam`. |
 | Coachless API ingestion | Implemented | Uses API-first flow from `https://api.coachless.gg`. |
 | Item set apply | Implemented | Upserts a managed item set in LCU. |
 | Summoner spells apply | Implemented | Applies two spells and preserves the current Flash slot when possible. |
@@ -65,6 +66,7 @@ lol-autobuild ui --config ./config.example.yaml
 The UI lets you:
 
 - Change what sync updates: items, runes, and summoner spells.
+- Select up to five visible enemy champions for Coachless matchup data.
 - Switch between live apply mode and preview mode.
 - Run one sync.
 - Start or stop the watcher.
@@ -171,6 +173,7 @@ LCU connection discovery tries League process args first (`--app-port`, `--remot
 - Watch mode attempts one sync per champ select. A session `Delete` or a new non-finalized `Create` event resets that lock.
 - If the finalization sync fails, watch mode waits for the next champ select before it tries again.
 - The local UI and CLI read the `sync` config section. CLI flags override patch, apply, and dry-run fields.
+- Enemy matchup selection is UI session state. It is not saved to config, does not force sync, and is not exposed as a CLI flag.
 - Free Coachless tokens use the latest non-Premium patch when the patch setting is blank. Requesting the newest Premium patch or manual patch additions returns an error.
 - Rune page apply reuses a deletable `AutoBuild` page or creates one without deleting user pages. If replacing a managed page fails after delete, the app attempts to restore that page and reports the failure context.
 - Browser-assisted auth capture watches the Coachless login response and stores the token pair.

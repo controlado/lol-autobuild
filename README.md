@@ -20,7 +20,7 @@ Pick the ZIP for your system, extract it, and run `lol-autobuild`.
 
 ## What it does
 
-`lol-autobuild` connects to the League Client during champion select. It reads your champion and position, checks Coachless data, and applies recommended rune pages, item sets, and summoner spells.
+`lol-autobuild` connects to the League Client during champion select. It reads your champion, position, and visible enemy champions, checks Coachless data, and applies recommended rune pages, item sets, and summoner spells. In the local UI, select up to five enemies to use Coachless matchup data.
 
 ## About Coachless
 

@@ -20,7 +20,7 @@ Escolha o ZIP do seu sistema, extraia os arquivos e rode `lol-autobuild`.
 
 ## O que ele faz
 
-`lol-autobuild` conecta no client durante a seleção de campeões. Ele lê seu campeão e sua rota, consulta dados do Coachless e aplica páginas de runas, itens e spells recomendadas.
+`lol-autobuild` conecta no client durante a seleção de campeões. Ele lê seu campeão, sua rota e os campeões inimigos visíveis, consulta dados do Coachless e aplica páginas de runas, itens e spells recomendadas. Na UI local, selecione até cinco inimigos para usar dados de matchup do Coachless.
 
 ## Sobre o Coachless
 
