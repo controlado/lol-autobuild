@@ -1,5 +1,11 @@
 package domain
 
+type RunePage struct {
+	PrimaryStyleID  int
+	SubStyleID      int
+	SelectedPerkIDs []int
+}
+
 const (
 	RuneStylePrecision   = 8000
 	RuneStyleDomination  = 8100

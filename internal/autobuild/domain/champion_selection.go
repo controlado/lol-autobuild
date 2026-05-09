@@ -1,5 +1,16 @@
 package domain
 
+type (
+	ChampionRef struct {
+		ID   int
+		Name string
+	}
+	ChampSelectState struct {
+		SessionKey     string
+		EnemyChampions []ChampionRef
+	}
+)
+
 const MaxMatchupChampionIDs = 5
 
 func MatchupChampionIDsForRoster(requested []int, roster []ChampionRef, limit int) []int {

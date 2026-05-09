@@ -17,12 +17,6 @@ type ApplyItemSetBlock struct {
 	ItemIDs []int
 }
 
-type RunePage struct {
-	PrimaryStyleID  int
-	SubStyleID      int
-	SelectedPerkIDs []int
-}
-
 type ApplyRunePageRequest struct {
 	ChampionID   int
 	ChampionName string
@@ -45,16 +39,6 @@ type DetectedSelection struct {
 	Position       Position
 	QueueID        int
 	IsAutofilled   bool
-	EnemyChampions []ChampionRef
-}
-
-type ChampionRef struct {
-	ID   int
-	Name string
-}
-
-type ChampSelectState struct {
-	SessionKey     string
 	EnemyChampions []ChampionRef
 }
 
