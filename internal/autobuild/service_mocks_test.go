@@ -3,6 +3,7 @@ package autobuild
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"time"
 
@@ -68,7 +69,7 @@ func (c *coachlessStub) GetPatches(_ context.Context, _ string) ([]domain.PatchI
 
 	c.getPatchesCalls++
 	if c.patches != nil {
-		return append([]domain.PatchInfo{}, c.patches...), nil
+		return slices.Clone(c.patches), nil
 	}
 
 	return []domain.PatchInfo{{Label: "16.7", Major: 16, Patch: 7}}, nil
@@ -96,7 +97,7 @@ func (c *coachlessStub) GetSecondaryTreePlaycount(_ context.Context, _ string, r
 		return nil, c.treeErr
 	}
 	if c.treePlaycount != nil {
-		return append([]domain.RuneTreePlaycount{}, c.treePlaycount...), nil
+		return slices.Clone(c.treePlaycount), nil
 	}
 
 	return []domain.RuneTreePlaycount{
@@ -183,7 +184,7 @@ func (c *coachlessStub) GetItemStats(_ context.Context, _ string, req domain.Ite
 		return nil, err
 	}
 	if c.itemStats != nil {
-		return append([]domain.ItemStat{}, c.itemStats...), nil
+		return slices.Clone(c.itemStats), nil
 	}
 
 	return []domain.ItemStat{

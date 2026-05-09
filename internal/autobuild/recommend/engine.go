@@ -1,6 +1,7 @@
 package recommend
 
 import (
+	"slices"
 	"sort"
 
 	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
@@ -205,7 +206,7 @@ func filterRunesWithFallback(in []domain.RuneStat, minOccurrence int) []domain.R
 		return filtered
 	}
 
-	return append([]domain.RuneStat{}, in...)
+	return slices.Clone(in)
 }
 
 func sortRuneStats(in []domain.RuneStat) {

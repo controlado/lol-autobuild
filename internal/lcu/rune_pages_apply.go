@@ -3,6 +3,7 @@ package lcu
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -174,7 +175,7 @@ func runePageCreateRequestFromPage(page runePage) runePageCreateRequest {
 		Name:            page.Name,
 		PrimaryStyleID:  page.PrimaryStyleID,
 		SubStyleID:      page.SubStyleID,
-		SelectedPerkIDs: append([]int(nil), page.SelectedPerkIDs...),
+		SelectedPerkIDs: slices.Clone(page.SelectedPerkIDs),
 		Current:         page.Current,
 	}
 }

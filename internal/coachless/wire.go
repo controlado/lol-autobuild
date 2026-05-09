@@ -1,6 +1,10 @@
 package coachless
 
-import "github.com/controlado/lol-autobuild/internal/autobuild/domain"
+import (
+	"slices"
+
+	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
+)
 
 type apiPatchInfo struct {
 	Label      string `json:"label"`
@@ -143,7 +147,7 @@ func apiSummonerSpellStatsRequestFromDomain(req domain.SummonerSpellStatsRequest
 func apiItemStatsRequestFromDomain(req domain.ItemStatsRequest) apiItemStatsRequest {
 	return apiItemStatsRequest{
 		CommonFilters:         apiCommonFiltersFromDomain(req.CommonFilters),
-		ItemSlots:             append([]int(nil), req.ItemSlots...),
+		ItemSlots:             slices.Clone(req.ItemSlots),
 		ItemType:              req.ItemType,
 		Keystone:              req.Keystone,
 		StarterID:             req.StarterID,
@@ -158,10 +162,10 @@ func apiItemStatsRequestFromDomain(req domain.ItemStatsRequest) apiItemStatsRequ
 func apiCommonFiltersFromDomain(filters domain.CommonFilters) apiCommonFilters {
 	return apiCommonFilters{
 		Patch:              apiPatchFilterFromDomain(filters.Patch),
-		ChampionIDs:        append([]int(nil), filters.ChampionIDs...),
-		MatchupChampionIDs: append([]int(nil), filters.MatchupChampionIDs...),
-		LeagueTiers:        append([]int(nil), filters.LeagueTiers...),
-		Regions:            append([]string(nil), filters.Regions...),
+		ChampionIDs:        slices.Clone(filters.ChampionIDs),
+		MatchupChampionIDs: slices.Clone(filters.MatchupChampionIDs),
+		LeagueTiers:        slices.Clone(filters.LeagueTiers),
+		Regions:            slices.Clone(filters.Regions),
 		Role:               filters.Role,
 	}
 }
