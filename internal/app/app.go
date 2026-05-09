@@ -671,7 +671,7 @@ func cloneSyncSummary(res *SyncSummary) *SyncSummary {
 	}
 
 	out := *res
-	out.Warnings = append([]MessageDescriptor{}, res.Warnings...)
+	out.Warnings = slices.Clone(res.Warnings)
 	return &out
 }
 

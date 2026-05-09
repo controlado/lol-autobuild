@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 )
 
 func (c *Client) fetchChampSelectSession(ctx context.Context, info connectionInfo) (champSelectSession, error) {
@@ -27,7 +28,7 @@ func (c *Client) fetchChampSelectSessionEventData(ctx context.Context, info conn
 		}
 		return nil, fmt.Errorf("%w: %v", ErrChampSelectUnavailable, err)
 	}
-	return append(json.RawMessage(nil), raw...), nil
+	return slices.Clone(raw), nil
 }
 
 func (c *Client) patchSelectionSpells(ctx context.Context, info connectionInfo, spell1ID int, spell2ID int) error {

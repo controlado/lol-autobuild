@@ -1,8 +1,8 @@
 package recommend
 
 import (
+	"cmp"
 	"slices"
-	"sort"
 
 	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
 	"github.com/controlado/lol-autobuild/internal/autobuild/runes"
@@ -119,11 +119,8 @@ func filterKeystones(in []domain.KeystoneStat, minOccurrence int) []domain.Keyst
 		}
 	}
 
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].WPAOverall == out[j].WPAOverall {
-			return out[i].Occurrence > out[j].Occurrence
-		}
-		return out[i].WPAOverall > out[j].WPAOverall
+	slices.SortFunc(out, func(a, b domain.KeystoneStat) int {
+		return compareWPAOccurrence(a.WPAOverall, b.WPAOverall, a.Occurrence, b.Occurrence)
 	})
 
 	return out
@@ -210,11 +207,8 @@ func filterRunesWithFallback(in []domain.RuneStat, minOccurrence int) []domain.R
 }
 
 func sortRuneStats(in []domain.RuneStat) {
-	sort.Slice(in, func(i, j int) bool {
-		if in[i].WPAOverall == in[j].WPAOverall {
-			return in[i].Occurrence > in[j].Occurrence
-		}
-		return in[i].WPAOverall > in[j].WPAOverall
+	slices.SortFunc(in, func(a, b domain.RuneStat) int {
+		return compareWPAOccurrence(a.WPAOverall, b.WPAOverall, a.Occurrence, b.Occurrence)
 	})
 }
 
@@ -226,11 +220,8 @@ func filterSpells(in []domain.SummonerSpellStat, minOccurrence int) []domain.Sum
 		}
 	}
 
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].WPAOverall == out[j].WPAOverall {
-			return out[i].Occurrence > out[j].Occurrence
-		}
-		return out[i].WPAOverall > out[j].WPAOverall
+	slices.SortFunc(out, func(a, b domain.SummonerSpellStat) int {
+		return compareWPAOccurrence(a.WPAOverall, b.WPAOverall, a.Occurrence, b.Occurrence)
 	})
 
 	return out
@@ -244,12 +235,16 @@ func filterItems(in []domain.ItemStat, minOccurrence int) []domain.ItemStat {
 		}
 	}
 
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].WPAOverall == out[j].WPAOverall {
-			return out[i].Occurrence > out[j].Occurrence
-		}
-		return out[i].WPAOverall > out[j].WPAOverall
+	slices.SortFunc(out, func(a, b domain.ItemStat) int {
+		return compareWPAOccurrence(a.WPAOverall, b.WPAOverall, a.Occurrence, b.Occurrence)
 	})
 
 	return out
+}
+
+func compareWPAOccurrence(aWPA, bWPA float64, aOccurrence, bOccurrence int) int {
+	if wpa := cmp.Compare(bWPA, aWPA); wpa != 0 {
+		return wpa
+	}
+	return cmp.Compare(bOccurrence, aOccurrence)
 }

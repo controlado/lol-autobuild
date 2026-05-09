@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -158,7 +159,7 @@ func upsertManagedItemSet(existing itemSetsPayload, fallbackAccountID int64, man
 			}
 			continue
 		}
-		outSets = append(outSets, append(json.RawMessage(nil), raw...))
+		outSets = append(outSets, slices.Clone(raw))
 	}
 
 	if !isItemSetReplaced {

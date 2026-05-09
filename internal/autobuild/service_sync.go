@@ -1,11 +1,11 @@
 package autobuild
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/controlado/lol-autobuild/internal/autobuild/domain"
@@ -374,11 +374,11 @@ func itemStageSpecsForPosition(p domain.Position) []itemStageSpec {
 func filterAndLimitItemStats(in []domain.ItemStat, minOccurrence, topItems int) []domain.ItemStat {
 	out := itemStatsPassingOccurrenceFilter(in, minOccurrence)
 
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].WPAOverall == out[j].WPAOverall {
-			return out[i].Occurrence > out[j].Occurrence
+	slices.SortFunc(out, func(a, b domain.ItemStat) int {
+		if wpa := cmp.Compare(b.WPAOverall, a.WPAOverall); wpa != 0 {
+			return wpa
 		}
-		return out[i].WPAOverall > out[j].WPAOverall
+		return cmp.Compare(b.Occurrence, a.Occurrence)
 	})
 
 	if topItems > 0 && len(out) > topItems {
@@ -422,15 +422,10 @@ func resolvePatch(rawPatch string, rawPatchAdditionsMode string, requestedPatchA
 	selectedIndex := len(patches) - 1
 	if strings.TrimSpace(rawPatch) != "" {
 		wanted := strings.TrimSpace(rawPatch)
-		found := false
-		for idx, p := range patches {
-			if p.Label == wanted {
-				selectedIndex = idx
-				found = true
-				break
-			}
-		}
-		if !found {
+		selectedIndex = slices.IndexFunc(patches, func(p domain.PatchInfo) bool {
+			return p.Label == wanted
+		})
+		if selectedIndex < 0 {
 			return domain.PatchFilter{}, "", nil, fmt.Errorf("requested patch %q not found", rawPatch)
 		}
 	} else if !subscribed && len(patches) > 1 {
