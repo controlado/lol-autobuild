@@ -15,9 +15,8 @@ import (
 )
 
 const (
-	eventTopic            = "OnJsonApiEvent"
-	champSelectSessionURI = "/lol-champ-select/v1/session"
-	snapshotEventType     = "Snapshot"
+	eventTopic        = "OnJsonApiEvent"
+	snapshotEventType = "Snapshot"
 )
 
 var (
