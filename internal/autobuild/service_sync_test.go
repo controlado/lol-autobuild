@@ -337,6 +337,64 @@ func TestSyncUsesAdvancedCoachlessFilters(t *testing.T) {
 	}
 }
 
+func TestSyncSendsSelectedMatchupsInLCUEnemyOrder(t *testing.T) {
+	t.Parallel()
+
+	coachless := &coachlessStub{}
+	lcu := &lcuStub{
+		detectedSelection: domain.DetectedSelection{
+			ChampionID: 240,
+			Position:   domain.Top,
+			QueueID:    420,
+			EnemyChampions: []domain.ChampionRef{
+				{ID: 10, Name: "Kayle"},
+				{ID: 20, Name: "Nunu & Willump"},
+				{ID: 30, Name: "Ashe"},
+				{ID: 40, Name: "Jhin"},
+				{ID: 50, Name: "Karma"},
+				{ID: 60, Name: "Elise"},
+			},
+		},
+	}
+	svc, err := NewService(ServiceDeps{
+		Coachless:   coachless,
+		Tokens:      tokenProviderStub{token: "t"},
+		LCU:         lcu,
+		Recommender: recommend.NewEngine(),
+		Policy:      RecommendationPolicy{MinOccurrence: 100, TopItems: 6, TopSpells: 2},
+	})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	_, err = svc.Sync(context.Background(), SyncRequest{
+		MatchupChampionIDs: []int{60, 20, 0, 20, 10, 30, 40, 50},
+		ApplyItems:         true,
+		ApplyRunes:         true,
+		ApplySpells:        true,
+		DryRun:             false,
+	})
+	if err != nil {
+		t.Fatalf("Sync() error = %v", err)
+	}
+
+	want := []int{10, 20, 30, 40, 60}
+	assertMatchups(t, coachless.keystoneCalls[0].CommonFilters, want)
+	assertMatchups(t, coachless.spellCalls[0].CommonFilters, want)
+	for idx, call := range coachless.itemCalls {
+		assertMatchupsFor(t, call.CommonFilters, want, fmt.Sprintf("item call %d", idx))
+	}
+	for idx, call := range coachless.treeCalls {
+		assertMatchupsFor(t, call.CommonFilters, want, fmt.Sprintf("tree call %d", idx))
+	}
+	for idx, call := range coachless.runeCalls {
+		assertMatchupsFor(t, call.CommonFilters, want, fmt.Sprintf("rune call %d", idx))
+	}
+	for idx, call := range coachless.shardCalls {
+		assertMatchupsFor(t, call.CommonFilters, want, fmt.Sprintf("shard call %d", idx))
+	}
+}
+
 func TestSyncFailsFastWhenChampionDetectionFails(t *testing.T) {
 	t.Parallel()
 
@@ -710,4 +768,24 @@ func hasItemCall(calls []domain.ItemStatsRequest, itemType int, itemSlots []int,
 		}
 	}
 	return false
+}
+
+func assertMatchups(t *testing.T, filters domain.CommonFilters, want []int) {
+	t.Helper()
+
+	if reflect.DeepEqual(filters.MatchupChampionIDs, want) {
+		return
+	}
+
+	t.Fatalf("MatchupChampionIDs = %+v, want %+v", filters.MatchupChampionIDs, want)
+}
+
+func assertMatchupsFor(t *testing.T, filters domain.CommonFilters, want []int, label string) {
+	t.Helper()
+
+	if reflect.DeepEqual(filters.MatchupChampionIDs, want) {
+		return
+	}
+
+	t.Fatalf("%s MatchupChampionIDs = %+v, want %+v", label, filters.MatchupChampionIDs, want)
 }

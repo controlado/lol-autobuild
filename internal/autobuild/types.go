@@ -32,6 +32,7 @@ type SyncRequest struct {
 	PatchAdditionsMode string
 	PatchAdditions     int
 	LeagueTierPreset   string
+	MatchupChampionIDs []int
 
 	ApplyItems  bool
 	ApplyRunes  bool
@@ -53,10 +54,11 @@ type SyncResult struct {
 }
 
 type WatchRequest struct {
-	Patch              string
-	PatchAdditionsMode string
-	PatchAdditions     int
-	LeagueTierPreset   string
+	Patch                      string
+	PatchAdditionsMode         string
+	PatchAdditions             int
+	LeagueTierPreset           string
+	SelectedMatchupChampionIDs func() []int
 
 	ApplyItems  bool
 	ApplyRunes  bool

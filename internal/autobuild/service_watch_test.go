@@ -2,6 +2,7 @@ package autobuild
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -463,6 +464,58 @@ func TestWatchForwardsSnapshotUnavailableNotice(t *testing.T) {
 	waitForWatchExit(t, errCh)
 }
 
+func TestWatchReadsSelectedMatchupsAtCycleTime(t *testing.T) {
+	t.Parallel()
+
+	events := make(chan domain.LCUEvent)
+	lcu := watchTestLCU(watchEventsWithNoticesFrom(events))
+	lcu.detectedSelection.EnemyChampions = []domain.ChampionRef{{ID: 22}, {ID: 99}}
+	coachless := &coachlessStub{}
+	svc, err := NewService(ServiceDeps{
+		Coachless:   coachless,
+		Tokens:      tokenProviderStub{token: "t"},
+		LCU:         lcu,
+		Recommender: recommend.NewEngine(),
+		Policy:      RecommendationPolicy{MinOccurrence: 100, TopItems: 6, TopSpells: 2},
+	})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	selected := []int{22}
+	req := watchTestRequest(func(WatchCycle) {})
+	req.SelectedMatchupChampionIDs = func() []int {
+		return slices.Clone(selected)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- svc.Watch(ctx, req)
+	}()
+
+	selected = []int{99}
+	sendWatchEvent(t, events, champSelectSessionEvent("Update", "FINALIZATION"))
+
+	waitForCondition(t, func() bool {
+		coachless.mu.Lock()
+		defer coachless.mu.Unlock()
+		return len(coachless.keystoneCalls) == 1
+	}, "coachless keystone call")
+
+	coachless.mu.Lock()
+	got := slices.Clone(coachless.keystoneCalls[0].CommonFilters.MatchupChampionIDs)
+	coachless.mu.Unlock()
+	if len(got) != 1 || got[0] != 99 {
+		t.Fatalf("MatchupChampionIDs = %+v, want [99]", got)
+	}
+
+	cancel()
+	waitForWatchExit(t, errCh)
+}
+
 func newWatchTestService(t *testing.T, lcu *lcuStub) Service {
 	t.Helper()
 
@@ -577,5 +630,24 @@ func waitForWatchExit(t *testing.T, errCh <-chan error) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for watch exit")
+	}
+}
+
+func waitForCondition(t *testing.T, condition func() bool, label string) {
+	t.Helper()
+
+	deadline := time.After(2 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-deadline:
+			t.Fatalf("timed out waiting for %s", label)
+		case <-ticker.C:
+			if condition() {
+				return
+			}
+		}
 	}
 }

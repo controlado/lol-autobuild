@@ -52,10 +52,11 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 
 	var (
 		filters = domain.CommonFilters{
-			Patch:       patchFilter,
-			ChampionIDs: []int{selection.ChampionID},
-			LeagueTiers: leagueTiers,
-			Role:        selection.Position.Code(),
+			Patch:              patchFilter,
+			ChampionIDs:        []int{selection.ChampionID},
+			MatchupChampionIDs: domain.MatchupChampionIDsForRoster(req.MatchupChampionIDs, selection.EnemyChampions, domain.MaxMatchupChampionIDs),
+			LeagueTiers:        leagueTiers,
+			Role:               selection.Position.Code(),
 		}
 
 		stageSpecs = itemStageSpecsForPosition(selection.Position)
@@ -399,7 +400,7 @@ func itemStatsPassingOccurrenceFilter(in []domain.ItemStat, minOccurrence int) [
 		return filtered
 	}
 
-	return append([]domain.ItemStat{}, in...)
+	return slices.Clone(in)
 }
 
 func resolvePatch(rawPatch string, rawPatchAdditionsMode string, requestedPatchAdditions int, patches []domain.PatchInfo, subscribed bool) (domain.PatchFilter, string, []string, error) {

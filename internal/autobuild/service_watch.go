@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -286,11 +287,17 @@ func watchNoticeFromLCU(notice domain.LCUWatchNotice) WatchNotice {
 }
 
 func (r WatchRequest) syncRequest() SyncRequest {
+	var matchupChampionIDs []int
+	if r.SelectedMatchupChampionIDs != nil {
+		matchupChampionIDs = slices.Clone(r.SelectedMatchupChampionIDs())
+	}
+
 	return SyncRequest{
 		Patch:              r.Patch,
 		PatchAdditionsMode: r.PatchAdditionsMode,
 		PatchAdditions:     r.PatchAdditions,
 		LeagueTierPreset:   r.LeagueTierPreset,
+		MatchupChampionIDs: matchupChampionIDs,
 		ApplyItems:         r.ApplyItems,
 		ApplyRunes:         r.ApplyRunes,
 		ApplySpells:        r.ApplySpells,
