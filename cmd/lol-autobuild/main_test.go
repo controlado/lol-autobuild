@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -76,6 +77,7 @@ func TestSyncRequestFromConfigAndFlagsUsesConfigByDefault(t *testing.T) {
 	cfg.Sync.PatchAdditionsMode = autobuild.PatchAdditionsModeManual
 	cfg.Sync.PatchAdditions = 4
 	cfg.Sync.LeagueTierPreset = autobuild.LeagueTierPresetMasterPlus
+	cfg.Sync.Regions = []int{autobuild.CoachlessRegionBR, autobuild.CoachlessRegionNA}
 	cfg.Sync.ApplyItems = false
 	cfg.Sync.ApplyRunes = false
 	cfg.Sync.ApplySpells = true
@@ -92,6 +94,9 @@ func TestSyncRequestFromConfigAndFlagsUsesConfigByDefault(t *testing.T) {
 
 	if got.Patch != "16.7" || got.PatchAdditionsMode != autobuild.PatchAdditionsModeManual || got.PatchAdditions != 4 || got.LeagueTierPreset != autobuild.LeagueTierPresetMasterPlus {
 		t.Fatalf("advanced sync config = %+v", got)
+	}
+	if !slices.Equal(got.Regions, []int{autobuild.CoachlessRegionBR, autobuild.CoachlessRegionNA}) {
+		t.Fatalf("regions = %+v", got.Regions)
 	}
 	if got.ApplyItems || got.ApplyRunes || !got.ApplySpells || got.KeepFlash || got.DryRun {
 		t.Fatalf("sync booleans = %+v", got)
@@ -134,12 +139,13 @@ func TestWatchRequestFromConfigAndFlagsUsesWatchConfig(t *testing.T) {
 	cfg.Watch.DebounceMillis = 750
 	cfg.Sync.KeepFlash = false
 	cfg.Sync.PatchAdditions = 3
+	cfg.Sync.Regions = []int{autobuild.CoachlessRegionEUW}
 
 	got := watchRequestFromConfigAndFlags(cfg, executionFlags{}, executionFlagChanges{})
 	if got.Debounce != 750*time.Millisecond {
 		t.Fatalf("watch debounce = %v, want 750ms", got.Debounce)
 	}
-	if got.KeepFlash || got.PatchAdditions != 3 {
+	if got.KeepFlash || got.PatchAdditions != 3 || !slices.Equal(got.Regions, []int{autobuild.CoachlessRegionEUW}) {
 		t.Fatalf("watch request = %+v", got)
 	}
 }

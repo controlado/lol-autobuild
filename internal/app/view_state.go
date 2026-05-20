@@ -63,6 +63,10 @@ type (
 		ID   int    `json:"id"`
 		Name string `json:"name,omitempty"`
 	}
+	CoachlessRegionOption struct {
+		ID    int    `json:"id"`
+		Label string `json:"label"`
+	}
 	ChampSelectState struct {
 		EnemyChampions           []ChampionRef `json:"enemy_champions"`
 		SelectedEnemyChampionIDs []int         `json:"selected_enemy_champion_ids"`
@@ -102,15 +106,16 @@ type (
 		Message   *MessageDescriptor  `json:"message,omitempty"`
 	}
 	ViewState struct {
-		Settings      Settings           `json:"settings"`
-		LCU           LCUStatus          `json:"lcu"`
-		ChampSelect   ChampSelectState   `json:"champ_select"`
-		CoachlessAuth CoachlessAuthState `json:"coachless_auth"`
-		Watcher       WatcherState       `json:"watcher"`
-		Update        UpdateState        `json:"update"`
-		SyncRunning   bool               `json:"sync_running"`
-		LastSync      *SyncSummary       `json:"last_sync,omitempty"`
-		LastSyncAt    *time.Time         `json:"last_sync_at,omitempty"`
-		LastError     *MessageDescriptor `json:"last_error,omitempty"`
+		Settings         Settings                `json:"settings"`
+		CoachlessRegions []CoachlessRegionOption `json:"coachless_regions"`
+		LCU              LCUStatus               `json:"lcu"`
+		ChampSelect      ChampSelectState        `json:"champ_select"`
+		CoachlessAuth    CoachlessAuthState      `json:"coachless_auth"`
+		Watcher          WatcherState            `json:"watcher"`
+		Update           UpdateState             `json:"update"`
+		SyncRunning      bool                    `json:"sync_running"`
+		LastSync         *SyncSummary            `json:"last_sync,omitempty"`
+		LastSyncAt       *time.Time              `json:"last_sync_at,omitempty"`
+		LastError        *MessageDescriptor      `json:"last_error,omitempty"`
 	}
 )

@@ -26,6 +26,12 @@ const ids = {
   leagueTierPresetSlider: document.getElementById("leagueTierPresetSlider"),
   leagueTierPresetValue: document.getElementById("leagueTierPresetValue"),
   leagueTierPresetTicks: document.getElementById("leagueTierPresetTicks"),
+  regionPickerButton: document.getElementById("regionPickerButton"),
+  regionPickerPanel: document.getElementById("regionPickerPanel"),
+  regionPickerSummary: document.getElementById("regionPickerSummary"),
+  regionCheckboxList: document.getElementById("regionCheckboxList"),
+  regionSelectAllButton: document.getElementById("regionSelectAllButton"),
+  regionClearButton: document.getElementById("regionClearButton"),
   applyItems: document.getElementById("applyItems"),
   applyRunes: document.getElementById("applyRunes"),
   applySpells: document.getElementById("applySpells"),
@@ -246,6 +252,7 @@ async function setLocale(locale, shouldPersist = true) {
   if (formsLoaded) {
     renderModeStatus(readSettings());
     renderAdvancedSliderValues();
+    renderRegionSummary();
   } else if (currentState && currentState.settings) {
     renderModeStatus(currentState.settings);
   }
@@ -286,6 +293,9 @@ const leagueTierPresets = [
   { value: "diamond_plus", key: "settings.rank_diamond_plus", letter: "D", className: "rank-diamond" },
   { value: "master_plus", key: "settings.rank_master_plus", letter: "M", className: "rank-master" }
 ];
+let coachlessRegions = [];
+let coachlessRegionIDs = [];
+let coachlessRegionIDSet = new Set();
 
 function clampSliderIndex(rawValue, maxIndex, fallback = 0) {
   const value = Number(rawValue);
@@ -386,6 +396,95 @@ function selectedLeagueTierPreset() {
   return leagueTierPresets[clampSliderIndex(ids.leagueTierPresetSlider.value, leagueTierPresets.length - 1, 2)].value;
 }
 
+function uniqueCoachlessRegionIDs(values = []) {
+  const selected = new Set();
+  for (const rawValue of values) {
+    const id = Number(rawValue);
+    if (Number.isInteger(id) && coachlessRegionIDSet.has(id)) {
+      selected.add(id);
+    }
+  }
+  return coachlessRegionIDs.filter(id => selected.has(id));
+}
+
+function settingsRegionIDsFromSelection(values = []) {
+  const regions = uniqueCoachlessRegionIDs(values);
+  return regions.length === coachlessRegions.length ? [] : regions;
+}
+
+function selectedRegionIDs() {
+  const selected = Array.from(ids.regionCheckboxList.querySelectorAll("input[type='checkbox']:checked"))
+    .map(input => input.value);
+  return uniqueCoachlessRegionIDs(selected);
+}
+
+function setRegionPickerOpen(isOpen) {
+  ids.regionPickerButton.setAttribute("aria-expanded", String(isOpen));
+  ids.regionPickerPanel.hidden = !isOpen;
+}
+
+function regionSummaryText(values = []) {
+  const regions = uniqueCoachlessRegionIDs(values);
+  if (regions.length === 0 || regions.length === coachlessRegions.length) {
+    return t("settings.regions_all");
+  }
+  return t("settings.regions_selected_count", { count: regions.length });
+}
+
+function renderRegionSummary() {
+  ids.regionPickerSummary.textContent = regionSummaryText(selectedRegionIDs());
+}
+
+function displayedRegionIDsFromSettings(values = []) {
+  const regions = uniqueCoachlessRegionIDs(values);
+  return regions.length === 0 ? coachlessRegionIDs : regions;
+}
+
+function setRegionSelection(values = [], options = {}) {
+  const regionIDs = options.emptyMeansAll ? displayedRegionIDsFromSettings(values) : uniqueCoachlessRegionIDs(values);
+  const selected = new Set(regionIDs);
+  ids.regionCheckboxList.querySelectorAll("input[type='checkbox']").forEach(input => {
+    input.checked = selected.has(Number(input.value));
+  });
+  renderRegionSummary();
+}
+
+function setCoachlessRegionOptions(options = []) {
+  const seen = new Set();
+  coachlessRegions = [];
+  for (const option of options) {
+    const id = Number(option.id);
+    const label = String(option.label || "").trim();
+    if (Number.isInteger(id) && label && !seen.has(id)) {
+      seen.add(id);
+      coachlessRegions.push({ id, label });
+    }
+  }
+  coachlessRegionIDs = coachlessRegions.map(region => region.id);
+  coachlessRegionIDSet = new Set(coachlessRegionIDs);
+  renderRegionCheckboxes();
+}
+
+function renderRegionCheckboxes() {
+  const boxes = coachlessRegions.map(region => {
+    const label = document.createElement("label");
+    label.className = "region-check";
+
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.name = "coachless-region";
+    input.value = String(region.id);
+
+    const text = document.createElement("span");
+    text.textContent = region.label;
+
+    label.replaceChildren(input, text);
+    return label;
+  });
+
+  ids.regionCheckboxList.replaceChildren(...boxes);
+}
+
 function renderLeagueTierPresetValue(value) {
   const preset = leagueTierPresets.find(item => item.value === value) || leagueTierPresets[2];
   const badge = document.createElement("span");
@@ -457,6 +556,7 @@ function readSettings() {
     patch: ids.patch.value.trim(),
     ...patchRangeSettings,
     league_tier_preset: selectedLeagueTierPreset(),
+    regions: settingsRegionIDsFromSelection(selectedRegionIDs()),
     apply_items: ids.applyItems.checked,
     apply_runes: ids.applyRunes.checked,
     apply_spells: ids.applySpells.checked,
@@ -963,11 +1063,15 @@ function renderLog(state = {}, sync) {
 
 function renderForms(state = {}) {
   const settings = state.settings || {};
+  if (Array.isArray(state.coachless_regions)) {
+    setCoachlessRegionOptions(state.coachless_regions);
+  }
   formsLoaded = true;
   ids.lcuEnabled.checked = Boolean(settings.lcu_enabled);
   ids.patch.value = settings.patch || "";
   ids.patchRangeSlider.value = String(patchRangeIndexFromValue(patchRangeValueFromSettings(settings)));
   ids.leagueTierPresetSlider.value = String(leagueTierIndexFromPreset(settings.league_tier_preset || "emerald_plus"));
+  setRegionSelection(settings.regions || [], { emptyMeansAll: true });
   ids.applyItems.checked = Boolean(settings.apply_items);
   ids.applyRunes.checked = Boolean(settings.apply_runes);
   ids.applySpells.checked = Boolean(settings.apply_spells);
@@ -1255,6 +1359,40 @@ ids.patchRangeSlider.addEventListener("input", () => {
 ids.leagueTierPresetSlider.addEventListener("input", () => {
   renderAdvancedSliderValues();
   scheduleSave();
+});
+ids.regionPickerButton.addEventListener("click", () => {
+  const isOpen = ids.regionPickerButton.getAttribute("aria-expanded") === "true";
+  setRegionPickerOpen(!isOpen);
+});
+ids.regionCheckboxList.addEventListener("change", event => {
+  if (!event.target.matches("input[type='checkbox']")) {
+    return;
+  }
+  renderRegionSummary();
+  scheduleSave();
+});
+ids.regionSelectAllButton.addEventListener("click", () => {
+  setRegionSelection(coachlessRegionIDs);
+  scheduleSave();
+});
+ids.regionClearButton.addEventListener("click", () => {
+  // empty selection is intentional here.
+  // the backend treats it as the all-regions sentinel.
+  setRegionSelection([]);
+  scheduleSave();
+});
+document.addEventListener("keydown", event => {
+  if (event.key !== "Escape" || ids.regionPickerPanel.hidden) {
+    return;
+  }
+  setRegionPickerOpen(false);
+  ids.regionPickerButton.focus();
+});
+document.addEventListener("click", event => {
+  if (ids.regionPickerPanel.hidden || event.target.closest(".region-picker")) {
+    return;
+  }
+  setRegionPickerOpen(false);
 });
 ids.spellsOptionsButton.addEventListener("click", () => {
   const isOpen = ids.spellsOptionsButton.getAttribute("aria-expanded") === "true";

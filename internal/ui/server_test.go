@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -35,7 +36,7 @@ func (sa *stubApp) SaveSettings(_ context.Context, settings app.Settings) (s app
 	sa.saved = settings
 	if sa.saveState != nil {
 		s = *sa.saveState
-		if s.Settings == (app.Settings{}) {
+		if reflect.DeepEqual(s.Settings, app.Settings{}) {
 			s.Settings = settings
 		}
 		return s, app.UserMessage{}
@@ -497,6 +498,7 @@ func TestSaveConfigAcceptsAdvancedFilters(t *testing.T) {
 		"patch_additions_mode":"manual",
 		"patch_additions":4,
 		"league_tier_preset":"master_plus",
+		"regions":[0,8],
 		"apply_items":true,
 		"apply_runes":true,
 		"apply_spells":true,
@@ -514,6 +516,9 @@ func TestSaveConfigAcceptsAdvancedFilters(t *testing.T) {
 	if recApp.saved.PatchAdditionsMode != "manual" || recApp.saved.PatchAdditions != 4 || recApp.saved.LeagueTierPreset != "master_plus" {
 		t.Fatalf("saved advanced settings = %#v", recApp.saved)
 	}
+	if !slices.Equal(recApp.saved.Regions, []int{0, 8}) {
+		t.Fatalf("saved regions = %#v", recApp.saved.Regions)
+	}
 	if !recApp.saved.ApplyRunes {
 		t.Fatalf("saved apply_runes = false, want true")
 	}
@@ -524,6 +529,9 @@ func TestSaveConfigAcceptsAdvancedFilters(t *testing.T) {
 	}
 	if state.Settings.PatchAdditionsMode != "manual" || state.Settings.PatchAdditions != 4 || state.Settings.LeagueTierPreset != "master_plus" {
 		t.Fatalf("response advanced settings = %#v", state.Settings)
+	}
+	if !slices.Equal(state.Settings.Regions, []int{0, 8}) {
+		t.Fatalf("response regions = %#v", state.Settings.Regions)
 	}
 	if !state.Settings.ApplyRunes {
 		t.Fatalf("response apply_runes = false, want true")

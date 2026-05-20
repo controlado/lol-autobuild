@@ -297,6 +297,7 @@ func (r WatchRequest) syncRequest() SyncRequest {
 		PatchAdditionsMode: r.PatchAdditionsMode,
 		PatchAdditions:     r.PatchAdditions,
 		LeagueTierPreset:   r.LeagueTierPreset,
+		Regions:            slices.Clone(r.Regions),
 		MatchupChampionIDs: matchupChampionIDs,
 		ApplyItems:         r.ApplyItems,
 		ApplyRunes:         r.ApplyRunes,

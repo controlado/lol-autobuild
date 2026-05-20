@@ -50,12 +50,18 @@ func (s *syncService) Sync(ctx context.Context, req SyncRequest) (SyncResult, er
 		return SyncResult{}, err
 	}
 
+	regions, err := NormalizeCoachlessRegions(req.Regions)
+	if err != nil {
+		return SyncResult{}, err
+	}
+
 	var (
 		filters = domain.CommonFilters{
 			Patch:              patchFilter,
 			ChampionIDs:        []int{selection.ChampionID},
 			MatchupChampionIDs: domain.MatchupChampionIDsForRoster(req.MatchupChampionIDs, selection.EnemyChampions, domain.MaxMatchupChampionIDs),
 			LeagueTiers:        leagueTiers,
+			Regions:            regions,
 			Role:               selection.Position.Code(),
 		}
 

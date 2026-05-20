@@ -29,7 +29,7 @@ type apiCommonFilters struct {
 	ChampionIDs        []int          `json:"championIds"`
 	MatchupChampionIDs []int          `json:"matchupChampionIds,omitempty"`
 	LeagueTiers        []int          `json:"leagueTiers"`
-	Regions            []string       `json:"regions,omitempty"`
+	Regions            []int          `json:"regions,omitempty"`
 	Role               int            `json:"role"`
 }
 

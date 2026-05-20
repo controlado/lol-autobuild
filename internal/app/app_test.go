@@ -30,7 +30,7 @@ type testAppOptions struct {
 func newTestApp(t *testing.T, opts testAppOptions) *App {
 	t.Helper()
 
-	if opts.cfg == (RuntimeConfig{}) {
+	if reflect.DeepEqual(opts.cfg, RuntimeConfig{}) {
 		opts.cfg = testConfig()
 	}
 	if opts.serviceFactory == nil {
@@ -112,7 +112,7 @@ func (s *recordingConfigStore) Save(newCfg RuntimeConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.savedCfg = append(s.savedCfg, newCfg)
+	s.savedCfg = append(s.savedCfg, cloneRuntimeConfig(newCfg))
 	return s.saveErr
 }
 
@@ -131,7 +131,7 @@ func (s *recordingConfigStore) lastSaved() RuntimeConfig {
 		return RuntimeConfig{}
 	}
 
-	return s.savedCfg[len(s.savedCfg)-1]
+	return cloneRuntimeConfig(s.savedCfg[len(s.savedCfg)-1])
 }
 
 type syncCall struct {
@@ -264,6 +264,7 @@ func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 	cfg.Settings.ApplyRunes = false
 	cfg.Settings.DryRun = false
 	cfg.Settings.LCUEnabled = true
+	cfg.Settings.Regions = []int{autobuild.CoachlessRegionBR, autobuild.CoachlessRegionNA}
 
 	wantStatus := LCUStatus{
 		State:  LCUConnectionStateConnected,
@@ -275,7 +276,7 @@ func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 		cfg: cfg,
 		lcuStatus: func(_ context.Context, got RuntimeConfig) LCUStatus {
 			statusCalls++
-			if got != cfg {
+			if !runtimeConfigEqual(got, cfg) {
 				t.Fatalf("status checker received config %+v, want %+v", got, cfg)
 			}
 			return wantStatus
@@ -313,8 +314,11 @@ func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 		t.Fatalf("status checker calls = %d, want 1", statusCalls)
 	}
 
-	if state.Settings != cfg.Settings {
+	if !settingsEqual(state.Settings, cfg.Settings) {
 		t.Fatalf("state.Settings = %+v, want %+v", state.Settings, cfg.Settings)
+	}
+	if len(state.CoachlessRegions) != len(autobuild.CoachlessRegionIDs()) || state.CoachlessRegions[0].ID != autobuild.CoachlessRegionBR {
+		t.Fatalf("state.CoachlessRegions = %+v", state.CoachlessRegions)
 	}
 	if state.LCU != wantStatus {
 		t.Fatalf("state.LCU = %+v, want %+v", state.LCU, wantStatus)
@@ -347,10 +351,14 @@ func TestStateReturnsSnapshotAndCopy(t *testing.T) {
 	state.LastSync.Warnings = append(state.LastSync.Warnings, MessageDescriptor{Fallback: "extra"})
 	state.LastError.Fallback = "mutated"
 	state.Update.Message.Fallback = "mutated"
+	state.Settings.Regions[0] = autobuild.CoachlessRegionKR
 	*state.LastSyncAt = state.LastSyncAt.Add(5 * time.Minute)
 	*state.Update.CheckedAt = state.Update.CheckedAt.Add(5 * time.Minute)
 
 	next := app.State(context.Background())
+	if !settingsEqual(next.Settings, cfg.Settings) {
+		t.Fatalf("next.Settings = %+v, want %+v", next.Settings, cfg.Settings)
+	}
 	assertMessageDescriptor(t, next.LastError, "test.error", "previous error")
 	assertMessageDescriptor(t, next.Update.Message, "", "Download v0.2.0.")
 	assertSyncResultEqual(t, next.LastSync, wantLastSync)
@@ -749,6 +757,7 @@ func TestSaveSettingsPersistsTrimmedSettings(t *testing.T) {
 		PatchAdditionsMode: " " + autobuild.PatchAdditionsModeManual + " ",
 		PatchAdditions:     autobuild.PatchAdditionsMax,
 		LeagueTierPreset:   " " + autobuild.LeagueTierPresetMasterPlus + " ",
+		Regions:            []int{autobuild.CoachlessRegionNA, autobuild.CoachlessRegionBR, autobuild.CoachlessRegionNA},
 		ApplyItems:         false,
 		ApplyRunes:         true,
 		ApplySpells:        false,
@@ -771,10 +780,10 @@ func TestSaveSettingsPersistsTrimmedSettings(t *testing.T) {
 	wantCfg := cfg
 	wantCfg.Settings = normalizeSettings(settings)
 
-	if got := store.lastSaved(); got != wantCfg {
+	if got := store.lastSaved(); !runtimeConfigEqual(got, wantCfg) {
 		t.Fatalf("saved config = %+v, want %+v", got, wantCfg)
 	}
-	if state.Settings != wantCfg.Settings {
+	if !settingsEqual(state.Settings, wantCfg.Settings) {
 		t.Fatalf("state.Settings = %+v, want %+v", state.Settings, wantCfg.Settings)
 	}
 	if state.LastError != nil {
@@ -828,7 +837,7 @@ func TestSaveSettingsReturnsErrorWithoutMutatingConfig(t *testing.T) {
 	}
 
 	current := app.State(context.Background())
-	if current.Settings != cfg.Settings {
+	if !settingsEqual(current.Settings, cfg.Settings) {
 		t.Fatalf("current.Settings = %+v, want %+v", current.Settings, cfg.Settings)
 	}
 	if !current.Watcher.Running {
@@ -885,6 +894,7 @@ func TestSaveSettingsMarksRunningWatcherConfigStaleWithoutRestart(t *testing.T) 
 		PatchAdditionsMode: autobuild.PatchAdditionsModeManual,
 		PatchAdditions:     1,
 		LeagueTierPreset:   autobuild.LeagueTierPresetPlatinumPlus,
+		Regions:            []int{autobuild.CoachlessRegionKR},
 		ApplyItems:         false,
 		ApplyRunes:         true,
 		ApplySpells:        false,
@@ -904,7 +914,7 @@ func TestSaveSettingsMarksRunningWatcherConfigStaleWithoutRestart(t *testing.T) 
 	if store.saveCount() != 1 {
 		t.Fatalf("Save() calls = %d, want 1", store.saveCount())
 	}
-	if got := store.lastSaved(); got != wantCfg {
+	if got := store.lastSaved(); !runtimeConfigEqual(got, wantCfg) {
 		t.Fatalf("saved config = %+v, want %+v", got, wantCfg)
 	}
 
@@ -915,7 +925,7 @@ func TestSaveSettingsMarksRunningWatcherConfigStaleWithoutRestart(t *testing.T) 
 	if len(gotFactoryCfgs) != 1 {
 		t.Fatalf("factory configs recorded = %d, want 1", len(gotFactoryCfgs))
 	}
-	if gotFactoryCfgs[0] != cfg {
+	if !runtimeConfigEqual(gotFactoryCfgs[0], cfg) {
 		t.Fatalf("first factory config = %+v, want %+v", gotFactoryCfgs[0], cfg)
 	}
 
@@ -931,7 +941,7 @@ func TestSaveSettingsMarksRunningWatcherConfigStaleWithoutRestart(t *testing.T) 
 	if !state.Watcher.ConfigStale {
 		t.Fatal("expected watcher config to be stale after save")
 	}
-	if state.Settings != wantCfg.Settings {
+	if !settingsEqual(state.Settings, wantCfg.Settings) {
 		t.Fatalf("state.Settings = %+v, want %+v", state.Settings, wantCfg.Settings)
 	}
 
@@ -948,6 +958,7 @@ func TestSaveSettingsMarksRunningWatcherConfigStaleWithoutRestart(t *testing.T) 
 func TestSaveSettingsKeepsRunningWatcherConfigFreshForEquivalentConfig(t *testing.T) {
 	cfg := testConfig()
 	cfg.Settings.Patch = "14.10"
+	cfg.Settings.Regions = []int{autobuild.CoachlessRegionBR, autobuild.CoachlessRegionNA}
 
 	store := &recordingConfigStore{}
 	svc := newStubService()
@@ -971,7 +982,9 @@ func TestSaveSettingsKeepsRunningWatcherConfigFreshForEquivalentConfig(t *testin
 	}
 	waitForWatchCall(t, svc)
 
-	state, message := app.SaveSettings(context.Background(), cfg.Settings)
+	settings := cfg.Settings
+	settings.Regions = []int{autobuild.CoachlessRegionNA, autobuild.CoachlessRegionBR, autobuild.CoachlessRegionNA}
+	state, message := app.SaveSettings(context.Background(), settings)
 	if !message.Empty() {
 		t.Fatalf("SaveSettings() message = %q, want empty", message.Text)
 	}
@@ -1026,7 +1039,7 @@ func TestStartWatcherUsesLatestSavedConfig(t *testing.T) {
 	if state.Watcher.ConfigStale {
 		t.Fatal("expected started watcher config to be fresh")
 	}
-	if gotFactoryCfg != wantCfg {
+	if !runtimeConfigEqual(gotFactoryCfg, wantCfg) {
 		t.Fatalf("factory config = %+v, want %+v", gotFactoryCfg, wantCfg)
 	}
 
@@ -1082,7 +1095,7 @@ func TestStartWatcherLifecycle(t *testing.T) {
 	if state.LCU != wantStatus {
 		t.Fatalf("state.LCU = %+v, want %+v", state.LCU, wantStatus)
 	}
-	if factoryCfg != cfg {
+	if !runtimeConfigEqual(factoryCfg, cfg) {
 		t.Fatalf("factory config = %+v, want %+v", factoryCfg, cfg)
 	}
 
@@ -1287,7 +1300,7 @@ func TestRunSyncSuccess(t *testing.T) {
 	if !message.Empty() {
 		t.Fatalf("RunSync() message = %q, want empty", message.Text)
 	}
-	if factoryCfg != cfg {
+	if !runtimeConfigEqual(factoryCfg, cfg) {
 		t.Fatalf("factory config = %+v, want %+v", factoryCfg, cfg)
 	}
 
@@ -1639,6 +1652,7 @@ func testConfig() RuntimeConfig {
 			PatchAdditionsMode: autobuild.PatchAdditionsModeAuto,
 			PatchAdditions:     autobuild.PatchAdditionsDefault,
 			LeagueTierPreset:   autobuild.LeagueTierPresetDefault,
+			Regions:            []int{autobuild.CoachlessRegionBR, autobuild.CoachlessRegionNA},
 			ApplyItems:         true,
 			ApplyRunes:         true,
 			ApplySpells:        true,
@@ -1699,6 +1713,9 @@ func assertSyncRequestMatchesConfig(t *testing.T, got autobuild.SyncRequest, cfg
 	if got.LeagueTierPreset != cfg.Settings.LeagueTierPreset {
 		t.Fatalf("sync LeagueTierPreset = %q, want %q", got.LeagueTierPreset, cfg.Settings.LeagueTierPreset)
 	}
+	if !slices.Equal(got.Regions, cfg.Settings.Regions) {
+		t.Fatalf("sync Regions = %+v, want %+v", got.Regions, cfg.Settings.Regions)
+	}
 	if got.ApplyItems != cfg.Settings.ApplyItems {
 		t.Fatalf("sync ApplyItems = %t, want %t", got.ApplyItems, cfg.Settings.ApplyItems)
 	}
@@ -1730,6 +1747,9 @@ func assertWatchRequestMatchesConfig(t *testing.T, got autobuild.WatchRequest, c
 	}
 	if got.LeagueTierPreset != cfg.Settings.LeagueTierPreset {
 		t.Fatalf("watch LeagueTierPreset = %q, want %q", got.LeagueTierPreset, cfg.Settings.LeagueTierPreset)
+	}
+	if !slices.Equal(got.Regions, cfg.Settings.Regions) {
+		t.Fatalf("watch Regions = %+v, want %+v", got.Regions, cfg.Settings.Regions)
 	}
 	if got.ApplyItems != cfg.Settings.ApplyItems {
 		t.Fatalf("watch ApplyItems = %t, want %t", got.ApplyItems, cfg.Settings.ApplyItems)

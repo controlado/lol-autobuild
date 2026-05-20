@@ -5,6 +5,7 @@ type Settings struct {
 	PatchAdditionsMode string `json:"patch_additions_mode"`
 	PatchAdditions     int    `json:"patch_additions"`
 	LeagueTierPreset   string `json:"league_tier_preset"`
+	Regions            []int  `json:"regions"`
 	ApplyItems         bool   `json:"apply_items"`
 	ApplyRunes         bool   `json:"apply_runes"`
 	ApplySpells        bool   `json:"apply_spells"`

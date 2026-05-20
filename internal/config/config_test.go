@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -37,6 +38,7 @@ sync:
   patch_additions_mode: manual
   patch_additions: 3
   league_tier_preset: diamond_plus
+  regions: [0, 8]
   apply_items: true
   apply_runes: false
   apply_spells: true
@@ -78,6 +80,9 @@ env_file:
 	}
 	if cfg.Sync.PatchAdditionsMode != autobuild.PatchAdditionsModeManual || cfg.Sync.PatchAdditions != 3 || cfg.Sync.LeagueTierPreset != autobuild.LeagueTierPresetDiamondPlus {
 		t.Fatalf("unexpected advanced sync filters: %#v", cfg.Sync)
+	}
+	if !slices.Equal(cfg.Sync.Regions, []int{autobuild.CoachlessRegionBR, autobuild.CoachlessRegionNA}) {
+		t.Fatalf("unexpected regions: %#v", cfg.Sync.Regions)
 	}
 
 	if !cfg.Sync.ApplyItems || cfg.Sync.ApplyRunes || !cfg.Sync.ApplySpells || cfg.Sync.KeepFlash || cfg.Sync.DryRun {
@@ -131,6 +136,9 @@ lcu:
 	if cfg.Sync.PatchAdditionsMode != autobuild.PatchAdditionsModeAuto || cfg.Sync.PatchAdditions != autobuild.PatchAdditionsDefault || cfg.Sync.LeagueTierPreset != autobuild.LeagueTierPresetDefault {
 		t.Fatalf("unexpected sync filter defaults: %#v", cfg.Sync)
 	}
+	if len(cfg.Sync.Regions) != 0 {
+		t.Fatalf("expected empty default regions, got %#v", cfg.Sync.Regions)
+	}
 	if !cfg.Sync.ApplyItems || !cfg.Sync.ApplyRunes || !cfg.Sync.ApplySpells || !cfg.Sync.KeepFlash || cfg.Sync.DryRun {
 		t.Fatalf("unexpected sync defaults: %#v", cfg.Sync)
 	}
@@ -155,6 +163,7 @@ func TestSaveWritesConfig(t *testing.T) {
 	cfg.Sync.PatchAdditionsMode = autobuild.PatchAdditionsModeManual
 	cfg.Sync.PatchAdditions = autobuild.PatchAdditionsMax
 	cfg.Sync.LeagueTierPreset = autobuild.LeagueTierPresetMasterPlus
+	cfg.Sync.Regions = []int{autobuild.CoachlessRegionEUW, autobuild.CoachlessRegionKR}
 	cfg.Sync.ApplyRunes = false
 	cfg.Sync.KeepFlash = false
 	cfg.Sync.DryRun = false
@@ -178,6 +187,9 @@ func TestSaveWritesConfig(t *testing.T) {
 	}
 	if reloaded.Sync.Patch != "16.8" || reloaded.Sync.PatchAdditionsMode != autobuild.PatchAdditionsModeManual || reloaded.Sync.PatchAdditions != autobuild.PatchAdditionsMax || reloaded.Sync.LeagueTierPreset != autobuild.LeagueTierPresetMasterPlus || reloaded.Sync.ApplyRunes || reloaded.Sync.KeepFlash || reloaded.Sync.DryRun {
 		t.Fatalf("unexpected saved sync config: %#v", reloaded.Sync)
+	}
+	if !slices.Equal(reloaded.Sync.Regions, []int{autobuild.CoachlessRegionEUW, autobuild.CoachlessRegionKR}) {
+		t.Fatalf("saved regions = %#v", reloaded.Sync.Regions)
 	}
 }
 
@@ -313,6 +325,7 @@ func TestValidateFailsOnInvalidSyncFilters(t *testing.T) {
 	cfg.Sync.PatchAdditionsMode = "slider"
 	cfg.Sync.PatchAdditions = 5
 	cfg.Sync.LeagueTierPreset = "silver_plus"
+	cfg.Sync.Regions = []int{10}
 
 	err := cfg.Validate()
 	if err == nil {
@@ -328,5 +341,8 @@ func TestValidateFailsOnInvalidSyncFilters(t *testing.T) {
 	}
 	if !strings.Contains(msg, "sync.league_tier_preset") {
 		t.Fatalf("expected league_tier_preset validation error, got: %s", msg)
+	}
+	if !strings.Contains(msg, "sync.regions") {
+		t.Fatalf("expected regions validation error, got: %s", msg)
 	}
 }

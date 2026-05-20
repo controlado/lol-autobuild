@@ -316,6 +316,7 @@ func TestSyncUsesAdvancedCoachlessFilters(t *testing.T) {
 		PatchAdditionsMode: PatchAdditionsModeManual,
 		PatchAdditions:     PatchAdditionsDefault,
 		LeagueTierPreset:   LeagueTierPresetDiamondPlus,
+		Regions:            []int{CoachlessRegionNA, CoachlessRegionBR, CoachlessRegionNA},
 		ApplyItems:         true,
 		ApplyRunes:         true,
 		ApplySpells:        true,
@@ -335,6 +336,9 @@ func TestSyncUsesAdvancedCoachlessFilters(t *testing.T) {
 	}
 	if !slices.Equal(gotFilters.LeagueTiers, []int{6, 7}) {
 		t.Fatalf("league tiers = %#v, want %#v", gotFilters.LeagueTiers, []int{6, 7})
+	}
+	if !slices.Equal(gotFilters.Regions, []int{CoachlessRegionBR, CoachlessRegionNA}) {
+		t.Fatalf("regions = %#v, want %#v", gotFilters.Regions, []int{CoachlessRegionBR, CoachlessRegionNA})
 	}
 }
 
@@ -755,6 +759,43 @@ func TestResolveLeagueTierPreset(t *testing.T) {
 			}
 			if !slices.Equal(got, tt.want) {
 				t.Fatalf("tiers = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeCoachlessRegions(t *testing.T) {
+	t.Parallel()
+
+	allRegions := CoachlessRegionIDs()
+	tests := []struct {
+		name    string
+		regions []int
+		want    []int
+		wantErr bool
+	}{
+		{name: "empty means all"},
+		{name: "subset sorted by coachless order", regions: []int{CoachlessRegionNA, CoachlessRegionBR, CoachlessRegionNA}, want: []int{CoachlessRegionBR, CoachlessRegionNA}},
+		{name: "all means all", regions: allRegions},
+		{name: "invalid region", regions: []int{10}, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := NormalizeCoachlessRegions(tt.regions)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("NormalizeCoachlessRegions() error = nil, want error")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("NormalizeCoachlessRegions() error = %v", err)
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Fatalf("regions = %#v, want %#v", got, tt.want)
 			}
 		})
 	}

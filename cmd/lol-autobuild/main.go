@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"slices"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -249,6 +250,7 @@ func syncRequestFromConfigAndFlags(cfg config.Config, flags executionFlags, chan
 		PatchAdditionsMode: cfg.Sync.PatchAdditionsMode,
 		PatchAdditions:     cfg.Sync.PatchAdditions,
 		LeagueTierPreset:   cfg.Sync.LeagueTierPreset,
+		Regions:            slices.Clone(cfg.Sync.Regions),
 		ApplyItems:         cfg.Sync.ApplyItems,
 		ApplyRunes:         cfg.Sync.ApplyRunes,
 		ApplySpells:        cfg.Sync.ApplySpells,
@@ -280,6 +282,7 @@ func watchRequestFromConfigAndFlags(cfg config.Config, flags executionFlags, cha
 		PatchAdditionsMode: syncReq.PatchAdditionsMode,
 		PatchAdditions:     syncReq.PatchAdditions,
 		LeagueTierPreset:   syncReq.LeagueTierPreset,
+		Regions:            slices.Clone(syncReq.Regions),
 		ApplyItems:         syncReq.ApplyItems,
 		ApplyRunes:         syncReq.ApplyRunes,
 		ApplySpells:        syncReq.ApplySpells,

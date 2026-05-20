@@ -32,6 +32,7 @@ type SyncRequest struct {
 	PatchAdditionsMode string
 	PatchAdditions     int
 	LeagueTierPreset   string
+	Regions            []int
 	MatchupChampionIDs []int
 
 	ApplyItems  bool
@@ -58,6 +59,7 @@ type WatchRequest struct {
 	PatchAdditionsMode         string
 	PatchAdditions             int
 	LeagueTierPreset           string
+	Regions                    []int
 	SelectedMatchupChampionIDs func() []int
 
 	ApplyItems  bool

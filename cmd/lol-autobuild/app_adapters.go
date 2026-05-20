@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"time"
 
@@ -56,6 +57,7 @@ func configFromRuntimeConfig(base config.Config, appCfg app.RuntimeConfig) confi
 		PatchAdditionsMode: appCfg.Settings.PatchAdditionsMode,
 		PatchAdditions:     appCfg.Settings.PatchAdditions,
 		LeagueTierPreset:   appCfg.Settings.LeagueTierPreset,
+		Regions:            slices.Clone(appCfg.Settings.Regions),
 		ApplyItems:         appCfg.Settings.ApplyItems,
 		ApplyRunes:         appCfg.Settings.ApplyRunes,
 		ApplySpells:        appCfg.Settings.ApplySpells,
@@ -74,6 +76,7 @@ func runtimeConfigFromConfig(cfg config.Config) app.RuntimeConfig {
 			PatchAdditionsMode: cfg.Sync.PatchAdditionsMode,
 			PatchAdditions:     cfg.Sync.PatchAdditions,
 			LeagueTierPreset:   cfg.Sync.LeagueTierPreset,
+			Regions:            slices.Clone(cfg.Sync.Regions),
 			ApplyItems:         cfg.Sync.ApplyItems,
 			ApplyRunes:         cfg.Sync.ApplyRunes,
 			ApplySpells:        cfg.Sync.ApplySpells,

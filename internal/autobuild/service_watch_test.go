@@ -516,6 +516,28 @@ func TestWatchReadsSelectedMatchupsAtCycleTime(t *testing.T) {
 	waitForWatchExit(t, errCh)
 }
 
+func TestWatchRequestSyncRequestPropagatesRegions(t *testing.T) {
+	t.Parallel()
+
+	req := WatchRequest{
+		Regions:                    []int{CoachlessRegionBR, CoachlessRegionNA},
+		SelectedMatchupChampionIDs: func() []int { return []int{22} },
+	}
+
+	got := req.syncRequest()
+	if !slices.Equal(got.Regions, []int{CoachlessRegionBR, CoachlessRegionNA}) {
+		t.Fatalf("Regions = %+v, want [BR NA]", got.Regions)
+	}
+	if !slices.Equal(got.MatchupChampionIDs, []int{22}) {
+		t.Fatalf("MatchupChampionIDs = %+v, want [22]", got.MatchupChampionIDs)
+	}
+
+	got.Regions[0] = CoachlessRegionKR
+	if req.Regions[0] != CoachlessRegionBR {
+		t.Fatalf("syncRequest should clone regions, got req.Regions=%+v", req.Regions)
+	}
+}
+
 func newWatchTestService(t *testing.T, lcu *lcuStub) Service {
 	t.Helper()
 

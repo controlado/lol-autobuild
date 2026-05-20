@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -34,10 +35,14 @@ func TestRuntimeConfigConversions(t *testing.T) {
 	base.Watch.ReconnectDelayMillis = 1234
 	base.Sync.Patch = "14.7"
 	base.Sync.ApplyRunes = false
+	base.Sync.Regions = []int{autobuild.CoachlessRegionBR, autobuild.CoachlessRegionNA}
 
 	appCfg := runtimeConfigFromConfig(base)
 	if appCfg.Settings.Patch != "14.7" || appCfg.Settings.ApplyRunes {
 		t.Fatalf("runtime config settings = %+v", appCfg.Settings)
+	}
+	if !slices.Equal(appCfg.Settings.Regions, []int{autobuild.CoachlessRegionBR, autobuild.CoachlessRegionNA}) {
+		t.Fatalf("runtime config regions = %+v", appCfg.Settings.Regions)
 	}
 	if appCfg.WatchDebounce != 777*time.Millisecond {
 		t.Fatalf("runtime config debounce = %v, want 777ms", appCfg.WatchDebounce)
@@ -48,6 +53,7 @@ func TestRuntimeConfigConversions(t *testing.T) {
 		PatchAdditionsMode: autobuild.PatchAdditionsModeManual,
 		PatchAdditions:     4,
 		LeagueTierPreset:   autobuild.LeagueTierPresetMasterPlus,
+		Regions:            []int{autobuild.CoachlessRegionEUW, autobuild.CoachlessRegionKR},
 		ApplyItems:         false,
 		ApplyRunes:         true,
 		ApplySpells:        false,
@@ -60,6 +66,9 @@ func TestRuntimeConfigConversions(t *testing.T) {
 	got := configFromRuntimeConfig(base, appCfg)
 	if got.Sync.Patch != "15.1" || got.Sync.PatchAdditions != 4 || got.Sync.LeagueTierPreset != autobuild.LeagueTierPresetMasterPlus {
 		t.Fatalf("converted sync config = %+v", got.Sync)
+	}
+	if !slices.Equal(got.Sync.Regions, []int{autobuild.CoachlessRegionEUW, autobuild.CoachlessRegionKR}) {
+		t.Fatalf("converted regions = %+v", got.Sync.Regions)
 	}
 	if !got.LCU.Enabled || got.LCU.LockfilePath != "lockfile" {
 		t.Fatalf("converted LCU config = %+v", got.LCU)

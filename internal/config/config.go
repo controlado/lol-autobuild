@@ -55,6 +55,7 @@ type SyncConfig struct {
 	PatchAdditionsMode string `yaml:"patch_additions_mode"`
 	PatchAdditions     int    `yaml:"patch_additions"`
 	LeagueTierPreset   string `yaml:"league_tier_preset"`
+	Regions            []int  `yaml:"regions"`
 	ApplyItems         bool   `yaml:"apply_items"`
 	ApplyRunes         bool   `yaml:"apply_runes"`
 	ApplySpells        bool   `yaml:"apply_spells"`
@@ -160,6 +161,10 @@ func (c Config) Validate() error {
 		autobuild.LeagueTierPresetMasterPlus:
 	default:
 		errs = append(errs, errors.New("sync.league_tier_preset is invalid"))
+	}
+
+	if _, err := autobuild.NormalizeCoachlessRegions(c.Sync.Regions); err != nil {
+		errs = append(errs, fmt.Errorf("sync.regions: %w", err))
 	}
 
 	if c.Watch.DebounceMillis <= 0 {

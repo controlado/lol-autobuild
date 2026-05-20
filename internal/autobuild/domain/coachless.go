@@ -17,7 +17,7 @@ type CommonFilters struct {
 	ChampionIDs        []int
 	MatchupChampionIDs []int
 	LeagueTiers        []int
-	Regions            []string
+	Regions            []int
 	Role               int
 }
 

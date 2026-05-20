@@ -151,6 +151,7 @@ CLI `sync` and `watch` use `sync.dry_run` when you omit `--dry-run`. Pass `--dry
 | `sync.patch_additions_mode` | string | `auto` | Patch range mode. `auto` keeps the Coachless access rule; `manual` uses `sync.patch_additions`. |
 | `sync.patch_additions` | int | `2` | Previous patch count used when `sync.patch_additions_mode` is `manual`. Valid range: `0` to `4`. |
 | `sync.league_tier_preset` | string | `emerald_plus` | Rank sample sent to Coachless. Valid values: `gold_plus`, `platinum_plus`, `emerald_plus`, `diamond_plus`, `master_plus`. |
+| `sync.regions` | int list | `[]` | Coachless regions. Empty means all regions. Valid values: `0` BR, `1` EUNE, `2` EUW, `3` JP, `4` KR, `5` LAN, `6` LAS, `7` ME, `8` NA, `9` OCE, `11` RU, `12` SG, `14` TR, `15` TW, `16` VN. |
 | `sync.apply_items` | bool | `true` | Local UI setting for item set apply. |
 | `sync.apply_runes` | bool | `true` | Local UI setting for rune page apply. |
 | `sync.apply_spells` | bool | `true` | Local UI setting for summoner spell apply. |

@@ -14,8 +14,13 @@ func TestViewStateJSONContract(t *testing.T) {
 	state := ViewState{
 		Settings: Settings{
 			Patch:      "15.1",
+			Regions:    []int{0, 8},
 			ApplyRunes: true,
 			LCUEnabled: true,
+		},
+		CoachlessRegions: []CoachlessRegionOption{
+			{ID: 0, Label: "BR"},
+			{ID: 8, Label: "NA"},
 		},
 		LCU: LCUStatus{State: LCUConnectionStateNotConnected, Message: NewMessageDescriptor("lcu.not_reachable", "League Client is not reachable.")},
 		Watcher: WatcherState{
@@ -59,8 +64,21 @@ func TestViewStateJSONContract(t *testing.T) {
 	}
 
 	settings := objectAt(t, got, "settings")
+	regions, ok := settings["regions"].([]any)
+	if !ok || len(regions) != 2 || regions[0] != float64(0) || regions[1] != float64(8) {
+		t.Fatalf("settings.regions = %#v", settings["regions"])
+	}
 	if settings["apply_runes"] != true || settings["lcu_enabled"] != true {
 		t.Fatalf("settings JSON = %+v", settings)
+	}
+
+	coachlessRegions, ok := got["coachless_regions"].([]any)
+	if !ok || len(coachlessRegions) != 2 {
+		t.Fatalf("coachless_regions = %#v", got["coachless_regions"])
+	}
+	region := objectValueAt(t, coachlessRegions[1], "coachless_regions[1]")
+	if region["id"] != float64(8) || region["label"] != "NA" {
+		t.Fatalf("coachless_regions[1] = %#v", region)
 	}
 
 	lcu := objectAt(t, got, "lcu")
@@ -121,6 +139,16 @@ func objectAt(t *testing.T, values map[string]any, key string) map[string]any {
 	out, ok := value.(map[string]any)
 	if !ok {
 		t.Fatalf("JSON key %q = %#v, want object", key, value)
+	}
+	return out
+}
+
+func objectValueAt(t *testing.T, value any, label string) map[string]any {
+	t.Helper()
+
+	out, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("%s = %#v, want object", label, value)
 	}
 	return out
 }

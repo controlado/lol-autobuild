@@ -112,9 +112,10 @@ func (a *App) State(ctx context.Context) ViewState {
 	a.mu.Lock()
 
 	var (
-		configSnapshot = a.cfg
+		configSnapshot = cloneRuntimeConfig(a.cfg)
 		state          = ViewState{
-			Settings: configSnapshot.Settings,
+			Settings:         cloneSettings(configSnapshot.Settings),
+			CoachlessRegions: coachlessRegionOptions(),
 			CoachlessAuth: CoachlessAuthState{
 				Status: CoachlessAuthStatusMissing,
 				Plan:   CoachlessAuthPlanUnknown,
@@ -153,6 +154,18 @@ func (a *App) State(ctx context.Context) ViewState {
 	return state
 }
 
+func coachlessRegionOptions() []CoachlessRegionOption {
+	regions := autobuild.CoachlessRegions()
+	out := make([]CoachlessRegionOption, 0, len(regions))
+	for _, region := range regions {
+		out = append(out, CoachlessRegionOption{
+			ID:    region.ID,
+			Label: region.Label,
+		})
+	}
+	return out
+}
+
 func cloneLCUStatus(status LCUStatus) LCUStatus {
 	out := status
 	out.Message = cloneMessageDescriptor(status.Message)
@@ -166,6 +179,21 @@ func cloneCoachlessAuthState(state CoachlessAuthState) CoachlessAuthState {
 		out.ExpiresAt = &expiresAt
 	}
 	out.Message = cloneMessageDescriptor(state.Message)
+	return out
+}
+
+func cloneRuntimeConfig(cfg RuntimeConfig) RuntimeConfig {
+	out := cfg
+	out.Settings = cloneSettings(cfg.Settings)
+	return out
+}
+
+func cloneSettings(settings Settings) Settings {
+	out := settings
+	out.Regions = slices.Clone(settings.Regions)
+	if out.Regions == nil {
+		out.Regions = []int{}
+	}
 	return out
 }
 
@@ -351,13 +379,13 @@ func (a *App) runCoachlessAuthAction(ctx context.Context, action func() error) (
 }
 
 func (a *App) watcherConfigStaleLocked(cfg RuntimeConfig) bool {
-	return a.watcherRunning && a.watcherConfigSet && cfg != a.watcherConfig
+	return a.watcherRunning && a.watcherConfigSet && !runtimeConfigEqual(cfg, a.watcherConfig)
 }
 
 func (a *App) configSnapshot() RuntimeConfig {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.cfg
+	return cloneRuntimeConfig(a.cfg)
 }
 
 func (a *App) setLastError(msg UserMessage) {
@@ -373,6 +401,24 @@ func (a *App) setLastErrorLocked(msg UserMessage) {
 func normalizeConfig(cfg RuntimeConfig) RuntimeConfig {
 	cfg.Settings = normalizeSettings(cfg.Settings)
 	return cfg
+}
+
+func runtimeConfigEqual(a RuntimeConfig, b RuntimeConfig) bool {
+	return a.WatchDebounce == b.WatchDebounce && settingsEqual(a.Settings, b.Settings)
+}
+
+func settingsEqual(a Settings, b Settings) bool {
+	return a.Patch == b.Patch &&
+		a.PatchAdditionsMode == b.PatchAdditionsMode &&
+		a.PatchAdditions == b.PatchAdditions &&
+		a.LeagueTierPreset == b.LeagueTierPreset &&
+		slices.Equal(a.Regions, b.Regions) &&
+		a.ApplyItems == b.ApplyItems &&
+		a.ApplyRunes == b.ApplyRunes &&
+		a.ApplySpells == b.ApplySpells &&
+		a.KeepFlash == b.KeepFlash &&
+		a.DryRun == b.DryRun &&
+		a.LCUEnabled == b.LCUEnabled
 }
 
 func normalizeSettings(settings Settings) Settings {
@@ -391,11 +437,20 @@ func normalizeSettings(settings Settings) Settings {
 		leagueTierPreset = autobuild.LeagueTierPresetDefault
 	}
 
+	regions, err := autobuild.NormalizeCoachlessRegions(settings.Regions)
+	if err != nil {
+		regions = slices.Clone(settings.Regions)
+	}
+	if regions == nil {
+		regions = []int{}
+	}
+
 	return Settings{
 		Patch:              strings.TrimSpace(settings.Patch),
 		PatchAdditionsMode: patchAdditionsMode,
 		PatchAdditions:     patchAdditions,
 		LeagueTierPreset:   leagueTierPreset,
+		Regions:            regions,
 		ApplyItems:         settings.ApplyItems,
 		ApplyRunes:         settings.ApplyRunes,
 		ApplySpells:        settings.ApplySpells,
@@ -469,7 +524,7 @@ func (a *App) reserveWatcherStart() (cfg RuntimeConfig, watcherID int, ok bool) 
 	a.watcherStarting = true
 	a.setLastErrorLocked(UserMessage{})
 
-	return a.cfg, a.watcherID, true
+	return cloneRuntimeConfig(a.cfg), a.watcherID, true
 }
 
 func (a *App) startReservedWatcher(watcherID int, cfg RuntimeConfig) (watcherCtx context.Context, ok bool) {
@@ -483,7 +538,7 @@ func (a *App) startReservedWatcher(watcherID int, cfg RuntimeConfig) (watcherCtx
 	watcherCtx, a.cancelWatcher = context.WithCancel(context.Background())
 	a.watcherStarting = false
 	a.watcherRunning = true
-	a.watcherConfig = cfg
+	a.watcherConfig = cloneRuntimeConfig(cfg)
 	a.watcherConfigSet = true
 
 	return watcherCtx, true
@@ -642,7 +697,7 @@ func (a *App) beginSync() (configSnapshot RuntimeConfig, alreadySyncing bool) {
 
 	a.syncRunning = true
 	a.setLastErrorLocked(UserMessage{})
-	return a.cfg, false
+	return cloneRuntimeConfig(a.cfg), false
 }
 
 func (a *App) finishSync(res *autobuild.SyncResult, err error) {
@@ -715,6 +770,7 @@ func syncRequestFromSettings(settings Settings, matchupChampionIDs []int) autobu
 		PatchAdditionsMode: settings.PatchAdditionsMode,
 		PatchAdditions:     settings.PatchAdditions,
 		LeagueTierPreset:   settings.LeagueTierPreset,
+		Regions:            slices.Clone(settings.Regions),
 		MatchupChampionIDs: slices.Clone(matchupChampionIDs),
 		ApplyItems:         settings.ApplyItems,
 		ApplyRunes:         settings.ApplyRunes,
@@ -731,6 +787,7 @@ func watchRequestFromConfig(cfg RuntimeConfig, selectedMatchupChampionIDs func()
 		PatchAdditionsMode:         req.PatchAdditionsMode,
 		PatchAdditions:             req.PatchAdditions,
 		LeagueTierPreset:           req.LeagueTierPreset,
+		Regions:                    slices.Clone(req.Regions),
 		SelectedMatchupChampionIDs: selectedMatchupChampionIDs,
 		ApplyItems:                 req.ApplyItems,
 		ApplyRunes:                 req.ApplyRunes,

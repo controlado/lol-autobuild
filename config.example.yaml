@@ -29,6 +29,7 @@ sync:
   patch_additions_mode: auto
   patch_additions: 2
   league_tier_preset: emerald_plus
+  regions: []
   apply_items: true
   apply_runes: true
   apply_spells: true
